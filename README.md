@@ -6,7 +6,7 @@ An AI-powered email security investigation tool designed for SOC analysts. Analy
 **Try it now:** [https://nikes-ui.up.railway.app](https://nikes-ui.up.railway.app)
 
 ---
-(image.png)
+![alt text](image.png)
 
 
 
@@ -48,13 +48,13 @@ An AI-powered email security investigation tool designed for SOC analysts. Analy
 ## 📸 Screenshots
 
 ### Main Analysis View
-(image-1.png)
+![alt text](image-1.png)
 
 ### Threat Intelligence
-(image-2.png)
+![alt text](image-2.png)
 
 ### AI Triage Results
-(image-3.png)
+![alt text](image-3.png)
 
 ### SOC Tools
 ![alt text](image-4.png)
