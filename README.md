@@ -57,7 +57,7 @@ An AI-powered email security investigation tool designed for SOC analysts. Analy
 (image-3.png)
 
 ### SOC Tools
-(image-4.png)
+![alt text](image-4.png)
 
 ---
 
