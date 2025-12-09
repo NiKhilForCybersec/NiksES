@@ -1346,6 +1346,25 @@ const AdvancedAnalysisView: React.FC<AdvancedAnalysisViewProps> = ({ result, onE
                 </div>
               )}
 
+              {/* Blacklist Status */}
+              {senderDomain && (senderDomain.blacklist_count > 0 || senderDomain.blacklists_listed?.length > 0) && (
+                <div className="bg-red-900/30 rounded-lg p-3 border border-red-700 mt-4">
+                  <h3 className="text-sm font-semibold text-red-400 mb-2 flex items-center">
+                    <AlertTriangle className="w-4 h-4 mr-2" />
+                    🚫 Domain Blacklisted ({senderDomain.blacklist_count || senderDomain.blacklists_listed?.length || 0} lists)
+                  </h3>
+                  {senderDomain.blacklists_listed && senderDomain.blacklists_listed.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {senderDomain.blacklists_listed.map((bl: string, idx: number) => (
+                        <span key={idx} className="px-2 py-1 text-xs bg-red-900/50 text-red-300 rounded border border-red-700">
+                          {bl}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* No enrichment notice */}
               {!senderDomain && (
                 <div className="bg-gray-900/50 rounded-lg p-3 border border-dashed border-gray-700 text-center">
@@ -1497,6 +1516,25 @@ const AdvancedAnalysisView: React.FC<AdvancedAnalysisViewProps> = ({ result, onE
                           </span>
                         )}
                       </div>
+                    </div>
+                  )}
+
+                  {/* IP Blacklist Status */}
+                  {(ipData.blacklist_count > 0 || ipData.blacklists_listed?.length > 0) && (
+                    <div className="bg-red-900/30 rounded-lg p-3 border border-red-700 mt-4">
+                      <h3 className="text-sm font-semibold text-red-400 mb-2 flex items-center">
+                        <AlertTriangle className="w-4 h-4 mr-2" />
+                        🚫 IP Blacklisted ({ipData.blacklist_count || ipData.blacklists_listed?.length || 0} lists)
+                      </h3>
+                      {ipData.blacklists_listed && ipData.blacklists_listed.length > 0 && (
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          {ipData.blacklists_listed.map((bl: string, idx: number) => (
+                            <span key={idx} className="px-2 py-1 text-xs bg-red-900/50 text-red-300 rounded border border-red-700">
+                              {bl}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
 
