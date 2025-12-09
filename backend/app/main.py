@@ -131,13 +131,33 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
-# CORS middleware
+# CORS middleware - Configure allowed origins
+def get_cors_origins():
+    """Get CORS origins from environment or use defaults."""
+    # Check for custom origins in environment
+    custom_origins = os.getenv("CORS_ORIGINS", "")
+    
+    if custom_origins:
+        # Split by comma and strip whitespace
+        origins = [origin.strip() for origin in custom_origins.split(",") if origin.strip()]
+    else:
+        # Default: localhost only (development)
+        origins = [
+            "http://localhost:3000",
+            "http://localhost:5173",
+            "http://127.0.0.1:3000",
+            "http://127.0.0.1:5173",
+        ]
+    
+    logger.info(f"CORS allowed origins: {origins}")
+    return origins
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure in production
+    allow_origins=get_cors_origins(),
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-API-Key"],
 )
 
 # Include API routes
