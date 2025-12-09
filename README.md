@@ -1,14 +1,14 @@
 # 🛡️ NiksES - Email Security Analysis Platform
 
 An AI-powered email security investigation tool designed for SOC analysts. Analyze suspicious emails with threat intelligence enrichment, detection rules, and AI-powered triage.
-
-![NiksES Banner]![alt text](image.png)
-
 ## 🌐 Live Demo
 
 **Try it now:** [https://nikes-ui.up.railway.app](https://nikes-ui.up.railway.app)
 
 ---
+[alt text](image.png)
+
+
 
 ## ✨ Features
 
