@@ -1,7 +1,4 @@
 # NiksES Frontend Dockerfile
-# Multi-stage build for optimized production image
-
-# Stage 1: Build
 FROM node:20-alpine AS builder
 
 WORKDIR /app
@@ -15,27 +12,24 @@ RUN npm ci
 # Copy source code
 COPY . .
 
-# Build argument for API URL (set during build)
-ARG VITE_API_URL=http://localhost:8000
+# Build argument for API URL
+ARG VITE_API_URL
 ENV VITE_API_URL=$VITE_API_URL
 
 # Build the app
 RUN npm run build
 
-# Stage 2: Production
+# Stage 2: Serve with nginx
 FROM nginx:alpine
 
-# Copy custom nginx config template
-COPY nginx.conf /etc/nginx/templates/default.conf.template
-
-# Copy built files from builder stage
+# Copy built files
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# Railway provides PORT env var - nginx will listen on it
-ENV PORT=80
+# Copy nginx config
+COPY nginx.conf /etc/nginx/nginx.conf
 
-# Expose port
-EXPOSE $PORT
+# Expose port 80
+EXPOSE 80
 
-# Start nginx with envsubst for PORT variable
-CMD sh -c "envsubst '\$PORT' < /etc/nginx/templates/default.conf.template > /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'"
+# Start nginx
+CMD ["nginx", "-g", "daemon off;"]
