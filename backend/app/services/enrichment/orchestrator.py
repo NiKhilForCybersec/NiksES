@@ -555,6 +555,11 @@ class EnrichmentOrchestrator:
                 'configured': self.phishtank.is_configured,
                 'requires_key': False,
             },
+            'mxtoolbox': {
+                'name': 'MXToolbox',
+                'configured': self.mxtoolbox.is_configured,
+                'requires_key': True,
+            },
         }
 
 
