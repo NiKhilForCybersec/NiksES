@@ -41,6 +41,7 @@ async def lifespan(app: FastAPI):
         virustotal_api_key=os.getenv("VIRUSTOTAL_API_KEY"),
         abuseipdb_api_key=os.getenv("ABUSEIPDB_API_KEY"),
         phishtank_api_key=os.getenv("PHISHTANK_API_KEY"),
+        mxtoolbox_api_key=os.getenv("MXTOOLBOX_API_KEY"),
         anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"),
         openai_api_key=os.getenv("OPENAI_API_KEY"),
         ai_enabled=os.getenv("AI_ENABLED", "false").lower() == "true",
