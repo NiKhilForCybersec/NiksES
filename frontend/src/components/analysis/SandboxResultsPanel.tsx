@@ -927,16 +927,27 @@ const SandboxResultsPanel: React.FC<SandboxResultsPanelProps> = ({
       if (response.data?.results) {
         // Update local results with new data
         setLocalResults(prev => prev.map(result => {
-          const updated = response.data.results.find(
+          // Find ALL matching results (there may be multiple - one from submission_id, one from hash)
+          const matchingResults = response.data.results.filter(
             (r: any) => r.file_hash === result.file_hash || 
                        r.submission_id === result.submission_id ||
-                       r.sha256 === result.file_hash
+                       r.sha256 === result.file_hash ||
+                       r.file_hash === result.submission_id
           );
+          
+          // Prioritize completed results over errors/pending
+          const updated = matchingResults.find((r: any) => r.status === 'completed' || r.verdict) ||
+                         matchingResults.find((r: any) => r.status !== 'error') ||
+                         matchingResults[0];
+          
           if (updated && (updated.status === 'completed' || updated.verdict)) {
+            console.log('Updating result:', result.filename, 'with:', updated.status, updated.verdict);
             return { 
               ...result, 
               ...updated,
-              status: 'completed'
+              status: 'completed',
+              // Preserve the original submission_id but update with sha256 format if available
+              submission_id: updated.submission_id || result.submission_id
             };
           }
           return result;

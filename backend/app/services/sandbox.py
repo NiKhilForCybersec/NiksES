@@ -4,7 +4,7 @@ NiksES Sandbox Integration Service - Hybrid Analysis
 Provides dynamic analysis of email attachments through Hybrid Analysis API.
 Gracefully handles cases with no attachments or no API key configured.
 
-Version: 2.3.0 (2025-12-11) - Added screenshots, fixed None comparisons, response format parsing
+Version: 2.3.1 (2025-12-11) - Fixed frontend refresh, submission_id format, removed dead code
 """
 
 import asyncio
@@ -18,7 +18,7 @@ import base64
 
 logger = logging.getLogger(__name__)
 
-SANDBOX_VERSION = "2.3.0"
+SANDBOX_VERSION = "2.3.1"
 logger.info(f"Sandbox service module loaded - version {SANDBOX_VERSION}")
 
 
@@ -166,8 +166,8 @@ class HybridAnalysisClient:
             except Exception as e:
                 return {"error": str(e), "configured": True}
     
-    async def search_hash(self, file_hash: str, fetch_full_report: bool = True) -> SandboxResult:
-        """Search for existing analysis by hash. Optionally fetches full report."""
+    async def search_hash(self, file_hash: str) -> SandboxResult:
+        """Search for existing analysis by hash and fetch full report."""
         if not self.is_configured:
             return SandboxResult(
                 provider="hybrid_analysis",
@@ -231,12 +231,18 @@ class HybridAnalysisClient:
                         
                         logger.info(f"Hash found: sha256={sha256[:16]}..., job_id={job_id}, report_id={report_id}")
                         
-                        # Fetch full report for comprehensive details
-                        if fetch_full_report:
-                            logger.info(f"Fetching full report for {report_id}")
-                            return await self.get_report(report_id)
-                        else:
-                            return self._parse_search_result(report, file_hash)
+                        # Always fetch full report for comprehensive details
+                        logger.info(f"Fetching full report for {report_id}")
+                        full_report = await self.get_report(report_id)
+                        
+                        # Ensure the returned result has correct identifiers
+                        if hasattr(full_report, 'submission_id'):
+                            if not full_report.submission_id or ':' not in str(full_report.submission_id):
+                                full_report.submission_id = report_id
+                            if not full_report.file_hash:
+                                full_report.file_hash = sha256
+                        
+                        return full_report
                     else:
                         logger.info(f"No existing analysis found for {file_hash[:16]}...")
                         return SandboxResult(
@@ -311,17 +317,17 @@ class HybridAnalysisClient:
                 if response.status_code == 201:
                     data = response.json()
                     sha256 = data.get("sha256", file_hash)
-                    job_id = data.get("job_id", "")  # Format: {sha256}:{env_id}
+                    job_id = data.get("job_id", "")
                     
-                    # Use job_id for report lookups (contains environment_id)
-                    # Fall back to sha256:env_id if job_id not provided
-                    report_id = job_id if job_id else f"{sha256}:{env_id}"
+                    # IMPORTANT: Report endpoint requires sha256:env_id format, NOT job_id
+                    # job_id is just an internal reference, not usable for report lookups
+                    report_id = f"{sha256}:{env_id}"
                     
                     logger.info(f"Submission successful: sha256={sha256[:16]}..., job_id={job_id}, report_id={report_id}")
                     
                     return SandboxResult(
                         provider="hybrid_analysis",
-                        submission_id=report_id,  # Use job_id format for report lookups
+                        submission_id=report_id,  # Use sha256:env_id format for report lookups
                         filename=filename,
                         file_hash=sha256,
                         status="submitted",
