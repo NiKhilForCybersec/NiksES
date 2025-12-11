@@ -160,15 +160,8 @@ export default function RulesManager({ isOpen, onClose }: RulesManagerProps) {
     };
 
     try {
-      const response = await fetch(`${API_BASE}/api/v1/rules/test`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      if (response.ok) {
-        setTestResult(await response.json());
-      }
+      const response = await apiClient.post('/rules/test', payload);
+      setTestResult(response.data);
     } catch (error) {
       console.error('Failed to test rule:', error);
     }
