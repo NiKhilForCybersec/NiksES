@@ -375,6 +375,16 @@ class MultiDimensionalScorer:
             intent = content_analysis.get("intent", "unknown")
             confidence = content_analysis.get("confidence", 0.5)
             
+            # If intent is legitimate, don't add content-based penalties
+            if intent == "legitimate":
+                dim.score = 0
+                dim.level = "low"
+                dim.weight = DIMENSION_WEIGHTS[RiskDimension.CONTENT]
+                dim.indicators.append("Content appears legitimate")
+                dim.details["intent"] = intent
+                dim.details["confidence"] = confidence
+                return dim
+            
             intent_scores = {
                 "credential_harvest": 80,
                 "payment_fraud": 75,
@@ -389,16 +399,20 @@ class MultiDimensionalScorer:
                 score = int(intent_scores[intent] * confidence)
                 dim.indicators.append(f"Attack intent: {intent.replace('_', ' ').title()}")
             
-            # Target data indicators
-            target_data = content_analysis.get("target_data", [])
-            for target in target_data[:3]:
-                dim.indicators.append(f"Targets: {target.replace('_', ' ')}")
-                score += 10
-            
-            # Requested actions
-            actions = content_analysis.get("requested_actions", [])
-            for action in actions[:2]:
-                dim.indicators.append(f"Requests: {action.replace('_', ' ')}")
+            # Only add target data penalties for suspicious intents
+            if intent not in ["legitimate", "marketing", "spam", "unknown"]:
+                target_data = content_analysis.get("target_data", [])
+                for target in target_data[:3]:
+                    dim.indicators.append(f"Targets: {target.replace('_', ' ')}")
+                    score += 10
+                
+                # Requested actions
+                actions = content_analysis.get("requested_actions", [])
+                risky_actions = ["send_payment", "purchase_gift_cards", "change_payment_details", "enable_macros"]
+                for action in actions[:2]:
+                    dim.indicators.append(f"Requests: {action.replace('_', ' ')}")
+                    if action in risky_actions:
+                        score += 15
         
         # Detection rules
         if detection_results:
