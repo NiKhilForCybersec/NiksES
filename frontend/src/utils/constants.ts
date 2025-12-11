@@ -16,7 +16,8 @@ export const APP_TAGLINE = "AI-Powered Email Investigation Copilot";
 // =============================================================================
 // API CONFIGURATION
 // =============================================================================
-export const API_BASE_URL = (import.meta.env.VITE_API_URL && import.meta.env.VITE_API_URL.trim()) || "/api/v1";
+// Always use /api/v1 - nginx proxies to backend
+export const API_BASE_URL = "/api/v1";
 export const API_TIMEOUT = 30000; // 30 seconds
 
 // =============================================================================
