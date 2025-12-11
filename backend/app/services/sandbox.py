@@ -3,6 +3,8 @@ NiksES Sandbox Integration Service - Hybrid Analysis
 
 Provides dynamic analysis of email attachments through Hybrid Analysis API.
 Gracefully handles cases with no attachments or no API key configured.
+
+Version: 2.1.0 (2025-12-11) - Fixed GET search/hash, report URL format with env_id
 """
 
 import asyncio
@@ -15,6 +17,9 @@ import os
 import base64
 
 logger = logging.getLogger(__name__)
+
+SANDBOX_VERSION = "2.1.0"
+logger.info(f"Sandbox service module loaded - version {SANDBOX_VERSION}")
 
 
 @dataclass
@@ -183,18 +188,48 @@ class HybridAnalysisClient:
                 logger.info(f"Hash search response: {response.status_code} for {file_hash[:16]}...")
                 
                 if response.status_code == 200:
-                    results = response.json()
+                    try:
+                        results = response.json()
+                        logger.info(f"Hash search response type: {type(results)}, content: {str(results)[:200]}")
+                    except Exception as json_err:
+                        logger.error(f"Failed to parse search response: {json_err}")
+                        return SandboxResult(
+                            provider="hybrid_analysis",
+                            submission_id=file_hash,
+                            file_hash=file_hash,
+                            status="error",
+                            error=f"Invalid response format: {json_err}"
+                        )
+                    
+                    # Handle different response formats
+                    if results is None:
+                        results = []
+                    elif isinstance(results, dict):
+                        # Some APIs wrap results in a dict
+                        results = results.get("result", results.get("results", [results]))
+                    
+                    logger.info(f"Hash search returned {len(results) if isinstance(results, list) else 'non-list'} results")
+                    
                     if results and len(results) > 0:
                         report = results[0]
                         sha256 = report.get("sha256", file_hash)
+                        # job_id has format {sha256}:{environment_id}
+                        job_id = report.get("job_id", "")
+                        env_id = report.get("environment_id", 120)
+                        
+                        # Use job_id if available, otherwise construct from sha256:env_id
+                        report_id = job_id if job_id else f"{sha256}:{env_id}"
+                        
+                        logger.info(f"Hash found: sha256={sha256[:16]}..., job_id={job_id}, report_id={report_id}")
                         
                         # Fetch full report for comprehensive details
                         if fetch_full_report:
-                            logger.info(f"Hash found, fetching full report for {sha256}")
-                            return await self.get_report(sha256)
+                            logger.info(f"Fetching full report for {report_id}")
+                            return await self.get_report(report_id)
                         else:
                             return self._parse_search_result(report, file_hash)
                     else:
+                        logger.info(f"No existing analysis found for {file_hash[:16]}...")
                         return SandboxResult(
                             provider="hybrid_analysis",
                             submission_id=file_hash,
@@ -267,10 +302,17 @@ class HybridAnalysisClient:
                 if response.status_code == 201:
                     data = response.json()
                     sha256 = data.get("sha256", file_hash)
-                    job_id = data.get("job_id", "")
+                    job_id = data.get("job_id", "")  # Format: {sha256}:{env_id}
+                    
+                    # Use job_id for report lookups (contains environment_id)
+                    # Fall back to sha256:env_id if job_id not provided
+                    report_id = job_id if job_id else f"{sha256}:{env_id}"
+                    
+                    logger.info(f"Submission successful: sha256={sha256[:16]}..., job_id={job_id}, report_id={report_id}")
+                    
                     return SandboxResult(
                         provider="hybrid_analysis",
-                        submission_id=sha256,  # Use sha256 for report lookups
+                        submission_id=report_id,  # Use job_id format for report lookups
                         filename=filename,
                         file_hash=sha256,
                         status="submitted",
@@ -312,7 +354,12 @@ class HybridAnalysisClient:
                 )
     
     async def get_report(self, submission_id: str) -> SandboxResult:
-        """Get detailed analysis report."""
+        """Get detailed analysis report.
+        
+        submission_id can be:
+        - {sha256}:{environment_id} format (from job_id)
+        - Just {sha256} (will try common environments)
+        """
         if not self.is_configured:
             return SandboxResult(
                 provider="hybrid_analysis",
@@ -321,16 +368,36 @@ class HybridAnalysisClient:
                 error="API key not configured"
             )
         
-        logger.info(f"Fetching report for: {submission_id}")
+        # If submission_id already has environment, use it directly
+        if ":" in submission_id:
+            report_id = submission_id
+            logger.info(f"Fetching report for: {report_id}")
+        else:
+            # Try with default environment (Windows 10 64-bit)
+            report_id = f"{submission_id}:120"
+            logger.info(f"Fetching report for: {report_id} (added default env)")
         
         async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
             try:
                 response = await client.get(
-                    f"{self.BASE_URL}/report/{submission_id}/summary",
+                    f"{self.BASE_URL}/report/{report_id}/summary",
                     headers=self.headers
                 )
                 
                 logger.info(f"Report response: {response.status_code}")
+                
+                # If 400/404 with default env, try other common environments
+                if response.status_code in [400, 404] and ":" not in submission_id:
+                    for env_id in [110, 100, 160]:  # Win10 32-bit, Win7 32-bit, Linux
+                        alt_report_id = f"{submission_id}:{env_id}"
+                        logger.info(f"Trying alternate environment: {alt_report_id}")
+                        response = await client.get(
+                            f"{self.BASE_URL}/report/{alt_report_id}/summary",
+                            headers=self.headers
+                        )
+                        if response.status_code == 200:
+                            report_id = alt_report_id
+                            break
                 
                 if response.status_code == 200:
                     data = response.json()
@@ -360,7 +427,7 @@ class HybridAnalysisClient:
                     logger.info(f"Report parsed: status={result.status}, verdict={result.verdict}")
                     return result
                 elif response.status_code == 404:
-                    logger.info(f"Report not ready yet for {submission_id}")
+                    logger.info(f"Report not ready yet for {report_id}")
                     return SandboxResult(
                         provider="hybrid_analysis",
                         submission_id=submission_id,
