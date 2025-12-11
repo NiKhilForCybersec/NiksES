@@ -4,7 +4,7 @@ NiksES Sandbox Integration Service - Hybrid Analysis
 Provides dynamic analysis of email attachments through Hybrid Analysis API.
 Gracefully handles cases with no attachments or no API key configured.
 
-Version: 2.1.0 (2025-12-11) - Fixed GET search/hash, report URL format with env_id
+Version: 2.2.0 (2025-12-11) - Fixed None comparison errors, response format parsing
 """
 
 import asyncio
@@ -18,7 +18,7 @@ import base64
 
 logger = logging.getLogger(__name__)
 
-SANDBOX_VERSION = "2.1.0"
+SANDBOX_VERSION = "2.2.0"
 logger.info(f"Sandbox service module loaded - version {SANDBOX_VERSION}")
 
 
@@ -205,20 +205,29 @@ class HybridAnalysisClient:
                     if results is None:
                         results = []
                     elif isinstance(results, dict):
-                        # Some APIs wrap results in a dict
-                        results = results.get("result", results.get("results", [results]))
+                        # Hybrid Analysis uses 'reports' key
+                        results = results.get("reports", results.get("result", results.get("results", [])))
+                        if not isinstance(results, list):
+                            results = [results] if results else []
                     
                     logger.info(f"Hash search returned {len(results) if isinstance(results, list) else 'non-list'} results")
                     
                     if results and len(results) > 0:
                         report = results[0]
+                        # 'id' in reports is the job_id, sha256 may be at top level or in report
                         sha256 = report.get("sha256", file_hash)
-                        # job_id has format {sha256}:{environment_id}
-                        job_id = report.get("job_id", "")
+                        # If sha256 not in report, check parent dict
+                        if sha256 == file_hash and isinstance(response.json(), dict):
+                            sha256s = response.json().get("sha256s", [])
+                            if sha256s:
+                                sha256 = sha256s[0]
+                        
+                        # 'id' field is the job_id  
+                        job_id = report.get("id", report.get("job_id", ""))
                         env_id = report.get("environment_id", 120)
                         
-                        # Use job_id if available, otherwise construct from sha256:env_id
-                        report_id = job_id if job_id else f"{sha256}:{env_id}"
+                        # Use sha256:env_id format for report URL (job_id alone doesn't work)
+                        report_id = f"{sha256}:{env_id}"
                         
                         logger.info(f"Hash found: sha256={sha256[:16]}..., job_id={job_id}, report_id={report_id}")
                         
@@ -496,7 +505,11 @@ class HybridAnalysisClient:
             )
         
         verdict = self._map_verdict(data.get("verdict"))
-        threat_score = data.get("threat_score", 0) or data.get("av_detect", 0)
+        # Handle None values explicitly
+        threat_score = data.get("threat_score")
+        if threat_score is None:
+            threat_score = data.get("av_detect") or 0
+        threat_score = int(threat_score) if threat_score else 0
         
         # Malware families
         families = []
@@ -555,12 +568,14 @@ class HybridAnalysisClient:
         dropped = data.get("dropped_files", []) or data.get("extracted_files", []) or []
         for f in dropped[:30]:
             if isinstance(f, dict):
+                threat_level = f.get("threat_level") or 0
+                av_matched = f.get("av_matched") or 0
                 file_iocs.append({
                     "filename": f.get("name", f.get("filename", "unknown")),
                     "sha256": f.get("sha256", ""),
                     "type": f.get("type", f.get("file_type", "")),
-                    "size": f.get("size", f.get("file_size", 0)),
-                    "malicious": (f.get("threat_level", 0) or 0) > 0 or f.get("av_matched", 0) > 0
+                    "size": f.get("size") or f.get("file_size") or 0,
+                    "malicious": (threat_level > 0) or (av_matched > 0)
                 })
         
         # Processes
@@ -569,12 +584,12 @@ class HybridAnalysisClient:
         for proc in proc_data[:30]:
             if isinstance(proc, dict):
                 processes.append({
-                    "name": proc.get("name", proc.get("process_name", "")),
-                    "command_line": proc.get("command_line", proc.get("cmd", "")),
-                    "pid": proc.get("pid", proc.get("process_id", 0)),
-                    "parent_pid": proc.get("parentuid", proc.get("parent_pid", 0)),
-                    "file_accesses": proc.get("file_accesses", 0),
-                    "registry_accesses": proc.get("registry_accesses", 0)
+                    "name": proc.get("name") or proc.get("process_name") or "",
+                    "command_line": proc.get("command_line") or proc.get("cmd") or "",
+                    "pid": proc.get("pid") or proc.get("process_id") or 0,
+                    "parent_pid": proc.get("parentuid") or proc.get("parent_pid") or 0,
+                    "file_accesses": proc.get("file_accesses") or 0,
+                    "registry_accesses": proc.get("registry_accesses") or 0
                 })
         
         # Registry modifications
@@ -670,6 +685,8 @@ class HybridAnalysisClient:
         return mapping.get(verdict_lower, "unknown")
     
     def _score_to_level(self, score: int) -> str:
+        if score is None:
+            score = 0
         if score >= 70:
             return "high"
         elif score >= 40:
@@ -891,8 +908,25 @@ def get_sandbox_service() -> SandboxService:
     global _sandbox_service
     if _sandbox_service is None:
         _sandbox_service = SandboxService()
-        # Auto-configure from environment
+        
+        # Try to get API key from multiple sources
         api_key = os.getenv("HYBRID_ANALYSIS_API_KEY", "")
+        
+        # Also try to load from settings if env var not set
+        if not api_key:
+            try:
+                from app.api.dependencies import get_settings
+                settings = get_settings()
+                api_key = getattr(settings, 'hybrid_analysis_api_key', '') or ''
+                if api_key:
+                    logger.info("Loaded Hybrid Analysis API key from settings")
+            except Exception as e:
+                logger.debug(f"Could not load settings for sandbox: {e}")
+        
         if api_key:
             _sandbox_service.configure(api_key=api_key, enabled=True)
+            logger.info(f"Sandbox service auto-configured: enabled=True")
+        else:
+            logger.info("Sandbox service: No API key found (env or settings)")
+            
     return _sandbox_service
