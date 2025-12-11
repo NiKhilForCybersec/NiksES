@@ -10,7 +10,7 @@ Provides endpoints for sandbox analysis:
 """
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
-from typing import Optional
+from typing import Optional, List
 from pydantic import BaseModel
 import logging
 
@@ -125,6 +125,71 @@ async def get_report(submission_id: str):
         )
     
     return result
+
+
+class BatchStatusRequest(BaseModel):
+    """Request to check status of multiple submissions."""
+    submission_ids: List[str] = []
+    file_hashes: List[str] = []
+
+
+@router.post("/batch-status")
+async def check_batch_status(request: BatchStatusRequest):
+    """
+    Check status of multiple sandbox submissions.
+    
+    Useful for polling/refreshing results for pending analyses.
+    Accepts either submission_ids or file_hashes (SHA256).
+    """
+    service = get_sandbox_service()
+    
+    if not service.is_enabled:
+        raise HTTPException(status_code=503, detail="Sandbox service not configured")
+    
+    results = []
+    
+    # Check by submission ID
+    for sub_id in request.submission_ids:
+        try:
+            report = await service.get_report(sub_id)
+            results.append(report.get("result", {}))
+        except Exception as e:
+            results.append({
+                "submission_id": sub_id,
+                "status": "error",
+                "error": str(e)
+            })
+    
+    # Check by file hash
+    for file_hash in request.file_hashes:
+        try:
+            check = await service.check_hash(file_hash)
+            if check.get("found"):
+                results.append(check.get("result", {}))
+            else:
+                results.append({
+                    "file_hash": file_hash,
+                    "status": "not_found"
+                })
+        except Exception as e:
+            results.append({
+                "file_hash": file_hash,
+                "status": "error",
+                "error": str(e)
+            })
+    
+    # Calculate summary
+    completed = sum(1 for r in results if r.get("status") == "completed")
+    pending = sum(1 for r in results if r.get("status") in ["pending", "submitted", "running"])
+    
+    return {
+        "results": results,
+        "summary": {
+            "total": len(results),
+            "completed": completed,
+            "pending": pending
+        }
+    }
 
 
 @router.get("/environments")

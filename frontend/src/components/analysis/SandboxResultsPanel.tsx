@@ -3,9 +3,10 @@
  * 
  * Displays dynamic malware analysis results from Hybrid Analysis sandbox.
  * Shows verdict, threat score, MITRE ATT&CK techniques, IOCs, and behaviors.
+ * Includes refresh functionality to poll for pending results.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Shield,
   AlertTriangle,
@@ -27,8 +28,12 @@ import {
   FileX,
   Bug,
   Copy,
-  Check
+  Check,
+  RefreshCw,
+  Clock,
+  Settings
 } from 'lucide-react';
+import { apiClient } from '../../services/api';
 
 // Types
 interface SandboxResult {
@@ -560,6 +565,73 @@ const SandboxResultsPanel: React.FC<SandboxResultsPanelProps> = ({
   sandboxAnalysis,
   isLoading = false
 }) => {
+  const [localResults, setLocalResults] = useState<SandboxResult[]>([]);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+  const [autoRefresh, setAutoRefresh] = useState(false);
+
+  // Initialize local results from props
+  useEffect(() => {
+    if (sandboxAnalysis?.results) {
+      setLocalResults(sandboxAnalysis.results);
+    }
+  }, [sandboxAnalysis]);
+
+  // Check if there are pending results that need refresh
+  const hasPendingResults = localResults.some(
+    r => r.status === 'submitted' || r.status === 'pending' || r.status === 'running'
+  );
+
+  // Auto-refresh for pending results
+  useEffect(() => {
+    if (!autoRefresh || !hasPendingResults) return;
+    
+    const interval = setInterval(() => {
+      handleRefresh();
+    }, 30000); // Every 30 seconds
+    
+    return () => clearInterval(interval);
+  }, [autoRefresh, hasPendingResults]);
+
+  // Refresh results by checking status
+  const handleRefresh = useCallback(async () => {
+    if (isRefreshing) return;
+    
+    // Collect hashes to check
+    const hashesToCheck = localResults
+      .filter(r => r.file_hash && (r.status === 'submitted' || r.status === 'pending' || r.status === 'running'))
+      .map(r => r.file_hash as string);
+    
+    if (hashesToCheck.length === 0) return;
+    
+    setIsRefreshing(true);
+    
+    try {
+      const response = await apiClient.post('/sandbox/batch-status', {
+        file_hashes: hashesToCheck
+      });
+      
+      if (response.data?.results) {
+        // Update local results with new data
+        setLocalResults(prev => prev.map(result => {
+          const updated = response.data.results.find(
+            (r: any) => r.file_hash === result.file_hash || r.submission_id === result.submission_id
+          );
+          if (updated && updated.status === 'completed') {
+            return { ...result, ...updated };
+          }
+          return result;
+        }));
+      }
+      
+      setLastRefresh(new Date());
+    } catch (error) {
+      console.error('Failed to refresh sandbox status:', error);
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [localResults, isRefreshing]);
+
   // Loading state
   if (isLoading) {
     return (
@@ -586,7 +658,7 @@ const SandboxResultsPanel: React.FC<SandboxResultsPanelProps> = ({
     return (
       <div className="bg-gray-800/50 rounded-xl p-6 border border-gray-700">
         <div className="flex items-center gap-3 mb-4">
-          <Shield className="w-5 h-5 text-gray-500" />
+          <Settings className="w-5 h-5 text-gray-500" />
           <h3 className="text-lg font-semibold text-gray-200">Sandbox Analysis</h3>
           <span className="px-2 py-0.5 bg-gray-700 text-gray-400 rounded text-xs">Not Configured</span>
         </div>
@@ -620,7 +692,31 @@ const SandboxResultsPanel: React.FC<SandboxResultsPanelProps> = ({
     );
   }
 
-  const { results, summary } = sandboxAnalysis;
+  // No content available
+  if (!sandboxAnalysis.analyzed && sandboxAnalysis.reason === 'no_content') {
+    return (
+      <div className="bg-gray-800/50 rounded-xl p-6 border border-gray-700">
+        <div className="flex items-center gap-3 mb-4">
+          <FileX className="w-5 h-5 text-yellow-500" />
+          <h3 className="text-lg font-semibold text-gray-200">Sandbox Analysis</h3>
+        </div>
+        <p className="text-gray-400 text-sm">
+          Attachment content could not be extracted for sandbox analysis. The file may be corrupted or in an unsupported format.
+        </p>
+      </div>
+    );
+  }
+
+  const { summary } = sandboxAnalysis;
+  const displayResults = localResults.length > 0 ? localResults : sandboxAnalysis.results || [];
+
+  // Calculate updated summary based on local results
+  const updatedSummary = {
+    ...summary,
+    malicious: displayResults.filter(r => r.verdict === 'malicious').length,
+    suspicious: displayResults.filter(r => r.verdict === 'suspicious').length,
+    clean: displayResults.filter(r => r.verdict === 'clean').length,
+  };
 
   return (
     <div className="bg-gray-800/50 rounded-xl p-6 border border-gray-700">
@@ -633,36 +729,84 @@ const SandboxResultsPanel: React.FC<SandboxResultsPanelProps> = ({
             Hybrid Analysis
           </span>
         </div>
+        
+        {/* Refresh Controls */}
+        <div className="flex items-center gap-2">
+          {lastRefresh && (
+            <span className="text-xs text-gray-500 flex items-center gap-1">
+              <Clock className="w-3 h-3" />
+              Updated {lastRefresh.toLocaleTimeString()}
+            </span>
+          )}
+          
+          {hasPendingResults && (
+            <label className="flex items-center gap-1 text-xs text-gray-400 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={autoRefresh}
+                onChange={(e) => setAutoRefresh(e.target.checked)}
+                className="w-3 h-3 rounded"
+              />
+              Auto-refresh
+            </label>
+          )}
+          
+          <button
+            onClick={handleRefresh}
+            disabled={isRefreshing || !hasPendingResults}
+            className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${
+              hasPendingResults
+                ? 'bg-purple-500/20 text-purple-400 hover:bg-purple-500/30'
+                : 'bg-gray-700 text-gray-500 cursor-not-allowed'
+            }`}
+          >
+            <RefreshCw className={`w-3 h-3 ${isRefreshing ? 'animate-spin' : ''}`} />
+            {isRefreshing ? 'Checking...' : 'Refresh'}
+          </button>
+        </div>
       </div>
+
+      {/* Pending Analysis Banner */}
+      {hasPendingResults && (
+        <div className="mb-4 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+          <div className="flex items-center gap-2">
+            <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />
+            <span className="text-sm text-blue-400">
+              Analysis in progress. Sandbox analysis typically takes 2-5 minutes.
+              {autoRefresh ? ' Auto-refreshing every 30 seconds.' : ' Click Refresh to check status.'}
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Summary Stats */}
       <div className="grid grid-cols-5 gap-3 mb-4">
         <div className="bg-gray-900/50 rounded-lg p-3 text-center">
-          <p className="text-2xl font-bold text-gray-200">{summary.total}</p>
+          <p className="text-2xl font-bold text-gray-200">{updatedSummary.total}</p>
           <p className="text-xs text-gray-500">Total</p>
         </div>
         <div className="bg-gray-900/50 rounded-lg p-3 text-center">
-          <p className="text-2xl font-bold text-blue-400">{summary.analyzed}</p>
+          <p className="text-2xl font-bold text-blue-400">{updatedSummary.analyzed}</p>
           <p className="text-xs text-gray-500">Analyzed</p>
         </div>
         <div className="bg-gray-900/50 rounded-lg p-3 text-center">
-          <p className="text-2xl font-bold text-red-400">{summary.malicious}</p>
+          <p className="text-2xl font-bold text-red-400">{updatedSummary.malicious}</p>
           <p className="text-xs text-gray-500">Malicious</p>
         </div>
         <div className="bg-gray-900/50 rounded-lg p-3 text-center">
-          <p className="text-2xl font-bold text-yellow-400">{summary.suspicious}</p>
+          <p className="text-2xl font-bold text-yellow-400">{updatedSummary.suspicious}</p>
           <p className="text-xs text-gray-500">Suspicious</p>
         </div>
         <div className="bg-gray-900/50 rounded-lg p-3 text-center">
-          <p className="text-2xl font-bold text-green-400">{summary.clean}</p>
+          <p className="text-2xl font-bold text-green-400">{updatedSummary.clean}</p>
           <p className="text-xs text-gray-500">Clean</p>
         </div>
       </div>
 
       {/* Results List */}
-      {results && results.length > 0 && (
+      {displayResults && displayResults.length > 0 && (
         <div className="space-y-3">
-          {results.map((result, index) => (
+          {displayResults.map((result, index) => (
             <FileResultCard key={index} result={result} />
           ))}
         </div>

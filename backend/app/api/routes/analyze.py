@@ -105,19 +105,23 @@ async def analyze_email(
         try:
             sandbox_service = get_sandbox_service()
             if sandbox_service and sandbox_service.is_enabled:
-                # Convert attachments to dict format
-                attachment_dicts = []
-                for att in parsed_email.attachments:
-                    att_dict = att.model_dump() if hasattr(att, 'model_dump') else (
-                        att.__dict__ if hasattr(att, '__dict__') else att
-                    )
-                    attachment_dicts.append(att_dict)
+                # Re-extract attachment content from original email for sandbox
+                # (AttachmentInfo model only stores metadata, not content)
+                attachment_payloads = await _extract_attachment_payloads(content)
                 
-                sandbox_analysis = await sandbox_service.analyze_attachments(
-                    attachment_dicts,
-                    wait_for_results=False  # Don't wait - results appear async
-                )
-                logger.info(f"Sandbox analysis initiated for {len(attachment_dicts)} attachments")
+                if attachment_payloads:
+                    sandbox_analysis = await sandbox_service.analyze_attachments(
+                        attachment_payloads,
+                        wait_for_results=False  # Don't wait - results appear async
+                    )
+                    logger.info(f"Sandbox analysis initiated for {len(attachment_payloads)} attachments")
+                else:
+                    sandbox_analysis = {
+                        "analyzed": False,
+                        "reason": "no_content",
+                        "results": [],
+                        "summary": {"total": len(parsed_email.attachments), "analyzed": 0, "malicious": 0, "suspicious": 0, "clean": 0, "skipped": len(parsed_email.attachments)}
+                    }
         except Exception as e:
             logger.error(f"Sandbox analysis error: {e}")
             sandbox_analysis = {
@@ -180,6 +184,56 @@ async def parse_email_file(content: bytes, filename: str) -> ParsedEmail:
         return await parse_msg_bytes(content)
     else:
         return await parse_eml_bytes(content)
+
+
+async def _extract_attachment_payloads(email_content: bytes) -> List[Dict[str, Any]]:
+    """
+    Extract attachment payloads (actual file content) from raw email.
+    
+    Returns list of dicts with:
+    - filename: str
+    - content: bytes (raw file content)
+    - content_type: str
+    - size: int
+    """
+    import email
+    from email import policy
+    from email.message import EmailMessage
+    import base64
+    
+    attachments = []
+    
+    try:
+        msg = email.message_from_bytes(email_content, policy=policy.default)
+        
+        for part in msg.walk():
+            content_disposition = str(part.get('Content-Disposition', ''))
+            
+            # Check if this is an attachment
+            if 'attachment' in content_disposition or part.get_filename():
+                filename = part.get_filename()
+                if not filename:
+                    continue
+                
+                # Get the payload
+                try:
+                    payload = part.get_payload(decode=True)
+                    if payload:
+                        content_type = part.get_content_type() or 'application/octet-stream'
+                        attachments.append({
+                            'filename': filename,
+                            'content': payload,  # This is bytes
+                            'content_type': content_type,
+                            'size': len(payload)
+                        })
+                        logger.debug(f"Extracted attachment: {filename} ({len(payload)} bytes)")
+                except Exception as e:
+                    logger.warning(f"Failed to extract payload for {filename}: {e}")
+                    continue
+    except Exception as e:
+        logger.error(f"Failed to extract attachment payloads: {e}")
+    
+    return attachments
 
 
 async def run_unified_analysis(
