@@ -146,32 +146,38 @@ async def check_batch_status(request: BatchStatusRequest):
     if not service.is_enabled:
         raise HTTPException(status_code=503, detail="Sandbox service not configured")
     
+    logger.info(f"Batch status check: submission_ids={request.submission_ids}, file_hashes={request.file_hashes}")
+    
     results = []
     
-    # Check by submission ID
+    # Check by submission ID (uses report endpoint)
     for sub_id in request.submission_ids:
         try:
+            logger.info(f"Checking submission_id: {sub_id}")
             report = await service.get_report(sub_id)
             results.append(report.get("result", {}))
         except Exception as e:
+            logger.error(f"Error checking submission {sub_id}: {e}")
             results.append({
                 "submission_id": sub_id,
                 "status": "error",
                 "error": str(e)
             })
     
-    # Check by file hash
+    # Check by file hash (uses search endpoint)
     for file_hash in request.file_hashes:
         try:
+            logger.info(f"Checking file_hash: {file_hash}")
             check = await service.check_hash(file_hash)
             if check.get("found"):
                 results.append(check.get("result", {}))
             else:
-                results.append({
-                    "file_hash": file_hash,
-                    "status": "not_found"
-                })
+                # Also try get_report with hash as ID
+                logger.info(f"Hash not found in search, trying report endpoint")
+                report = await service.get_report(file_hash)
+                results.append(report.get("result", {}))
         except Exception as e:
+            logger.error(f"Error checking hash {file_hash}: {e}")
             results.append({
                 "file_hash": file_hash,
                 "status": "error",

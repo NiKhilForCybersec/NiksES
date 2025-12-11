@@ -66,17 +66,40 @@ interface SandboxResult {
     filename: string;
     sha256: string;
     type: string;
+    size?: number;
     malicious: boolean;
   }>;
   processes?: Array<{
     name: string;
     command_line: string;
     pid: number;
+    parent_pid?: number;
+    file_accesses?: number;
+    registry_accesses?: number;
   }>;
   registry_keys?: string[];
   report_url?: string;
   environment?: string;
   error?: string;
+  
+  // Additional Hybrid Analysis fields
+  av_detect?: number;
+  vt_detect?: number;
+  total_signatures?: number;
+  total_processes?: number;
+  total_network_connections?: number;
+  file_type?: string;
+  file_size?: number;
+  classification_tags?: string[];
+  submit_name?: string;
+  type_short?: string;
+  contacted_hosts?: Array<{
+    ip: string;
+    port: number;
+    protocol: string;
+    hostname?: string;
+    country?: string;
+  }>;
 }
 
 interface SandboxAnalysis {
@@ -342,6 +365,71 @@ const FileResultCard: React.FC<{ result: SandboxResult }> = ({ result }) => {
       {/* Expanded Details */}
       {expanded && (
         <div className="p-4 space-y-4 bg-gray-900/50">
+          {/* File Info Header */}
+          {(result.file_type || result.file_size || result.submit_name) && (
+            <div className="flex flex-wrap items-center gap-2 text-xs text-gray-400 pb-2 border-b border-gray-700/50">
+              {result.file_type && (
+                <span className="px-2 py-0.5 bg-gray-800 rounded">{result.file_type}</span>
+              )}
+              {result.type_short && result.type_short !== result.file_type && (
+                <span className="px-2 py-0.5 bg-gray-800 rounded">{result.type_short}</span>
+              )}
+              {result.file_size && result.file_size > 0 && (
+                <span>{(result.file_size / 1024).toFixed(1)} KB</span>
+              )}
+              {result.submit_name && (
+                <span className="text-gray-500 truncate max-w-[200px]">{result.submit_name}</span>
+              )}
+            </div>
+          )}
+
+          {/* Analysis Overview Stats */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2 pb-3 border-b border-gray-700">
+            <div className="bg-gray-800/50 rounded-lg p-2 text-center">
+              <p className="text-xs text-gray-500">Environment</p>
+              <p className="text-sm text-gray-300 truncate">{result.environment || 'Windows'}</p>
+            </div>
+            {result.av_detect !== undefined && result.av_detect > 0 && (
+              <div className="bg-red-500/10 rounded-lg p-2 text-center border border-red-500/20">
+                <p className="text-xs text-gray-500">AV Detections</p>
+                <p className="text-sm text-red-400 font-medium">{result.av_detect}</p>
+              </div>
+            )}
+            {result.vt_detect !== undefined && result.vt_detect > 0 && (
+              <div className="bg-red-500/10 rounded-lg p-2 text-center border border-red-500/20">
+                <p className="text-xs text-gray-500">VirusTotal</p>
+                <p className="text-sm text-red-400 font-medium">{result.vt_detect}</p>
+              </div>
+            )}
+            <div className="bg-gray-800/50 rounded-lg p-2 text-center">
+              <p className="text-xs text-gray-500">Signatures</p>
+              <p className={`text-sm ${(result.total_signatures || result.signatures?.length || 0) > 0 ? 'text-purple-400' : 'text-gray-500'}`}>
+                {result.total_signatures || result.signatures?.length || 0}
+              </p>
+            </div>
+            <div className="bg-gray-800/50 rounded-lg p-2 text-center">
+              <p className="text-xs text-gray-500">MITRE</p>
+              <p className={`text-sm ${(result.mitre_attacks?.length || 0) > 0 ? 'text-orange-400' : 'text-gray-500'}`}>
+                {result.mitre_attacks?.length || 0}
+              </p>
+            </div>
+            <div className="bg-gray-800/50 rounded-lg p-2 text-center">
+              <p className="text-xs text-gray-500">Network</p>
+              <p className={`text-sm ${(result.total_network_connections || 0) > 0 ? 'text-blue-400' : 'text-gray-500'}`}>
+                {result.total_network_connections || 
+                 (result.network_iocs?.domains?.length || 0) + 
+                 (result.network_iocs?.ips?.length || 0) + 
+                 (result.network_iocs?.urls?.length || 0)}
+              </p>
+            </div>
+            <div className="bg-gray-800/50 rounded-lg p-2 text-center">
+              <p className="text-xs text-gray-500">Processes</p>
+              <p className={`text-sm ${(result.total_processes || result.processes?.length || 0) > 0 ? 'text-cyan-400' : 'text-gray-500'}`}>
+                {result.total_processes || result.processes?.length || 0}
+              </p>
+            </div>
+          </div>
+
           {/* Threat Score */}
           {result.threat_score !== undefined && (
             <ThreatScoreBar score={result.threat_score} />
@@ -355,6 +443,20 @@ const FileResultCard: React.FC<{ result: SandboxResult }> = ({ result }) => {
                 {result.malware_families.map((family, i) => (
                   <span key={i} className="px-2 py-1 bg-red-500/20 text-red-400 rounded text-sm">
                     {family}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Classification Tags */}
+          {result.classification_tags && result.classification_tags.length > 0 && (
+            <div>
+              <h4 className="text-sm font-medium text-gray-400 mb-2">Classification Tags</h4>
+              <div className="flex flex-wrap gap-2">
+                {result.classification_tags.map((tag, i) => (
+                  <span key={i} className="px-2 py-1 bg-yellow-500/20 text-yellow-400 rounded text-sm">
+                    {tag}
                   </span>
                 ))}
               </div>
@@ -475,6 +577,37 @@ const FileResultCard: React.FC<{ result: SandboxResult }> = ({ result }) => {
             )
           )}
 
+          {/* Contacted Hosts (with port/protocol details) */}
+          {result.contacted_hosts && result.contacted_hosts.length > 0 && (
+            <ExpandableSection
+              title="Contacted Hosts"
+              icon={<Server className="w-4 h-4 text-pink-400" />}
+              count={result.contacted_hosts.length}
+            >
+              <div className="space-y-2 max-h-60 overflow-y-auto">
+                {result.contacted_hosts.map((host, i) => (
+                  <div key={i} className="flex items-center gap-2 p-2 bg-gray-800/50 rounded text-sm">
+                    <code className="text-gray-300">{host.ip}</code>
+                    {host.port > 0 && (
+                      <span className="px-1.5 py-0.5 bg-pink-500/20 text-pink-400 rounded text-xs">
+                        :{host.port}
+                      </span>
+                    )}
+                    {host.protocol && (
+                      <span className="text-gray-500 text-xs">{host.protocol}</span>
+                    )}
+                    {host.hostname && (
+                      <span className="text-gray-400 text-xs truncate max-w-[150px]">{host.hostname}</span>
+                    )}
+                    {host.country && (
+                      <span className="text-gray-500 text-xs ml-auto">{host.country}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </ExpandableSection>
+          )}
+
           {/* Dropped Files */}
           {result.file_iocs && result.file_iocs.length > 0 && (
             <ExpandableSection
@@ -482,19 +615,25 @@ const FileResultCard: React.FC<{ result: SandboxResult }> = ({ result }) => {
               icon={<FileWarning className="w-4 h-4 text-red-400" />}
               count={result.file_iocs.length}
             >
-              <div className="space-y-2 max-h-48 overflow-y-auto">
+              <div className="space-y-2 max-h-60 overflow-y-auto">
                 {result.file_iocs.map((file, i) => (
                   <div key={i} className="flex items-center gap-2 p-2 bg-gray-800/50 rounded">
-                    <FileWarning className={`w-4 h-4 ${file.malicious ? 'text-red-400' : 'text-gray-400'}`} />
+                    <FileWarning className={`w-4 h-4 flex-shrink-0 ${file.malicious ? 'text-red-400' : 'text-gray-400'}`} />
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm text-gray-200 truncate">{file.filename}</p>
-                      <p className="text-xs text-gray-500 font-mono truncate">{file.sha256}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm text-gray-200 truncate">{file.filename}</p>
+                        {file.malicious && (
+                          <span className="px-1.5 py-0.5 bg-red-500/20 text-red-400 rounded text-xs flex-shrink-0">
+                            Malicious
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-gray-500">
+                        <span className="font-mono truncate">{file.sha256?.substring(0, 24)}...</span>
+                        {file.type && <span>• {file.type}</span>}
+                        {file.size && <span>• {(file.size / 1024).toFixed(1)} KB</span>}
+                      </div>
                     </div>
-                    {file.malicious && (
-                      <span className="px-2 py-0.5 bg-red-500/20 text-red-400 rounded text-xs">
-                        Malicious
-                      </span>
-                    )}
                   </div>
                 ))}
               </div>
@@ -508,14 +647,26 @@ const FileResultCard: React.FC<{ result: SandboxResult }> = ({ result }) => {
               icon={<Cpu className="w-4 h-4 text-cyan-400" />}
               count={result.processes.length}
             >
-              <div className="space-y-2 max-h-48 overflow-y-auto">
+              <div className="space-y-2 max-h-60 overflow-y-auto">
                 {result.processes.map((proc, i) => (
                   <div key={i} className="p-2 bg-gray-800/50 rounded">
-                    <p className="text-sm text-gray-200">{proc.name} (PID: {proc.pid})</p>
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm text-gray-200 font-medium">{proc.name}</p>
+                      <div className="flex items-center gap-2 text-xs text-gray-500">
+                        <span>PID: {proc.pid}</span>
+                        {proc.parent_pid ? <span>• Parent: {proc.parent_pid}</span> : null}
+                      </div>
+                    </div>
                     {proc.command_line && (
-                      <code className="block text-xs text-gray-400 mt-1 truncate">
+                      <code className="block text-xs text-gray-400 mt-1 p-1 bg-gray-900/50 rounded truncate">
                         {proc.command_line}
                       </code>
+                    )}
+                    {(proc.file_accesses || proc.registry_accesses) && (
+                      <div className="flex gap-3 mt-1 text-xs text-gray-500">
+                        {proc.file_accesses ? <span>📁 {proc.file_accesses} file ops</span> : null}
+                        {proc.registry_accesses ? <span>🔧 {proc.registry_accesses} reg ops</span> : null}
+                      </div>
                     )}
                   </div>
                 ))}
@@ -597,17 +748,26 @@ const SandboxResultsPanel: React.FC<SandboxResultsPanelProps> = ({
   const handleRefresh = useCallback(async () => {
     if (isRefreshing) return;
     
-    // Collect hashes to check
-    const hashesToCheck = localResults
-      .filter(r => r.file_hash && (r.status === 'submitted' || r.status === 'pending' || r.status === 'running'))
+    // Collect both submission_ids and hashes to check
+    const pendingResults = localResults.filter(
+      r => r.status === 'submitted' || r.status === 'pending' || r.status === 'running'
+    );
+    
+    const submissionIds = pendingResults
+      .filter(r => r.submission_id)
+      .map(r => r.submission_id as string);
+    
+    const hashesToCheck = pendingResults
+      .filter(r => r.file_hash)
       .map(r => r.file_hash as string);
     
-    if (hashesToCheck.length === 0) return;
+    if (submissionIds.length === 0 && hashesToCheck.length === 0) return;
     
     setIsRefreshing(true);
     
     try {
       const response = await apiClient.post('/sandbox/batch-status', {
+        submission_ids: submissionIds,
         file_hashes: hashesToCheck
       });
       
@@ -615,10 +775,16 @@ const SandboxResultsPanel: React.FC<SandboxResultsPanelProps> = ({
         // Update local results with new data
         setLocalResults(prev => prev.map(result => {
           const updated = response.data.results.find(
-            (r: any) => r.file_hash === result.file_hash || r.submission_id === result.submission_id
+            (r: any) => r.file_hash === result.file_hash || 
+                       r.submission_id === result.submission_id ||
+                       r.sha256 === result.file_hash
           );
-          if (updated && updated.status === 'completed') {
-            return { ...result, ...updated };
+          if (updated && (updated.status === 'completed' || updated.verdict)) {
+            return { 
+              ...result, 
+              ...updated,
+              status: 'completed'
+            };
           }
           return result;
         }));

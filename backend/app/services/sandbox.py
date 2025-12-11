@@ -39,6 +39,19 @@ class SandboxResult:
     analysis_time: Optional[int] = None
     environment: Optional[str] = None
     error: Optional[str] = None
+    
+    # Additional Hybrid Analysis fields
+    av_detect: Optional[int] = None  # Number of AV engines detecting as malicious
+    vt_detect: Optional[int] = None  # VirusTotal detections
+    total_signatures: Optional[int] = None
+    total_processes: Optional[int] = None
+    total_network_connections: Optional[int] = None
+    file_type: Optional[str] = None
+    file_size: Optional[int] = None
+    classification_tags: List[str] = None
+    submit_name: Optional[str] = None
+    type_short: Optional[str] = None  # e.g., "script", "peexe", "document"
+    contacted_hosts: List[Dict[str, Any]] = None  # IP + port + protocol
 
     def __post_init__(self):
         if self.malware_families is None:
@@ -55,6 +68,10 @@ class SandboxResult:
             self.processes = []
         if self.registry_keys is None:
             self.registry_keys = []
+        if self.classification_tags is None:
+            self.classification_tags = []
+        if self.contacted_hosts is None:
+            self.contacted_hosts = []
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -144,8 +161,8 @@ class HybridAnalysisClient:
             except Exception as e:
                 return {"error": str(e), "configured": True}
     
-    async def search_hash(self, file_hash: str) -> SandboxResult:
-        """Search for existing analysis by hash."""
+    async def search_hash(self, file_hash: str, fetch_full_report: bool = True) -> SandboxResult:
+        """Search for existing analysis by hash. Optionally fetches full report."""
         if not self.is_configured:
             return SandboxResult(
                 provider="hybrid_analysis",
@@ -166,7 +183,14 @@ class HybridAnalysisClient:
                     results = response.json()
                     if results and len(results) > 0:
                         report = results[0]
-                        return self._parse_search_result(report, file_hash)
+                        sha256 = report.get("sha256", file_hash)
+                        
+                        # Fetch full report for comprehensive details
+                        if fetch_full_report:
+                            logger.info(f"Hash found, fetching full report for {sha256}")
+                            return await self.get_report(sha256)
+                        else:
+                            return self._parse_search_result(report, file_hash)
                     else:
                         return SandboxResult(
                             provider="hybrid_analysis",
@@ -240,9 +264,10 @@ class HybridAnalysisClient:
                 if response.status_code == 201:
                     data = response.json()
                     sha256 = data.get("sha256", file_hash)
+                    job_id = data.get("job_id", "")
                     return SandboxResult(
                         provider="hybrid_analysis",
-                        submission_id=data.get("job_id", sha256),
+                        submission_id=sha256,  # Use sha256 for report lookups
                         filename=filename,
                         file_hash=sha256,
                         status="submitted",
@@ -293,6 +318,8 @@ class HybridAnalysisClient:
                 error="API key not configured"
             )
         
+        logger.info(f"Fetching report for: {submission_id}")
+        
         async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
             try:
                 response = await client.get(
@@ -300,10 +327,37 @@ class HybridAnalysisClient:
                     headers=self.headers
                 )
                 
+                logger.info(f"Report response: {response.status_code}")
+                
                 if response.status_code == 200:
                     data = response.json()
-                    return self._parse_full_report(data, submission_id)
+                    
+                    # Log all available fields for debugging
+                    logger.info(f"=== HYBRID ANALYSIS RAW RESPONSE ===")
+                    logger.info(f"Keys: {list(data.keys())}")
+                    logger.info(f"verdict: {data.get('verdict')}")
+                    logger.info(f"threat_score: {data.get('threat_score')}")
+                    logger.info(f"av_detect: {data.get('av_detect')}")
+                    logger.info(f"vx_family: {data.get('vx_family')}")
+                    logger.info(f"state: {data.get('state')}")
+                    logger.info(f"environment_description: {data.get('environment_description')}")
+                    logger.info(f"total_signatures: {data.get('total_signatures')}")
+                    logger.info(f"total_processes: {data.get('total_processes')}")
+                    logger.info(f"total_network_connections: {data.get('total_network_connections')}")
+                    logger.info(f"mitre_attcks count: {len(data.get('mitre_attcks', []))}")
+                    logger.info(f"signatures count: {len(data.get('signatures', []))}")
+                    logger.info(f"domains: {data.get('domains', [])[:5]}")
+                    logger.info(f"hosts: {data.get('hosts', [])[:5]}")
+                    logger.info(f"processes count: {len(data.get('processes', []))}")
+                    logger.info(f"extracted_files count: {len(data.get('extracted_files', []))}")
+                    logger.info(f"classification_tags: {data.get('classification_tags')}")
+                    logger.info(f"=== END RAW RESPONSE ===")
+                    
+                    result = self._parse_full_report(data, submission_id)
+                    logger.info(f"Report parsed: status={result.status}, verdict={result.verdict}")
+                    return result
                 elif response.status_code == 404:
+                    logger.info(f"Report not ready yet for {submission_id}")
                     return SandboxResult(
                         provider="hybrid_analysis",
                         submission_id=submission_id,
@@ -311,6 +365,7 @@ class HybridAnalysisClient:
                         error="Analysis still in progress"
                     )
                 else:
+                    logger.warning(f"Report fetch failed: {response.status_code}")
                     return SandboxResult(
                         provider="hybrid_analysis",
                         submission_id=submission_id,
@@ -318,6 +373,7 @@ class HybridAnalysisClient:
                         error=f"Report fetch failed: {response.status_code}"
                     )
             except Exception as e:
+                logger.error(f"Report fetch error: {e}")
                 return SandboxResult(
                     provider="hybrid_analysis",
                     submission_id=submission_id,
@@ -357,10 +413,12 @@ class HybridAnalysisClient:
         )
     
     def _parse_full_report(self, data: Dict, submission_id: str) -> SandboxResult:
-        """Parse full report into SandboxResult."""
+        """Parse full report into SandboxResult with comprehensive details."""
         state = data.get("state", "").upper()
         
-        if state != "SUCCESS":
+        logger.info(f"Parsing report - state: {state}, keys: {list(data.keys())[:20]}")
+        
+        if state not in ["SUCCESS", "ERROR"] and state != "":
             return SandboxResult(
                 provider="hybrid_analysis",
                 submission_id=submission_id,
@@ -368,58 +426,138 @@ class HybridAnalysisClient:
             )
         
         verdict = self._map_verdict(data.get("verdict"))
-        threat_score = data.get("threat_score", 0)
+        threat_score = data.get("threat_score", 0) or data.get("av_detect", 0)
         
+        # Malware families
         families = []
         if data.get("vx_family"):
-            families = [f.strip() for f in data["vx_family"].split(",") if f.strip()]
+            families = [f.strip() for f in str(data["vx_family"]).split(",") if f.strip()]
         
+        # Classification tags  
+        tags = data.get("classification_tags", []) or []
+        if tags and isinstance(tags, list):
+            families.extend([t for t in tags if t not in families])
+        
+        # Behavioral signatures
         signatures = []
-        for sig in data.get("signatures", []):
-            signatures.append({
-                "name": sig.get("name", ""),
-                "description": sig.get("description", ""),
-                "severity": sig.get("severity", ""),
-                "category": sig.get("category", "")
-            })
+        for sig in data.get("signatures", []) or []:
+            if isinstance(sig, dict):
+                signatures.append({
+                    "name": sig.get("name", ""),
+                    "description": sig.get("description", ""),
+                    "severity": sig.get("severity", sig.get("threat_level_human", "")),
+                    "category": sig.get("category", "")
+                })
         
+        # MITRE ATT&CK techniques
         mitre = []
-        for technique in data.get("mitre_attcks", []):
-            mitre.append({
-                "tactic": technique.get("tactic", ""),
-                "technique": technique.get("technique", ""),
-                "attck_id": technique.get("attck_id", "")
-            })
+        mitre_data = data.get("mitre_attcks", []) or data.get("mitre_attacks", []) or []
+        for technique in mitre_data:
+            if isinstance(technique, dict):
+                mitre.append({
+                    "tactic": technique.get("tactic", ""),
+                    "technique": technique.get("technique", ""),
+                    "attck_id": technique.get("attck_id", technique.get("id", ""))
+                })
+        
+        # Network IOCs - comprehensive extraction
+        domains = data.get("domains", []) or []
+        hosts = data.get("hosts", []) or []
+        urls = data.get("extracted_urls", []) or data.get("compromised_hosts", []) or []
+        
+        # Also check for contacted hosts
+        contacted = data.get("contacted_hosts", []) or []
+        for host in contacted:
+            if isinstance(host, dict):
+                if host.get("ip") and host.get("ip") not in hosts:
+                    hosts.append(host.get("ip"))
+                if host.get("hostname") and host.get("hostname") not in domains:
+                    domains.append(host.get("hostname"))
         
         network_iocs = {
-            "domains": data.get("domains", []),
-            "ips": data.get("hosts", []),
-            "urls": data.get("extracted_urls", [])
+            "domains": domains[:50],  # Limit to 50
+            "ips": hosts[:50],
+            "urls": urls[:50]
         }
         
+        # Dropped files
         file_iocs = []
-        for dropped in data.get("dropped_files", []):
-            file_iocs.append({
-                "filename": dropped.get("name", ""),
-                "sha256": dropped.get("sha256", ""),
-                "type": dropped.get("type", ""),
-                "malicious": dropped.get("threat_level", 0) > 0
-            })
+        dropped = data.get("dropped_files", []) or data.get("extracted_files", []) or []
+        for f in dropped[:30]:
+            if isinstance(f, dict):
+                file_iocs.append({
+                    "filename": f.get("name", f.get("filename", "unknown")),
+                    "sha256": f.get("sha256", ""),
+                    "type": f.get("type", f.get("file_type", "")),
+                    "size": f.get("size", f.get("file_size", 0)),
+                    "malicious": (f.get("threat_level", 0) or 0) > 0 or f.get("av_matched", 0) > 0
+                })
         
+        # Processes
         processes = []
-        for proc in data.get("processes", [])[:20]:
-            processes.append({
-                "name": proc.get("name", ""),
-                "command_line": proc.get("command_line", ""),
-                "pid": proc.get("pid", 0)
-            })
+        proc_data = data.get("processes", []) or data.get("process_list", []) or []
+        for proc in proc_data[:30]:
+            if isinstance(proc, dict):
+                processes.append({
+                    "name": proc.get("name", proc.get("process_name", "")),
+                    "command_line": proc.get("command_line", proc.get("cmd", "")),
+                    "pid": proc.get("pid", proc.get("process_id", 0)),
+                    "parent_pid": proc.get("parentuid", proc.get("parent_pid", 0)),
+                    "file_accesses": proc.get("file_accesses", 0),
+                    "registry_accesses": proc.get("registry_accesses", 0)
+                })
         
-        registry = data.get("registry_keys_modified", [])[:20]
+        # Registry modifications
+        registry = []
+        reg_data = data.get("registry_keys_modified", []) or data.get("registry", []) or []
+        for reg in reg_data[:30]:
+            if isinstance(reg, str):
+                registry.append(reg)
+            elif isinstance(reg, dict):
+                registry.append(reg.get("key", str(reg)))
+        
+        # Additional metadata
+        environment = data.get("environment_description", "") or data.get("environment", "")
+        analysis_time = data.get("analysis_start_time", "")
+        total_processes = data.get("total_processes", len(processes))
+        total_network = data.get("total_network_connections", len(hosts) + len(domains))
+        
+        # AV detections
+        av_detect = data.get("av_detect", 0) or 0
+        vt_detect = data.get("vt_detect", 0) or 0
+        total_signatures = data.get("total_signatures", len(signatures))
+        
+        # File metadata
+        file_type = data.get("type", "") or data.get("type_short", "")
+        type_short = data.get("type_short", "")
+        file_size = data.get("size", 0) or 0
+        submit_name = data.get("submit_name", "")
+        
+        # Classification tags (separate from families)
+        classification_tags = data.get("classification_tags", []) or []
+        
+        # Contacted hosts with details
+        contacted_hosts = []
+        for host in data.get("contacted_hosts", []) or []:
+            if isinstance(host, dict):
+                contacted_hosts.append({
+                    "ip": host.get("ip", ""),
+                    "port": host.get("port", 0),
+                    "protocol": host.get("protocol", ""),
+                    "hostname": host.get("hostname", ""),
+                    "country": host.get("country", "")
+                })
+        
+        sha256 = data.get("sha256", submission_id)
+        
+        logger.info(f"Parsed report: verdict={verdict}, score={threat_score}, av_detect={av_detect}, "
+                   f"families={families}, mitre={len(mitre)}, signatures={len(signatures)}, "
+                   f"network_iocs={len(domains)+len(hosts)}, processes={len(processes)}")
         
         return SandboxResult(
             provider="hybrid_analysis",
-            submission_id=submission_id,
-            file_hash=data.get("sha256", submission_id),
+            submission_id=sha256,
+            file_hash=sha256,
             status="completed",
             verdict=verdict,
             threat_score=threat_score,
@@ -431,8 +569,20 @@ class HybridAnalysisClient:
             file_iocs=file_iocs,
             processes=processes,
             registry_keys=registry,
-            environment=data.get("environment_description", ""),
-            report_url=f"https://www.hybrid-analysis.com/sample/{data.get('sha256', submission_id)}"
+            environment=environment,
+            report_url=f"https://www.hybrid-analysis.com/sample/{sha256}",
+            # New fields
+            av_detect=av_detect,
+            vt_detect=vt_detect,
+            total_signatures=total_signatures,
+            total_processes=total_processes,
+            total_network_connections=total_network,
+            file_type=file_type,
+            file_size=file_size,
+            classification_tags=classification_tags,
+            submit_name=submit_name,
+            type_short=type_short,
+            contacted_hosts=contacted_hosts
         )
     
     def _map_verdict(self, verdict: str) -> str:
