@@ -4,6 +4,11 @@ NiksES Content Deconstruction Analyzer
 Deep semantic analysis of email content using LLM.
 Extracts structured fields about intent, requested actions, 
 target data, and attack patterns.
+
+Uses DYNAMIC authentication-based brand validation:
+- No hardcoded brand lists needed
+- Uses SPF/DKIM/DMARC as source of truth
+- Automatically works for any brand
 """
 
 import re
@@ -216,10 +221,142 @@ class ContentAnalyzer:
                 except Exception as e:
                     self.logger.warning(f"LLM content analysis failed: {e}")
         
-        # Step 3: Infer potential impact
+        # Step 3: Dynamic validation - use EMAIL AUTHENTICATION as source of truth
+        # If SPF+DKIM+DMARC pass AND sender domain relates to brand, it's legitimate!
+        if result.spoofed_brand and email.sender:
+            if self._is_legitimate_brand_sender_dynamic(email, result.spoofed_brand):
+                self.logger.info(f"Cleared false positive: {result.spoofed_brand} - sender authenticated and domain matches brand")
+                result.spoofed_brand = None
+                result.spoofed_entity_type = None
+                # Also update intent if it was flagged as suspicious just because of brand
+                if result.intent in [AttackIntent.CREDENTIAL_HARVEST, AttackIntent.UNKNOWN]:
+                    result.intent = AttackIntent.LEGITIMATE
+                    result.confidence = 0.8
+        
+        # Step 4: Infer potential impact
         result.potential_impact = self._infer_impact(result)
         
         return result
+    
+    def _is_legitimate_brand_sender_dynamic(self, email: ParsedEmail, detected_brand: str) -> bool:
+        """
+        DYNAMIC brand validation using email authentication.
+        No hardcoded brand list needed!
+        
+        Logic:
+        1. Check if email passes authentication (SPF, DKIM, DMARC)
+        2. Check if sender domain relates to the detected brand name
+        3. If both pass → sender IS the brand, not spoofing
+        
+        Args:
+            email: ParsedEmail with auth results
+            detected_brand: Brand name detected in content (e.g., "Axis Bank")
+            
+        Returns:
+            True if sender is legitimately the brand
+        """
+        if not detected_brand or not email.sender or not email.sender.domain:
+            return False
+        
+        # Step 1: Check email authentication
+        # DMARC=pass is the strongest signal - it means SPF or DKIM aligned with From domain
+        auth_passed = self._check_authentication_passed(email)
+        
+        if not auth_passed:
+            self.logger.debug(f"Auth failed for {email.sender.domain} - cannot trust sender")
+            return False
+        
+        # Step 2: Check if sender domain relates to detected brand
+        sender_domain = email.sender.domain.lower()
+        brand_lower = detected_brand.lower()
+        
+        # Extract meaningful words from brand name
+        # Remove common suffixes like "bank", "inc", "corp", "ltd", "limited", "company"
+        stop_words = {'bank', 'inc', 'corp', 'ltd', 'limited', 'company', 'co', 'the', 'of', 'and'}
+        brand_words = [
+            word for word in re.split(r'[\s\-_]+', brand_lower) 
+            if word and len(word) >= 3 and word not in stop_words
+        ]
+        
+        if not brand_words:
+            # Fallback: use whole brand name without spaces
+            brand_words = [brand_lower.replace(' ', '')]
+        
+        # Check if any brand word appears in sender domain
+        # e.g., "axis" in "axisbank.com" → True
+        # e.g., "microsoft" in "microsoft.com" → True
+        for word in brand_words:
+            if word in sender_domain:
+                self.logger.info(f"Dynamic match: '{word}' found in '{sender_domain}' with valid auth")
+                return True
+        
+        # Also check reverse: domain name in brand
+        # e.g., domain "paypal.com" → "paypal" in "PayPal Security"
+        domain_base = sender_domain.split('.')[0]  # "axisbank" from "axisbank.com"
+        if len(domain_base) >= 4 and domain_base in brand_lower.replace(' ', ''):
+            self.logger.info(f"Dynamic match: domain base '{domain_base}' found in brand '{brand_lower}'")
+            return True
+        
+        return False
+    
+    def _check_authentication_passed(self, email: ParsedEmail) -> bool:
+        """
+        Check if email passes authentication.
+        
+        Priority: DMARC > (SPF + DKIM) > SPF alone
+        
+        Returns:
+            True if email is authenticated
+        """
+        # Check DMARC first - strongest signal
+        if email.dmarc_result:
+            dmarc_status = email.dmarc_result.result.lower() if email.dmarc_result.result else ""
+            if dmarc_status == "pass":
+                return True
+        
+        # Check via header_analysis if available
+        if email.header_analysis:
+            if email.header_analysis.dmarc_result:
+                dmarc_status = email.header_analysis.dmarc_result.result.lower() if email.header_analysis.dmarc_result.result else ""
+                if dmarc_status == "pass":
+                    return True
+        
+        # Fallback: Check SPF and DKIM individually
+        spf_pass = False
+        dkim_pass = False
+        
+        if email.spf_result:
+            spf_status = email.spf_result.result.lower() if email.spf_result.result else ""
+            spf_pass = spf_status == "pass"
+        
+        if email.dkim_result:
+            dkim_status = email.dkim_result.result.lower() if email.dkim_result.result else ""
+            dkim_pass = dkim_status == "pass"
+        
+        # Check header_analysis fallback
+        if email.header_analysis:
+            if email.header_analysis.spf_result and not spf_pass:
+                spf_status = email.header_analysis.spf_result.result.lower() if email.header_analysis.spf_result.result else ""
+                spf_pass = spf_status == "pass"
+            
+            if email.header_analysis.dkim_result and not dkim_pass:
+                dkim_status = email.header_analysis.dkim_result.result.lower() if email.header_analysis.dkim_result.result else ""
+                dkim_pass = dkim_status == "pass"
+        
+        # Need at least SPF or DKIM to pass
+        # Ideally both, but SPF+pass with no DKIM is still okay for many legitimate senders
+        if spf_pass and dkim_pass:
+            return True
+        
+        # SPF pass alone is weaker but acceptable if DKIM is not present (not failed)
+        if spf_pass and not email.dkim_result:
+            return True
+        
+        # DKIM pass alone is acceptable
+        if dkim_pass:
+            return True
+        
+        return False
     
     def _get_body_text(self, email: ParsedEmail) -> str:
         """Extract body text from email."""
