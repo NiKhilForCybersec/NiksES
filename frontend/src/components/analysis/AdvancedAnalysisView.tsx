@@ -7,6 +7,7 @@
  * - IOC extraction with OSINT pivots
  * - MITRE ATT&CK mapping
  * - Full header analysis
+ * - Sandbox dynamic analysis
  */
 
 import React, { useState } from 'react';
@@ -18,8 +19,10 @@ import {
   Copy, Download, Brain, Target, Eye, ExternalLink,
   FileText, Clock, Tag, MapPin, Building, Activity,
   Zap, Search, AlertCircle, Database, Network,
-  ArrowRight, Lock, Unlock, HelpCircle, TrendingUp
+  ArrowRight, Lock, Unlock, HelpCircle, TrendingUp,
+  Bug
 } from 'lucide-react';
+import SandboxResultsPanel from './SandboxResultsPanel';
 
 interface AdvancedAnalysisViewProps {
   result: any;
@@ -200,6 +203,10 @@ const AdvancedAnalysisView: React.FC<AdvancedAnalysisViewProps> = ({ result, onE
     { id: 'iocs', label: 'IOCs', icon: Target },
     { id: 'rules', label: 'Detection', icon: Shield },
     { id: 'ai', label: 'AI Analysis', icon: Brain },
+    // Add Sandbox tab if sandbox analysis available or attachments present
+    ...(result.sandbox_analysis || (result.email?.attachments?.length > 0)
+      ? [{ id: 'sandbox', label: 'Sandbox', icon: Bug }] 
+      : []),
     // Add Enhanced tab if enhanced results available
     ...(result.se_analysis || result.content_analysis || result.lookalike_analysis 
       ? [{ id: 'enhanced', label: 'Enhanced', icon: Zap }] 
@@ -2378,6 +2385,13 @@ const AdvancedAnalysisView: React.FC<AdvancedAnalysisViewProps> = ({ result, onE
                 </p>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Sandbox Analysis Tab */}
+        {activeTab === 'sandbox' && (
+          <div className="space-y-6">
+            <SandboxResultsPanel sandboxAnalysis={result.sandbox_analysis} />
           </div>
         )}
 

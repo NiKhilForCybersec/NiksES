@@ -33,6 +33,15 @@ from app.models.analysis import (
 from app.api.dependencies import get_settings, get_analysis_store
 from app.services.enrichment.geoip import GeoIPProvider, get_geoip_provider
 
+# Sandbox integration (optional - gracefully handles if not configured)
+try:
+    from app.services.sandbox import get_sandbox_service
+    SANDBOX_AVAILABLE = True
+except ImportError:
+    SANDBOX_AVAILABLE = False
+    def get_sandbox_service():
+        return None
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/analyze", tags=["analyze"])
@@ -90,6 +99,35 @@ async def analyze_email(
         logger.error(f"Analysis failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Analysis error: {str(e)}")
     
+    # Run sandbox analysis on attachments (non-blocking)
+    sandbox_analysis = None
+    if SANDBOX_AVAILABLE and parsed_email.attachments:
+        try:
+            sandbox_service = get_sandbox_service()
+            if sandbox_service and sandbox_service.is_enabled:
+                # Convert attachments to dict format
+                attachment_dicts = []
+                for att in parsed_email.attachments:
+                    att_dict = att.model_dump() if hasattr(att, 'model_dump') else (
+                        att.__dict__ if hasattr(att, '__dict__') else att
+                    )
+                    attachment_dicts.append(att_dict)
+                
+                sandbox_analysis = await sandbox_service.analyze_attachments(
+                    attachment_dicts,
+                    wait_for_results=False  # Don't wait - results appear async
+                )
+                logger.info(f"Sandbox analysis initiated for {len(attachment_dicts)} attachments")
+        except Exception as e:
+            logger.error(f"Sandbox analysis error: {e}")
+            sandbox_analysis = {
+                "analyzed": False,
+                "reason": "error",
+                "error": str(e),
+                "results": [],
+                "summary": {"total": len(parsed_email.attachments), "analyzed": 0, "malicious": 0, "suspicious": 0, "clean": 0, "skipped": len(parsed_email.attachments)}
+            }
+    
     # Store in memory cache FIRST (for immediate export access)
     from app.api.dependencies import cache_analysis
     cache_analysis(analysis_id, analysis_result)
@@ -108,8 +146,30 @@ async def analyze_email(
     duration_ms = int((time.time() - start_time) * 1000)
     logger.info(f"Analysis {analysis_id} completed in {duration_ms}ms")
     
-    # Return as dict for JSON serialization
-    return build_response_dict(analysis_result)
+    # Build response and add sandbox analysis
+    response = build_response_dict(analysis_result)
+    
+    # Add sandbox analysis to response
+    if sandbox_analysis:
+        response['sandbox_analysis'] = sandbox_analysis
+    else:
+        # Provide empty sandbox structure for frontend consistency
+        attachment_count = len(parsed_email.attachments) if parsed_email.attachments else 0
+        response['sandbox_analysis'] = {
+            "analyzed": False,
+            "reason": "no_attachments" if attachment_count == 0 else "sandbox_not_configured",
+            "results": [],
+            "summary": {
+                "total": attachment_count,
+                "analyzed": 0,
+                "malicious": 0,
+                "suspicious": 0,
+                "clean": 0,
+                "skipped": attachment_count
+            }
+        }
+    
+    return response
 
 
 async def parse_email_file(content: bytes, filename: str) -> ParsedEmail:

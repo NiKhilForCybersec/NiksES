@@ -14,6 +14,14 @@ from .settings import router as settings_router
 from .rules import router as rules_router
 from .soc_tools import router as soc_tools_router
 
+# Import sandbox router
+try:
+    from .sandbox import router as sandbox_router
+    SANDBOX_AVAILABLE = True
+except ImportError:
+    sandbox_router = None
+    SANDBOX_AVAILABLE = False
+
 
 def get_api_router() -> APIRouter:
     """Create and return the main API router."""
@@ -28,6 +36,10 @@ def get_api_router() -> APIRouter:
     api_router.include_router(rules_router)
     api_router.include_router(soc_tools_router)
     
+    # Include sandbox router if available
+    if SANDBOX_AVAILABLE and sandbox_router:
+        api_router.include_router(sandbox_router)
+    
     return api_router
 
 
@@ -40,4 +52,6 @@ __all__ = [
     'settings_router',
     'rules_router',
     'soc_tools_router',
+    'sandbox_router',
+    'SANDBOX_AVAILABLE',
 ]

@@ -43,6 +43,7 @@ interface APIKeyConfig {
   abuseipdb_api_key?: string;
   phishtank_api_key?: string;
   mxtoolbox_api_key?: string;
+  hybrid_analysis_api_key?: string;
   anthropic_api_key?: string;
   openai_api_key?: string;
 }
@@ -419,6 +420,24 @@ export function SettingsModal({ isOpen, onClose, onSettingsChange }: SettingsMod
                     signupUrl="https://mxtoolbox.com/User/Api/"
                     icon={<Server className="w-5 h-5 text-purple-400" />}
                     rateLimit="Varies by plan"
+                  />
+
+                  {/* Hybrid Analysis - Sandbox */}
+                  <APIKeyInput
+                    name="Hybrid Analysis"
+                    description="Dynamic malware sandbox for attachment analysis. Detects malware, MITRE ATT&CK techniques, network IOCs."
+                    keyName="hybrid_analysis_api_key"
+                    value={apiKeys.hybrid_analysis_api_key || ''}
+                    onChange={(value) => handleKeyChange('hybrid_analysis_api_key', value)}
+                    showKey={showKeys['hybrid_analysis'] || false}
+                    onToggleShow={() => toggleShowKey('hybrid_analysis')}
+                    isConfigured={settings?.api_keys_configured?.hybrid_analysis || false}
+                    onTest={() => testConnection('hybrid_analysis')}
+                    isTesting={testingProvider === 'hybrid_analysis'}
+                    testResult={testResults['hybrid_analysis']}
+                    signupUrl="https://www.hybrid-analysis.com/apikeys/info"
+                    icon={<Shield className="w-5 h-5 text-pink-400" />}
+                    rateLimit="100 submissions/month (free)"
                   />
 
                   <div className="p-4 bg-blue-900/30 rounded-lg border border-blue-700">
