@@ -12,7 +12,7 @@ RUN npm ci
 # Copy source code
 COPY . .
 
-# Build argument for API URL
+# Build argument for API URL (not used in proxy mode, but kept for compatibility)
 ARG VITE_API_URL
 ENV VITE_API_URL=$VITE_API_URL
 
@@ -22,14 +22,21 @@ RUN npm run build
 # Stage 2: Serve with nginx
 FROM nginx:alpine
 
+# Install envsubst (part of gettext)
+RUN apk add --no-cache gettext
+
 # Copy built files
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# Copy nginx config
-COPY nginx.conf /etc/nginx/nginx.conf
+# Copy nginx config template
+COPY nginx.conf.template /etc/nginx/nginx.conf.template
+
+# Copy entrypoint script
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
 
 # Expose port 80
 EXPOSE 80
 
-# Start nginx
-CMD ["nginx", "-g", "daemon off;"]
+# Start with entrypoint script
+CMD ["/docker-entrypoint.sh"]
