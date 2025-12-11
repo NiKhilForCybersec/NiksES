@@ -127,6 +127,35 @@ async def get_report(submission_id: str):
     return result
 
 
+@router.get("/screenshots/{report_id:path}")
+async def get_screenshots(report_id: str):
+    """
+    Get screenshots from sandbox analysis.
+    
+    Args:
+        report_id: Format {sha256}:{environment_id} or just {sha256}
+        
+    Returns:
+        Array of base64-encoded screenshots
+    """
+    service = get_sandbox_service()
+    
+    if not service.is_enabled:
+        raise HTTPException(status_code=503, detail="Sandbox service not configured")
+    
+    logger.info(f"Fetching screenshots for: {report_id}")
+    
+    result = await service.client.get_screenshots(report_id)
+    
+    if not result.get("success"):
+        raise HTTPException(
+            status_code=404,
+            detail=result.get("error", "Screenshots not available")
+        )
+    
+    return result
+
+
 class BatchStatusRequest(BaseModel):
     """Request to check status of multiple submissions."""
     submission_ids: List[str] = []

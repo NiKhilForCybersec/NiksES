@@ -31,7 +31,11 @@ import {
   Check,
   RefreshCw,
   Clock,
-  Settings
+  Settings,
+  Image,
+  Camera,
+  X,
+  ZoomIn
 } from 'lucide-react';
 import { apiClient } from '../../services/api';
 
@@ -99,6 +103,14 @@ interface SandboxResult {
     protocol: string;
     hostname?: string;
     country?: string;
+  }>;
+  
+  // Screenshots from sandbox execution
+  screenshots?: Array<{
+    index: number;
+    image: string;  // Base64 encoded
+    format: string;
+    name?: string;
   }>;
 }
 
@@ -205,13 +217,22 @@ const ExpandableSection: React.FC<{
   count?: number;
   children: React.ReactNode;
   defaultExpanded?: boolean;
-}> = ({ title, icon, count, children, defaultExpanded = false }) => {
+  onExpand?: () => void;
+}> = ({ title, icon, count, children, defaultExpanded = false, onExpand }) => {
   const [expanded, setExpanded] = useState(defaultExpanded);
+
+  const handleToggle = () => {
+    const newState = !expanded;
+    setExpanded(newState);
+    if (newState && onExpand) {
+      onExpand();
+    }
+  };
 
   return (
     <div className="border border-gray-700 rounded-lg overflow-hidden">
       <button
-        onClick={() => setExpanded(!expanded)}
+        onClick={handleToggle}
         className="w-full flex items-center justify-between p-3 bg-gray-800/50 hover:bg-gray-700/50 transition-colors"
       >
         <div className="flex items-center gap-2">
@@ -238,6 +259,33 @@ const ExpandableSection: React.FC<{
 const FileResultCard: React.FC<{ result: SandboxResult }> = ({ result }) => {
   const [expanded, setExpanded] = useState(false);
   const { copied, copy } = useCopyToClipboard();
+  const [screenshots, setScreenshots] = useState<Array<{index: number; image: string; format: string; name?: string}>>([]);
+  const [loadingScreenshots, setLoadingScreenshots] = useState(false);
+  const [screenshotError, setScreenshotError] = useState<string | null>(null);
+  const [selectedScreenshot, setSelectedScreenshot] = useState<number | null>(null);
+
+  // Fetch screenshots when expanded and completed
+  const fetchScreenshots = async () => {
+    if (!result.submission_id || loadingScreenshots || screenshots.length > 0) return;
+    
+    setLoadingScreenshots(true);
+    setScreenshotError(null);
+    
+    try {
+      // Use submission_id which should be in sha256:env format
+      const reportId = result.submission_id;
+      const response = await apiClient.get(`/sandbox/screenshots/${reportId}`);
+      
+      if (response.data.success && response.data.screenshots) {
+        setScreenshots(response.data.screenshots);
+      }
+    } catch (error: any) {
+      console.error('Failed to fetch screenshots:', error);
+      setScreenshotError('Screenshots not available');
+    } finally {
+      setLoadingScreenshots(false);
+    }
+  };
 
   // Skipped file
   if (result.status === 'skipped') {
@@ -689,6 +737,111 @@ const FileResultCard: React.FC<{ result: SandboxResult }> = ({ result }) => {
                 ))}
               </div>
             </ExpandableSection>
+          )}
+
+          {/* Screenshots */}
+          {result.status === 'completed' && (
+            <ExpandableSection
+              title="Sandbox Screenshots"
+              icon={<Camera className="w-4 h-4 text-indigo-400" />}
+              count={screenshots.length || undefined}
+              defaultExpanded={false}
+              onExpand={fetchScreenshots}
+            >
+              <div className="space-y-3">
+                {loadingScreenshots && (
+                  <div className="flex items-center gap-2 text-gray-400 text-sm">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Loading screenshots...
+                  </div>
+                )}
+                
+                {screenshotError && (
+                  <p className="text-sm text-gray-500">{screenshotError}</p>
+                )}
+                
+                {screenshots.length > 0 && (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {screenshots.map((ss) => (
+                      <div
+                        key={ss.index}
+                        className="relative group cursor-pointer rounded-lg overflow-hidden border border-gray-700 hover:border-indigo-500 transition-colors"
+                        onClick={() => setSelectedScreenshot(ss.index)}
+                      >
+                        <img
+                          src={`data:image/${ss.format || 'png'};base64,${ss.image}`}
+                          alt={ss.name || `Screenshot ${ss.index + 1}`}
+                          className="w-full h-24 object-cover"
+                        />
+                        <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                          <ZoomIn className="w-5 h-5 text-white" />
+                        </div>
+                        <div className="absolute bottom-0 left-0 right-0 bg-black/70 px-2 py-1">
+                          <p className="text-xs text-gray-300 truncate">
+                            {ss.name || `Screenshot ${ss.index + 1}`}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                
+                {!loadingScreenshots && screenshots.length === 0 && !screenshotError && (
+                  <button
+                    onClick={fetchScreenshots}
+                    className="flex items-center gap-2 text-sm text-indigo-400 hover:text-indigo-300"
+                  >
+                    <Camera className="w-4 h-4" />
+                    Load Screenshots
+                  </button>
+                )}
+              </div>
+            </ExpandableSection>
+          )}
+
+          {/* Screenshot Modal */}
+          {selectedScreenshot !== null && screenshots[selectedScreenshot] && (
+            <div
+              className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4"
+              onClick={() => setSelectedScreenshot(null)}
+            >
+              <div className="relative max-w-4xl max-h-[90vh]">
+                <button
+                  className="absolute -top-10 right-0 text-white hover:text-gray-300"
+                  onClick={() => setSelectedScreenshot(null)}
+                >
+                  <X className="w-6 h-6" />
+                </button>
+                <img
+                  src={`data:image/${screenshots[selectedScreenshot].format || 'png'};base64,${screenshots[selectedScreenshot].image}`}
+                  alt={screenshots[selectedScreenshot].name || `Screenshot ${selectedScreenshot + 1}`}
+                  className="max-w-full max-h-[85vh] object-contain rounded-lg"
+                  onClick={(e) => e.stopPropagation()}
+                />
+                <div className="absolute bottom-2 left-2 bg-black/70 px-3 py-1 rounded text-sm text-white">
+                  {screenshots[selectedScreenshot].name || `Screenshot ${selectedScreenshot + 1}`}
+                </div>
+                {/* Navigation */}
+                <div className="absolute bottom-2 right-2 flex gap-2">
+                  {selectedScreenshot > 0 && (
+                    <button
+                      className="bg-black/70 px-3 py-1 rounded text-sm text-white hover:bg-black/90"
+                      onClick={(e) => { e.stopPropagation(); setSelectedScreenshot(selectedScreenshot - 1); }}
+                    >
+                      ← Prev
+                    </button>
+                  )}
+                  {selectedScreenshot < screenshots.length - 1 && (
+                    <button
+                      className="bg-black/70 px-3 py-1 rounded text-sm text-white hover:bg-black/90"
+                      onClick={(e) => { e.stopPropagation(); setSelectedScreenshot(selectedScreenshot + 1); }}
+                    >
+                      Next →
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
           )}
 
           {/* Report Link */}

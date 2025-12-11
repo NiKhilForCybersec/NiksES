@@ -4,7 +4,7 @@ NiksES Sandbox Integration Service - Hybrid Analysis
 Provides dynamic analysis of email attachments through Hybrid Analysis API.
 Gracefully handles cases with no attachments or no API key configured.
 
-Version: 2.2.0 (2025-12-11) - Fixed None comparison errors, response format parsing
+Version: 2.3.0 (2025-12-11) - Added screenshots, fixed None comparisons, response format parsing
 """
 
 import asyncio
@@ -18,7 +18,7 @@ import base64
 
 logger = logging.getLogger(__name__)
 
-SANDBOX_VERSION = "2.2.0"
+SANDBOX_VERSION = "2.3.0"
 logger.info(f"Sandbox service module loaded - version {SANDBOX_VERSION}")
 
 
@@ -460,7 +460,70 @@ class HybridAnalysisClient:
                     error=str(e)
                 )
     
-    def _parse_search_result(self, report: Dict, file_hash: str) -> SandboxResult:
+    async def get_screenshots(self, report_id: str) -> Dict[str, Any]:
+        """Get screenshots from sandbox analysis.
+        
+        Args:
+            report_id: Format {sha256}:{environment_id}
+            
+        Returns:
+            Dict with 'screenshots' key containing list of base64 images
+        """
+        if not self.is_configured:
+            return {"success": False, "error": "API not configured", "screenshots": []}
+        
+        # Ensure report_id has environment
+        if ":" not in report_id:
+            report_id = f"{report_id}:120"
+        
+        logger.info(f"Fetching screenshots for: {report_id}")
+        
+        async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
+            try:
+                response = await client.get(
+                    f"{self.BASE_URL}/report/{report_id}/screenshots",
+                    headers=self.headers
+                )
+                
+                logger.info(f"Screenshots response: {response.status_code}")
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    screenshots = []
+                    
+                    # Response is array of base64 strings or objects
+                    if isinstance(data, list):
+                        for i, item in enumerate(data):
+                            if isinstance(item, str):
+                                # Direct base64 string
+                                screenshots.append({
+                                    "index": i,
+                                    "image": item,
+                                    "format": "png"
+                                })
+                            elif isinstance(item, dict):
+                                # Object with image data
+                                screenshots.append({
+                                    "index": i,
+                                    "image": item.get("image", item.get("data", "")),
+                                    "format": item.get("format", "png"),
+                                    "name": item.get("name", f"screenshot_{i}")
+                                })
+                    
+                    logger.info(f"Retrieved {len(screenshots)} screenshots")
+                    return {
+                        "success": True,
+                        "screenshots": screenshots,
+                        "count": len(screenshots)
+                    }
+                elif response.status_code == 404:
+                    return {"success": True, "screenshots": [], "count": 0, "message": "No screenshots available"}
+                else:
+                    return {"success": False, "error": f"Failed: {response.status_code}", "screenshots": []}
+                    
+            except Exception as e:
+                logger.error(f"Screenshots fetch error: {e}")
+                return {"success": False, "error": str(e), "screenshots": []}
         """Parse search result into SandboxResult."""
         verdict = self._map_verdict(report.get("verdict"))
         threat_score = report.get("threat_score", 0)
