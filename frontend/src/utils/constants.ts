@@ -16,8 +16,9 @@ export const APP_TAGLINE = "AI-Powered Email Investigation Copilot";
 // =============================================================================
 // API CONFIGURATION
 // =============================================================================
-// Always use /api/v1 - nginx proxies to backend
-export const API_BASE_URL = "/api/v1";
+// API Base URL - calls backend directly
+// Set VITE_API_URL in Railway to your backend URL
+export const API_BASE_URL = import.meta.env.VITE_API_URL || "/api/v1";
 export const API_TIMEOUT = 30000; // 30 seconds
 
 // =============================================================================
