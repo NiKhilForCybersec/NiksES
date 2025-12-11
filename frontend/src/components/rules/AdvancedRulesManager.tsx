@@ -21,8 +21,7 @@ import {
   Play, Pause, RefreshCw, Settings, BookOpen, Award
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
-
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+import { apiClient } from '../../services/api';
 
 // ============================================
 // FIELD DEFINITIONS - What can be checked
@@ -333,28 +332,26 @@ const AdvancedRulesManager: React.FC<AdvancedRulesManagerProps> = ({ isOpen, onC
   const loadRules = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`${API_BASE}/api/v1/rules`);
-      if (response.ok) {
-        const data = await response.json();
-        // Convert old format to new if needed
-        const convertedRules = (data.rules || []).map((r: any) => ({
-          ...r,
-          conditionGroups: r.conditionGroups || [{
-            id: '1',
-            logic: 'AND',
-            conditions: r.conditions?.map((c: any, i: number) => ({
-              id: String(i + 1),
-              field: c.field,
-              operator: c.operator,
-              value: c.value,
-            })) || []
-          }],
-          groupLogic: r.groupLogic || 'AND',
-          mitreTechniques: r.mitreTechniques || r.mitre || [],
-          tags: r.tags || [],
-        }));
-        setRules(convertedRules);
-      }
+      const response = await apiClient.get('/rules');
+      const data = response.data;
+      // Convert old format to new if needed
+      const convertedRules = (data.rules || []).map((r: any) => ({
+        ...r,
+        conditionGroups: r.conditionGroups || [{
+          id: '1',
+          logic: 'AND',
+          conditions: r.conditions?.map((c: any, i: number) => ({
+            id: String(i + 1),
+            field: c.field,
+            operator: c.operator,
+            value: c.value,
+          })) || []
+        }],
+        groupLogic: r.groupLogic || 'AND',
+        mitreTechniques: r.mitreTechniques || r.mitre || [],
+        tags: r.tags || [],
+      }));
+      setRules(convertedRules);
     } catch (error) {
       console.error('Failed to load rules:', error);
     } finally {
@@ -464,20 +461,11 @@ const AdvancedRulesManager: React.FC<AdvancedRulesManagerProps> = ({ isOpen, onC
         created_at: editForm.created_at || new Date().toISOString(),
       };
 
-      const response = await fetch(`${API_BASE}/api/v1/rules`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(ruleData),
-      });
-
-      if (response.ok) {
-        toast.success(selectedRule ? 'Rule updated' : 'Rule created');
-        setIsEditing(false);
-        setSelectedRule(null);
-        loadRules();
-      } else {
-        toast.error('Failed to save rule');
-      }
+      await apiClient.post('/rules', ruleData);
+      toast.success(selectedRule ? 'Rule updated' : 'Rule created');
+      setIsEditing(false);
+      setSelectedRule(null);
+      loadRules();
     } catch (error) {
       toast.error('Failed to save rule');
     }
@@ -486,13 +474,9 @@ const AdvancedRulesManager: React.FC<AdvancedRulesManagerProps> = ({ isOpen, onC
   // Delete rule
   const deleteRule = async (ruleId: string) => {
     try {
-      const response = await fetch(`${API_BASE}/api/v1/rules/${ruleId}`, {
-        method: 'DELETE',
-      });
-      if (response.ok) {
-        toast.success('Rule deleted');
-        loadRules();
-      }
+      await apiClient.delete(`/rules/${ruleId}`);
+      toast.success('Rule deleted');
+      loadRules();
     } catch (error) {
       toast.error('Failed to delete rule');
     }

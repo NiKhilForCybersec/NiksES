@@ -25,6 +25,7 @@ import {
   BarChart3,
   PieChart,
 } from 'lucide-react';
+import { apiClient } from '../../services/api';
 
 interface AnalysisSummary {
   // From backend AnalysisSummary
@@ -100,43 +101,45 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewAnalysis, onClose }) => {
   const fetchDashboardData = async () => {
     setLoading(true);
     try {
-      // Fetch analyses list
-      const params = new URLSearchParams({
-        page: currentPage.toString(),
-        page_size: pageSize.toString(),
-        sort_by: sortBy,
-        sort_order: sortOrder,
+      // Map UI sort fields to backend field names
+      const sortFieldMap: Record<string, string> = {
+        'date': 'analyzed_at',
+        'score': 'risk_score',
+        'subject': 'subject',
+      };
+      const backendSortBy = sortFieldMap[sortBy] || 'analyzed_at';
+
+      // Fetch analyses list using apiClient
+      const analysesResponse = await apiClient.get('/analyses', {
+        params: {
+          page: currentPage,
+          page_size: pageSize,
+          sort_by: backendSortBy,
+          sort_order: sortOrder,
+          ...(filterVerdict !== 'all' && { risk_level: filterVerdict }),
+        },
       });
-      if (filterVerdict !== 'all') {
-        params.append('verdict', filterVerdict);
-      }
+      
+      const data = analysesResponse.data;
+      // Backend returns 'analyses' not 'items'
+      const rawAnalyses = data.analyses || data.items || [];
+      // Normalize backend data to UI format
+      const normalizedAnalyses = rawAnalyses.map((a: any) => ({
+        ...a,
+        id: a.analysis_id || a.id,
+        sender: a.sender_email || a.sender || 'Unknown',
+        verdict: getVerdictFromClassification(a.classification || a.risk_level),
+        rules_triggered: a.rules_triggered_count || a.rules_triggered || 0,
+        critical_findings: a.critical_findings || 0,
+        ai_enabled: !!a.ai_summary,
+        subject: a.subject || '(No Subject)',
+      }));
+      setAnalyses(normalizedAnalyses);
+      setTotalPages(Math.ceil((data.total || 0) / pageSize));
 
-      const response = await fetch(`/api/v1/analyses?${params}`);
-      if (response.ok) {
-        const data = await response.json();
-        // Backend returns 'analyses' not 'items'
-        const rawAnalyses = data.analyses || data.items || [];
-        // Normalize backend data to UI format
-        const normalizedAnalyses = rawAnalyses.map((a: any) => ({
-          ...a,
-          id: a.analysis_id || a.id,
-          sender: a.sender_email || a.sender || 'Unknown',
-          verdict: getVerdictFromClassification(a.classification || a.risk_level),
-          rules_triggered: a.rules_triggered || 0,
-          critical_findings: a.critical_findings || 0,
-          ai_enabled: !!a.ai_summary,
-          subject: a.subject || '(No Subject)',
-        }));
-        setAnalyses(normalizedAnalyses);
-        setTotalPages(Math.ceil((data.total || 0) / pageSize));
-      }
-
-      // Fetch stats
-      const statsResponse = await fetch('/api/v1/analyses/stats');
-      if (statsResponse.ok) {
-        const statsData = await statsResponse.json();
-        setStats(statsData);
-      }
+      // Fetch stats using apiClient
+      const statsResponse = await apiClient.get('/analyses/stats');
+      setStats(statsResponse.data);
     } catch (error) {
       console.error('Failed to fetch dashboard data:', error);
       // Use mock data for demonstration

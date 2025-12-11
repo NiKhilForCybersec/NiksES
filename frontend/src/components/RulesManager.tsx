@@ -10,8 +10,7 @@ import {
   AlertTriangle, ChevronDown, ChevronUp, Copy, Download,
   Upload, TestTube, Check, Info
 } from 'lucide-react';
-
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+import { apiClient } from '../services/api';
 
 // Types
 interface RuleCondition {
@@ -74,18 +73,12 @@ export default function RulesManager({ isOpen, onClose }: RulesManagerProps) {
   const fetchRules = useCallback(async () => {
     try {
       const [rulesRes, catsRes] = await Promise.all([
-        fetch(`${API_BASE}/api/v1/rules`),
-        fetch(`${API_BASE}/api/v1/rules/categories`),
+        apiClient.get('/rules'),
+        apiClient.get('/rules/categories'),
       ]);
       
-      if (rulesRes.ok) {
-        const data = await rulesRes.json();
-        setRules(data.rules || []);
-      }
-      
-      if (catsRes.ok) {
-        setCategories(await catsRes.json());
-      }
+      setRules(rulesRes.data.rules || []);
+      setCategories(catsRes.data);
     } catch (error) {
       console.error('Failed to fetch rules:', error);
     } finally {
@@ -113,20 +106,13 @@ export default function RulesManager({ isOpen, onClose }: RulesManagerProps) {
     };
 
     try {
-      const url = editingRule 
-        ? `${API_BASE}/api/v1/rules/${editingRule.rule_id}`
-        : `${API_BASE}/api/v1/rules`;
-      
-      const response = await fetch(url, {
-        method: editingRule ? 'PATCH' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      if (response.ok) {
-        await fetchRules();
-        resetForm();
+      if (editingRule) {
+        await apiClient.patch(`/rules/${editingRule.rule_id}`, payload);
+      } else {
+        await apiClient.post('/rules', payload);
       }
+      await fetchRules();
+      resetForm();
     } catch (error) {
       console.error('Failed to save rule:', error);
     }
@@ -137,7 +123,7 @@ export default function RulesManager({ isOpen, onClose }: RulesManagerProps) {
     if (!confirm('Delete this rule?')) return;
     
     try {
-      await fetch(`${API_BASE}/api/v1/rules/${ruleId}`, { method: 'DELETE' });
+      await apiClient.delete(`/rules/${ruleId}`);
       await fetchRules();
     } catch (error) {
       console.error('Failed to delete rule:', error);
@@ -147,9 +133,7 @@ export default function RulesManager({ isOpen, onClose }: RulesManagerProps) {
   // Toggle rule enabled/disabled
   const handleToggleRule = async (ruleId: string, enabled: boolean) => {
     try {
-      await fetch(`${API_BASE}/api/v1/rules/${ruleId}/toggle?enabled=${enabled}`, {
-        method: 'POST',
-      });
+      await apiClient.post(`/rules/${ruleId}/toggle?enabled=${enabled}`);
       await fetchRules();
     } catch (error) {
       console.error('Failed to toggle rule:', error);

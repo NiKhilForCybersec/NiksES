@@ -30,6 +30,7 @@ import {
   WifiOff,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { apiClient } from '../../services/api';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -78,7 +79,7 @@ interface DetectionConfig {
   };
 }
 
-const API_BASE = 'http://localhost:8000/api/v1';
+const API_BASE = ''; // Using apiClient instead
 
 export function SettingsModal({ isOpen, onClose, onSettingsChange }: SettingsModalProps) {
   const [activeTab, setActiveTab] = useState<'threat-intel' | 'ai' | 'detection' | 'advanced'>('threat-intel');
@@ -113,15 +114,13 @@ export function SettingsModal({ isOpen, onClose, onSettingsChange }: SettingsMod
   const loadSettings = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${API_BASE}/settings`);
-      if (response.ok) {
-        const data = await response.json();
-        setSettings(data);
-        setEnrichmentEnabled(data.enrichment_enabled);
-        setAiEnabled(data.ai_enabled);
-        setAiProvider(data.ai_provider || 'openai');
-        onSettingsChange?.(data);
-      }
+      const response = await apiClient.get('/settings');
+      const data = response.data;
+      setSettings(data);
+      setEnrichmentEnabled(data.enrichment_enabled);
+      setAiEnabled(data.ai_enabled);
+      setAiProvider(data.ai_provider || 'openai');
+      onSettingsChange?.(data);
     } catch (error) {
       console.error('Failed to load settings:', error);
       toast.error('Failed to load settings');
@@ -132,11 +131,8 @@ export function SettingsModal({ isOpen, onClose, onSettingsChange }: SettingsMod
 
   const loadDetectionConfig = async () => {
     try {
-      const response = await fetch(`${API_BASE}/settings/detection-config`);
-      if (response.ok) {
-        const data = await response.json();
-        setDetectionConfig(data);
-      }
+      const response = await apiClient.get('/settings/detection-config');
+      setDetectionConfig(response.data);
     } catch (error) {
       console.error('Failed to load detection config:', error);
     }
@@ -164,23 +160,13 @@ export function SettingsModal({ isOpen, onClose, onSettingsChange }: SettingsMod
         updates.api_keys = keysToSave;
       }
       
-      const response = await fetch(`${API_BASE}/settings`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updates),
-      });
-      
-      if (response.ok) {
-        toast.success('Settings saved successfully');
-        setApiKeys({}); // Clear entered keys
-        await loadSettings();
-      } else {
-        const error = await response.json();
-        toast.error(error.detail || 'Failed to save settings');
-      }
-    } catch (error) {
+      await apiClient.patch('/settings', updates);
+      toast.success('Settings saved successfully');
+      setApiKeys({}); // Clear entered keys
+      await loadSettings();
+    } catch (error: any) {
       console.error('Failed to save settings:', error);
-      toast.error('Failed to save settings');
+      toast.error(error?.response?.data?.detail || 'Failed to save settings');
     } finally {
       setSaving(false);
     }
@@ -191,11 +177,8 @@ export function SettingsModal({ isOpen, onClose, onSettingsChange }: SettingsMod
       setTestingProvider(provider);
       setTestResults(prev => ({ ...prev, [provider]: { success: false } }));
       
-      const response = await fetch(`${API_BASE}/settings/test-connection/${provider}`, {
-        method: 'POST',
-      });
-      
-      const result = await response.json();
+      const response = await apiClient.post(`/settings/test-connection/${provider}`);
+      const result = response.data;
       
       setTestResults(prev => ({
         ...prev,
@@ -207,7 +190,7 @@ export function SettingsModal({ isOpen, onClose, onSettingsChange }: SettingsMod
       } else {
         toast.error(`${provider} connection failed: ${result.error || 'Unknown error'}`);
       }
-    } catch (error) {
+    } catch (error: any) {
       setTestResults(prev => ({
         ...prev,
         [provider]: { success: false, message: 'Connection failed' }
@@ -229,10 +212,8 @@ export function SettingsModal({ isOpen, onClose, onSettingsChange }: SettingsMod
   const addWhitelistDomain = async () => {
     if (!newWhitelistDomain.trim()) return;
     try {
-      const response = await fetch(`${API_BASE}/settings/detection-config/whitelist-domain?domain=${encodeURIComponent(newWhitelistDomain)}`, {
-        method: 'POST',
-      });
-      const result = await response.json();
+      const response = await apiClient.post(`/settings/detection-config/whitelist-domain?domain=${encodeURIComponent(newWhitelistDomain)}`);
+      const result = response.data;
       if (result.success) {
         toast.success(result.message);
         setNewWhitelistDomain('');
@@ -248,10 +229,8 @@ export function SettingsModal({ isOpen, onClose, onSettingsChange }: SettingsMod
   const addWhitelistSender = async () => {
     if (!newWhitelistSender.trim()) return;
     try {
-      const response = await fetch(`${API_BASE}/settings/detection-config/whitelist-sender?email=${encodeURIComponent(newWhitelistSender)}`, {
-        method: 'POST',
-      });
-      const result = await response.json();
+      const response = await apiClient.post(`/settings/detection-config/whitelist-sender?email=${encodeURIComponent(newWhitelistSender)}`);
+      const result = response.data;
       if (result.success) {
         toast.success(result.message);
         setNewWhitelistSender('');

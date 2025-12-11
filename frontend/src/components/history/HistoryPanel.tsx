@@ -13,6 +13,7 @@ import {
   SortAsc, SortDesc, Loader2, Database, AlertCircle
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
+import { apiClient } from '../../services/api';
 
 interface AnalysisSummary {
   analysis_id: string;
@@ -36,8 +37,6 @@ interface HistoryPanelProps {
   onViewAnalysis: (analysisId: string) => void;
   onExportAnalysis: (analysisId: string, format: string) => void;
 }
-
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 const HistoryPanel: React.FC<HistoryPanelProps> = ({
   isOpen,
@@ -71,29 +70,24 @@ const HistoryPanel: React.FC<HistoryPanelProps> = ({
   const fetchAnalyses = useCallback(async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({
-        page: page.toString(),
-        page_size: pageSize.toString(),
-        sort_by: sortBy,
-        sort_order: sortOrder,
+      const response = await apiClient.get('/analyses', {
+        params: {
+          page,
+          page_size: pageSize,
+          sort_by: sortBy,
+          sort_order: sortOrder,
+          ...(search && { search }),
+          ...(riskFilter && { risk_level: riskFilter }),
+          ...(classificationFilter && { classification: classificationFilter }),
+        },
       });
       
-      if (search) params.append('search', search);
-      if (riskFilter) params.append('risk_level', riskFilter);
-      if (classificationFilter) params.append('classification', classificationFilter);
-      
-      const response = await fetch(`${API_BASE}/api/v1/analyses?${params}`);
-      
-      if (response.ok) {
-        const data = await response.json();
-        setAnalyses(data.analyses || []);
-        setTotal(data.total || 0);
-      } else {
-        toast.error('Failed to load history');
-      }
+      const data = response.data;
+      setAnalyses(data.analyses || []);
+      setTotal(data.total || 0);
     } catch (error) {
       console.error('Failed to fetch analyses:', error);
-      toast.error('Failed to connect to server');
+      toast.error('Failed to load history');
     } finally {
       setLoading(false);
     }
@@ -109,17 +103,10 @@ const HistoryPanel: React.FC<HistoryPanelProps> = ({
   // Delete single analysis
   const deleteAnalysis = async (analysisId: string) => {
     try {
-      const response = await fetch(`${API_BASE}/api/v1/analyses/${analysisId}`, {
-        method: 'DELETE',
-      });
-      
-      if (response.ok) {
-        toast.success('Analysis deleted');
-        setDeleteConfirm(null);
-        fetchAnalyses();
-      } else {
-        toast.error('Failed to delete analysis');
-      }
+      await apiClient.delete(`/analyses/${analysisId}`);
+      toast.success('Analysis deleted');
+      setDeleteConfirm(null);
+      fetchAnalyses();
     } catch (error) {
       toast.error('Failed to delete analysis');
     }
@@ -128,18 +115,10 @@ const HistoryPanel: React.FC<HistoryPanelProps> = ({
   // Delete all analyses
   const deleteAllAnalyses = async () => {
     try {
-      const response = await fetch(`${API_BASE}/api/v1/analyses`, {
-        method: 'DELETE',
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        toast.success(`Deleted ${data.count} analyses`);
-        setDeleteAllConfirm(false);
-        fetchAnalyses();
-      } else {
-        toast.error('Failed to delete analyses');
-      }
+      const response = await apiClient.delete('/analyses');
+      toast.success(`Deleted ${response.data.count} analyses`);
+      setDeleteAllConfirm(false);
+      fetchAnalyses();
     } catch (error) {
       toast.error('Failed to delete analyses');
     }
@@ -148,7 +127,7 @@ const HistoryPanel: React.FC<HistoryPanelProps> = ({
   // Delete selected
   const deleteSelected = async () => {
     for (const id of selectedIds) {
-      await fetch(`${API_BASE}/api/v1/analyses/${id}`, { method: 'DELETE' });
+      await apiClient.delete(`/analyses/${id}`);
     }
     toast.success(`Deleted ${selectedIds.size} analyses`);
     setSelectedIds(new Set());

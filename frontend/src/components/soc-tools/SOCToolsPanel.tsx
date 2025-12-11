@@ -30,6 +30,7 @@ import {
   Globe,
   Link2,
 } from 'lucide-react';
+import { apiClient } from '../../services/api';
 
 interface SOCToolsProps {
   analysisResult: any;
@@ -114,17 +115,9 @@ const SOCToolsPanel: React.FC<SOCToolsProps> = ({ analysisResult }) => {
     
     setLoading(true);
     try {
-      const response = await fetch('/api/v1/soc/quick-actions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(analysisResult),
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        setQuickActionsData(data);
-        setPlaybook(data.playbook);
-      }
+      const response = await apiClient.post('/soc/quick-actions', analysisResult);
+      setQuickActionsData(response.data);
+      setPlaybook(response.data.playbook);
     } catch (error) {
       console.error('Failed to fetch quick actions:', error);
     } finally {
@@ -855,20 +848,12 @@ const SOCToolsPanel: React.FC<SOCToolsProps> = ({ analysisResult }) => {
     const generateNotification = async () => {
       setGeneratingNotification(true);
       try {
-        const response = await fetch('/api/v1/soc/notification/generate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            notification_type: notificationType,
-            analysis_result: analysisResult,
-            recipient_name: 'User',
-          }),
+        const response = await apiClient.post('/soc/notification/generate', {
+          notification_type: notificationType,
+          analysis_result: analysisResult,
+          recipient_name: 'User',
         });
-        
-        if (response.ok) {
-          const data = await response.json();
-          setGeneratedNotification(data);
-        }
+        setGeneratedNotification(response.data);
       } catch (error) {
         console.error('Failed to generate notification:', error);
       } finally {
