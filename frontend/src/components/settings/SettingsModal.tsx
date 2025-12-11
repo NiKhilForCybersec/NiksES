@@ -79,8 +79,6 @@ interface DetectionConfig {
   };
 }
 
-const API_BASE = ''; // Using apiClient instead
-
 export function SettingsModal({ isOpen, onClose, onSettingsChange }: SettingsModalProps) {
   const [activeTab, setActiveTab] = useState<'threat-intel' | 'ai' | 'detection' | 'advanced'>('threat-intel');
   const [loading, setLoading] = useState(true);

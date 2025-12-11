@@ -6,8 +6,7 @@
  */
 
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-
-const API_BASE = 'http://localhost:8000/api/v1';
+import { apiClient } from '../services/api';
 
 export interface SettingsState {
   enrichment_enabled: boolean;
@@ -39,13 +38,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     try {
       setLoading(true);
       setError(null);
-      const response = await fetch(`${API_BASE}/settings`);
-      if (response.ok) {
-        const data = await response.json();
-        setSettings(data);
-      } else {
-        setError('Failed to load settings');
-      }
+      const response = await apiClient.get('/settings');
+      setSettings(response.data);
     } catch (err) {
       console.error('Failed to load settings:', err);
       setError('Unable to connect to server');

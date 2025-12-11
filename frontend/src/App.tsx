@@ -14,6 +14,7 @@ import {
   Paperclip, Link, Key, Database,
   Target, Brain, Zap
 } from 'lucide-react';
+import { apiClient } from './services/api';
 import AdvancedRulesManager from './components/rules/AdvancedRulesManager';
 import Dashboard from './components/dashboard/Dashboard';
 import AdvancedAnalysisView from './components/analysis/AdvancedAnalysisView';
@@ -109,9 +110,6 @@ interface AnalysisResult {
   critical_findings?: number;
 }
 
-// API Configuration
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-
 // Extract numeric score from risk_score (can be number or MultiDimensionalRiskScore object)
 const extractScore = (score: any): number => {
   if (typeof score === 'number') return score;
@@ -138,11 +136,8 @@ function App() {
   useEffect(() => {
     const loadInitialSettings = async () => {
       try {
-        const response = await fetch(`${API_BASE}/api/v1/settings`);
-        if (response.ok) {
-          const data = await response.json();
-          setGlobalSettings(data);
-        }
+        const response = await apiClient.get('/settings');
+        setGlobalSettings(response.data);
       } catch (error) {
         console.error('Failed to load initial settings:', error);
       }
@@ -262,19 +257,13 @@ function App() {
 
     try {
       // Always use the unified analysis endpoint
-      const endpoint = `${API_BASE}/api/v1/analyze`;
-
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        body: formData,
+      const response = await apiClient.post('/analyze', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
       });
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.detail || 'Analysis failed');
-      }
-
-      const data = await response.json();
+      const data = response.data;
       
       // Log response for debugging
       console.log('=== ANALYSIS RESPONSE DEBUG ===');
@@ -370,13 +359,12 @@ function App() {
     if (!result) return;
 
     try {
-      const response = await fetch(
-        `${API_BASE}/api/v1/export/${result.analysis_id}/${format}`
+      const response = await apiClient.get(
+        `/export/${result.analysis_id}/${format}`,
+        { responseType: 'blob' }
       );
       
-      if (!response.ok) throw new Error('Export failed');
-
-      const blob = await response.blob();
+      const blob = response.data;
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -950,36 +938,29 @@ function App() {
         onClose={() => setHistoryOpen(false)}
         onViewAnalysis={async (analysisId: string) => {
           try {
-            const response = await fetch(`${API_BASE}/api/v1/analyses/${analysisId}`);
-            if (response.ok) {
-              const data = await response.json();
-              setResult(data);
-              setHistoryOpen(false);
-              setFullAnalysisOpen(true);
-            } else {
-              toast.error('Failed to load analysis');
-            }
+            const response = await apiClient.get(`/analyses/${analysisId}`);
+            setResult(response.data);
+            setHistoryOpen(false);
+            setFullAnalysisOpen(true);
           } catch (error) {
-            toast.error('Failed to connect to server');
+            toast.error('Failed to load analysis');
           }
         }}
         onExportAnalysis={async (analysisId: string, format: string) => {
           try {
-            const response = await fetch(`${API_BASE}/api/v1/export/${analysisId}/${format}`);
-            if (response.ok) {
-              const blob = await response.blob();
-              const url = window.URL.createObjectURL(blob);
-              const a = document.createElement('a');
-              a.href = url;
-              a.download = `analysis-${analysisId.slice(0, 8)}.${format}`;
-              document.body.appendChild(a);
-              a.click();
-              window.URL.revokeObjectURL(url);
-              a.remove();
-              toast.success(`Exported as ${format.toUpperCase()}`);
-            } else {
-              toast.error('Export failed');
-            }
+            const response = await apiClient.get(`/export/${analysisId}/${format}`, {
+              responseType: 'blob'
+            });
+            const blob = response.data;
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `analysis-${analysisId.slice(0, 8)}.${format}`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            a.remove();
+            toast.success(`Exported as ${format.toUpperCase()}`);
           } catch (error) {
             toast.error('Export failed');
           }
