@@ -25,6 +25,7 @@ class APIKeyConfig(BaseModel):
     mxtoolbox_api_key: Optional[str] = Field(None, description="MXToolbox API key")
     anthropic_api_key: Optional[str] = Field(None, description="Anthropic API key")
     openai_api_key: Optional[str] = Field(None, description="OpenAI API key")
+    hybrid_analysis_api_key: Optional[str] = Field(None, description="Hybrid Analysis API key")
 
 
 class SettingsUpdate(BaseModel):
@@ -70,6 +71,7 @@ async def get_current_settings(
         "mxtoolbox": bool(getattr(settings, 'mxtoolbox_api_key', None) if settings else False),
         "anthropic": bool(settings.anthropic_api_key if settings else False),
         "openai": bool(settings.openai_api_key if settings else False),
+        "hybrid_analysis": bool(getattr(settings, 'hybrid_analysis_api_key', None) if settings else False),
     }
     
     return SettingsResponse(
@@ -128,6 +130,15 @@ async def update_settings(
         if updates.api_keys.openai_api_key:
             settings.openai_api_key = updates.api_keys.openai_api_key
             _reinit_ai(settings)
+        if updates.api_keys.hybrid_analysis_api_key:
+            settings.hybrid_analysis_api_key = updates.api_keys.hybrid_analysis_api_key
+            # Configure sandbox service with new key
+            try:
+                from app.services.sandbox import get_sandbox_service
+                sandbox = get_sandbox_service()
+                sandbox.configure(api_key=updates.api_keys.hybrid_analysis_api_key, enabled=True)
+            except Exception as e:
+                logger.warning(f"Failed to configure sandbox service: {e}")
     
     return {"message": "Settings updated", "success": True}
 
@@ -289,9 +300,38 @@ async def test_provider_connection(
         except Exception as e:
             return {"provider": provider, "success": False, "error": str(e)}
     
+    elif provider == "hybrid_analysis":
+        try:
+            api_key = getattr(settings, 'hybrid_analysis_api_key', None)
+            if not api_key:
+                return {"provider": provider, "success": False, "error": "API key not configured"}
+            
+            import httpx
+            async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+                response = await client.get(
+                    "https://www.hybrid-analysis.com/api/v2/key/current",
+                    headers={
+                        "api-key": api_key,
+                        "User-Agent": "Falcon Sandbox"
+                    }
+                )
+                if response.status_code == 200:
+                    data = response.json()
+                    return {
+                        "provider": provider, 
+                        "success": True, 
+                        "message": f"API key valid. Limits: {data.get('api_key_data', {}).get('submission_limit', 'N/A')} submissions/month"
+                    }
+                elif response.status_code == 401 or response.status_code == 403:
+                    return {"provider": provider, "success": False, "error": "Invalid or unauthorized API key"}
+                else:
+                    return {"provider": provider, "success": False, "error": f"API returned {response.status_code}"}
+        except Exception as e:
+            return {"provider": provider, "success": False, "error": str(e)}
+    
     else:
         # Return a helpful error for unknown providers
-        known_providers = ["anthropic", "openai", "virustotal", "abuseipdb", "mxtoolbox", "urlhaus", "phishtank"]
+        known_providers = ["anthropic", "openai", "virustotal", "abuseipdb", "mxtoolbox", "urlhaus", "phishtank", "hybrid_analysis"]
         return {
             "provider": provider, 
             "success": False, 

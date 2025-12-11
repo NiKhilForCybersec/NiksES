@@ -119,7 +119,7 @@ class HybridAnalysisClient:
         if not self.is_configured:
             return {"error": "API key not configured", "configured": False}
         
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
             try:
                 response = await client.get(
                     f"{self.BASE_URL}/key/current",
@@ -154,7 +154,7 @@ class HybridAnalysisClient:
                 error="Hybrid Analysis API key not configured"
             )
         
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
             try:
                 response = await client.post(
                     f"{self.BASE_URL}/search/hash",
@@ -225,7 +225,7 @@ class HybridAnalysisClient:
         
         env_id = self.ENVIRONMENTS.get(environment, 120)
         
-        async with httpx.AsyncClient(timeout=120.0) as client:
+        async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:
             try:
                 response = await client.post(
                     f"{self.BASE_URL}/submit/file",
@@ -293,7 +293,7 @@ class HybridAnalysisClient:
                 error="API key not configured"
             )
         
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
             try:
                 response = await client.get(
                     f"{self.BASE_URL}/report/{submission_id}/summary",

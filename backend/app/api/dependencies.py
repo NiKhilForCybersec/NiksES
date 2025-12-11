@@ -34,6 +34,9 @@ class Settings(BaseModel):
     phishtank_api_key: Optional[str] = None
     mxtoolbox_api_key: Optional[str] = None
     
+    # Sandbox API Keys
+    hybrid_analysis_api_key: Optional[str] = None
+    
     # Storage
     storage_type: str = "memory"  # memory, sqlite, postgres
     database_url: Optional[str] = None
