@@ -68,7 +68,7 @@ class HybridAnalysisClient:
     Docs: https://www.hybrid-analysis.com/docs/api/v2
     """
     
-    BASE_URL = "https://www.hybrid-analysis.com/api/v2"
+    BASE_URL = "https://hybrid-analysis.com/api/v2"
     
     ENVIRONMENTS = {
         "win10_64": 120,

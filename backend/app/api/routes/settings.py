@@ -309,7 +309,7 @@ async def test_provider_connection(
             import httpx
             async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
                 response = await client.get(
-                    "https://www.hybrid-analysis.com/api/v2/key/current",
+                    "https://hybrid-analysis.com/api/v2/key/current",
                     headers={
                         "api-key": api_key,
                         "User-Agent": "Falcon Sandbox"
