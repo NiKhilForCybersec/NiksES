@@ -173,11 +173,14 @@ class HybridAnalysisClient:
         
         async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
             try:
-                response = await client.post(
+                # API v2.35.0: Changed from POST to GET for hash search
+                response = await client.get(
                     f"{self.BASE_URL}/search/hash",
                     headers=self.headers,
-                    data={"hash": file_hash}
+                    params={"hash": file_hash}
                 )
+                
+                logger.info(f"Hash search response: {response.status_code} for {file_hash[:16]}...")
                 
                 if response.status_code == 200:
                     results = response.json()
