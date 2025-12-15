@@ -289,13 +289,15 @@ function App() {
           setEnhancedResult(data);
           
           // Build detection object with proper fallbacks
-          // Backend may return 'detection' or 'detection_results'
+          // IMPORTANT: Use orchestrator's overall_score as primary (it applies false positive suppression)
+          // Detection engine's risk_score is just one component, not the final verdict
           const detectionData = data.detection || data.detection_results || {};
           const detection = {
             ...detectionData,
-            risk_score: detectionData.risk_score ?? data.overall_score ?? 0,
-            risk_level: detectionData.risk_level ?? data.overall_level ?? 'unknown',
-            primary_classification: detectionData.primary_classification ?? data.classification ?? 'unknown',
+            // Priority: orchestrator overall_score > risk_score object > detection risk_score
+            risk_score: data.overall_score ?? extractScore(data.risk_score) ?? detectionData.risk_score ?? 0,
+            risk_level: data.overall_level ?? detectionData.risk_level ?? 'unknown',
+            primary_classification: data.classification ?? detectionData.primary_classification ?? 'unknown',
             confidence: detectionData.confidence ?? 0.5,
             rules_triggered: detectionData.rules_triggered || [],
           };
@@ -416,7 +418,8 @@ function App() {
       };
       
       // Normalize risk_level to lowercase for comparison
-      const riskLevel = String(detection.risk_level || result.risk_level || 'unknown').toLowerCase();
+      // Priority: orchestrator overall_level > detection risk_level
+      const riskLevel = String(result.overall_level || detection.risk_level || 'unknown').toLowerCase();
       
       // Safe array extraction
       const safeArray = (val: any) => Array.isArray(val) ? val : [];
@@ -435,7 +438,8 @@ function App() {
         },
         detection: {
           ...detection,
-          risk_score: extractScore(detection.risk_score) || extractScore(result.risk_score) || 0,
+          // Use orchestrator's overall_score as primary source of truth
+          risk_score: extractScore(result.overall_score) || extractScore(result.risk_score) || extractScore(detection.risk_score) || 0,
           risk_level: riskLevel,
           verdict: riskLevel === 'critical' || riskLevel === 'high' 
             ? 'malicious' 
@@ -537,7 +541,7 @@ function App() {
       })),
       enrichment: result?.enrichment || {},
       detection: {
-        rules_triggered: (result?.detection.rules_triggered || []).map((rule: any) => ({
+        rules_triggered: (transformed?.detection?.rules_triggered || []).map((rule: any) => ({
           rule_id: rule.rule_id,
           name: rule.rule_name || rule.name,
           description: rule.description || '',
@@ -546,9 +550,10 @@ function App() {
           mitre_technique: rule.mitre_technique,
           is_custom: rule.rule_id?.startsWith('CUSTOM') || false,
         })),
-        risk_score: extractScore(result?.detection?.risk_score),
-        risk_level: String(result?.detection?.risk_level || 'UNKNOWN'),
-        verdict: transformed.detection.verdict,
+        // Use transformed values which have correct orchestrator scores
+        risk_score: transformed?.detection?.risk_score || 0,
+        risk_level: String(transformed?.detection?.risk_level || 'UNKNOWN'),
+        verdict: transformed?.detection?.verdict || 'unknown',
       },
       ai_analysis: transformed.ai_analysis,
       iocs: transformed.iocs,
@@ -558,8 +563,8 @@ function App() {
         { timestamp: '200ms', event: 'Attachments processed', status: 'success' as const, details: `Found ${result?.email?.attachments?.length || 0} attachments` },
         { timestamp: '350ms', event: 'Authentication checked', status: 'success' as const },
         { timestamp: '500ms', event: 'Threat intelligence queries', status: 'success' as const },
-        { timestamp: '800ms', event: 'Detection rules evaluated', status: 'success' as const, details: `${result?.detection?.rules_triggered?.length || 0} rules triggered` },
-        { timestamp: '1000ms', event: 'Risk score calculated', status: 'success' as const, details: `Score: ${extractScore(result?.detection?.risk_score)}/100` },
+        { timestamp: '800ms', event: 'Detection rules evaluated', status: 'success' as const, details: `${transformed?.detection?.rules_triggered?.length || 0} rules triggered` },
+        { timestamp: '1000ms', event: 'Risk score calculated', status: 'success' as const, details: `Score: ${transformed?.detection?.risk_score || 0}/100` },
         { timestamp: '2000ms', event: 'AI analysis completed', status: result?.ai_triage ? 'success' as const : 'info' as const },
         { timestamp: `${result?.analysis_duration_ms || 0}ms`, event: 'Analysis complete', status: 'success' as const },
       ],
