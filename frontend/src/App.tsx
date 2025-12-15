@@ -108,6 +108,9 @@ interface AnalysisResult {
   classification?: string;
   verdict?: string;
   critical_findings?: number;
+  // Orchestrator unified scores (these are the authoritative scores)
+  overall_score?: number;
+  overall_level?: string;
 }
 
 // Extract numeric score from risk_score (can be number or MultiDimensionalRiskScore object)
