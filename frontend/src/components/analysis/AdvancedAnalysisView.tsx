@@ -159,16 +159,20 @@ const AdvancedAnalysisView: React.FC<AdvancedAnalysisViewProps> = ({ result, onE
 
   // Extract authentication from result - try multiple paths
   const getAuthResult = (type: 'spf' | 'dkim' | 'dmarc') => {
-    // Priority 1: Top-level authentication object (from build_response_dict)
+    // Priority 1: Top-level header_analysis with flat fields (backend format)
+    const resultKey = `${type}_result`;
+    if (result.header_analysis?.[resultKey]) {
+      return { result: result.header_analysis[resultKey], details: null };
+    }
+    // Priority 2: Top-level authentication object (from build_response_dict)
     if (result.authentication?.[type]?.result) {
       return result.authentication[type];
     }
-    // Priority 2: email.header_analysis (where Advanced Insights expects it)
+    // Priority 3: email.header_analysis (legacy format)
     if (result.email?.header_analysis?.[type]?.result) {
       return result.email.header_analysis[type];
     }
-    // Priority 3: email auth result objects
-    const resultKey = `${type}_result`;
+    // Priority 4: email auth result objects
     if (result.email?.[resultKey]?.result) {
       return result.email[resultKey];
     }
@@ -186,6 +190,7 @@ const AdvancedAnalysisView: React.FC<AdvancedAnalysisViewProps> = ({ result, onE
   const lookalikeAnalysis = result.lookalike_analysis;
   const tiResults = result.ti_results;
   const riskScore = result.risk_score;
+  const headerAnalysis = result.header_analysis || result.email?.header_analysis || {};
 
   // Extract enrichment data
   const enrichment = result.enrichment || {};
@@ -818,11 +823,11 @@ const AdvancedAnalysisView: React.FC<AdvancedAnalysisViewProps> = ({ result, onE
                       <Key className="w-3 h-3" />
                       <span>SPF:</span>
                       <span className={
-                        result.email?.header_analysis?.spf?.result === 'pass' ? 'text-green-400' :
-                        result.email?.header_analysis?.spf?.result === 'fail' ? 'text-red-400' :
+                        spf.result === 'pass' ? 'text-green-400' :
+                        spf.result === 'fail' ? 'text-red-400' :
                         'text-yellow-400'
                       }>
-                        {(result.email?.header_analysis?.spf?.result || 'none').toUpperCase()}
+                        {(spf.result || 'none').toUpperCase()}
                       </span>
                     </div>
                     
@@ -831,11 +836,11 @@ const AdvancedAnalysisView: React.FC<AdvancedAnalysisViewProps> = ({ result, onE
                       <Key className="w-3 h-3" />
                       <span>DKIM:</span>
                       <span className={
-                        result.email?.header_analysis?.dkim?.result === 'pass' ? 'text-green-400' :
-                        result.email?.header_analysis?.dkim?.result === 'fail' ? 'text-red-400' :
+                        dkim.result === 'pass' ? 'text-green-400' :
+                        dkim.result === 'fail' ? 'text-red-400' :
                         'text-yellow-400'
                       }>
-                        {(result.email?.header_analysis?.dkim?.result || 'none').toUpperCase()}
+                        {(dkim.result || 'none').toUpperCase()}
                       </span>
                     </div>
                     
@@ -844,11 +849,11 @@ const AdvancedAnalysisView: React.FC<AdvancedAnalysisViewProps> = ({ result, onE
                       <Key className="w-3 h-3" />
                       <span>DMARC:</span>
                       <span className={
-                        result.email?.header_analysis?.dmarc?.result === 'pass' ? 'text-green-400' :
-                        result.email?.header_analysis?.dmarc?.result === 'fail' ? 'text-red-400' :
+                        dmarc.result === 'pass' ? 'text-green-400' :
+                        dmarc.result === 'fail' ? 'text-red-400' :
                         'text-yellow-400'
                       }>
-                        {(result.email?.header_analysis?.dmarc?.result || 'none').toUpperCase()}
+                        {(dmarc.result || 'none').toUpperCase()}
                       </span>
                     </div>
 
@@ -989,7 +994,7 @@ const AdvancedAnalysisView: React.FC<AdvancedAnalysisViewProps> = ({ result, onE
                   </div>
                 )}
 
-                {result.email?.header_analysis?.spf?.result === 'fail' && (
+                {spf.result === 'fail' && (
                   <div className="flex items-start space-x-3 p-3 bg-red-900/30 rounded-lg border border-red-500">
                     <Key className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
                     <div>
@@ -1097,9 +1102,9 @@ const AdvancedAnalysisView: React.FC<AdvancedAnalysisViewProps> = ({ result, onE
                 Email Routing (Received Chain)
               </h2>
               
-              {result.email?.header_analysis?.received_chain?.length > 0 ? (
+              {(headerAnalysis as any)?.received_chain?.length > 0 ? (
                 <div className="space-y-2">
-                  {result.email.header_analysis.received_chain.map((hop: any, idx: number) => (
+                  {((headerAnalysis as any).received_chain || []).map((hop: any, idx: number) => (
                     <div key={idx} className="flex items-start bg-gray-900 rounded p-3">
                       <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-sm font-bold mr-3">
                         {idx + 1}
@@ -1145,7 +1150,7 @@ const AdvancedAnalysisView: React.FC<AdvancedAnalysisViewProps> = ({ result, onE
             </div>
 
             {/* Originating IP Analysis */}
-            {(result.email?.header_analysis?.originating_ip || originatingIp) && (
+            {(headerAnalysis?.originating_ip || originatingIp) && (
               <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
                 <h2 className="text-lg font-semibold mb-4 flex items-center">
                   <MapPin className="w-5 h-5 mr-2 text-red-400" />
@@ -1155,9 +1160,9 @@ const AdvancedAnalysisView: React.FC<AdvancedAnalysisViewProps> = ({ result, onE
                   <div>
                     <label className="text-xs text-gray-500 uppercase">IP Address</label>
                     <p className="text-white font-mono flex items-center">
-                      {result.email?.header_analysis?.originating_ip}
+                      {headerAnalysis?.originating_ip || originatingIp?.ip_address}
                       <button
-                        onClick={() => copyToClipboard(result.email?.header_analysis?.originating_ip, 'ip')}
+                        onClick={() => copyToClipboard(headerAnalysis?.originating_ip || originatingIp?.ip_address, 'ip')}
                         className="ml-2 text-gray-400 hover:text-white"
                       >
                         <Copy className="w-4 h-4" />
@@ -1186,7 +1191,7 @@ const AdvancedAnalysisView: React.FC<AdvancedAnalysisViewProps> = ({ result, onE
                   )}
                 </div>
                 <div className="mt-3 flex space-x-2">
-                  {getOsintLinks('ip', result.email?.header_analysis?.originating_ip).map(link => (
+                  {getOsintLinks('ip', headerAnalysis?.originating_ip || originatingIp?.ip_address).map(link => (
                     <a
                       key={link.name}
                       href={link.url}

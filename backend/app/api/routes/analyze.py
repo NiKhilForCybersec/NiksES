@@ -101,9 +101,13 @@ async def analyze_email(
     
     # Run sandbox analysis on attachments (non-blocking)
     sandbox_analysis = None
+    logger.info(f"Sandbox check: SANDBOX_AVAILABLE={SANDBOX_AVAILABLE}, attachments={len(parsed_email.attachments) if parsed_email.attachments else 0}")
+    
     if SANDBOX_AVAILABLE and parsed_email.attachments:
         try:
             sandbox_service = get_sandbox_service()
+            logger.info(f"Sandbox service: exists={sandbox_service is not None}, enabled={sandbox_service.is_enabled if sandbox_service else 'N/A'}")
+            
             if sandbox_service and sandbox_service.is_enabled:
                 # Re-extract attachment content from original email for sandbox
                 # (AttachmentInfo model only stores metadata, not content)
@@ -116,12 +120,15 @@ async def analyze_email(
                     )
                     logger.info(f"Sandbox analysis initiated for {len(attachment_payloads)} attachments")
                 else:
+                    logger.warning("Sandbox: No attachment payloads extracted")
                     sandbox_analysis = {
                         "analyzed": False,
                         "reason": "no_content",
                         "results": [],
                         "summary": {"total": len(parsed_email.attachments), "analyzed": 0, "malicious": 0, "suspicious": 0, "clean": 0, "skipped": len(parsed_email.attachments)}
                     }
+            else:
+                logger.info(f"Sandbox skipped: service_exists={sandbox_service is not None}, is_enabled={sandbox_service.is_enabled if sandbox_service else False}")
         except Exception as e:
             logger.error(f"Sandbox analysis error: {e}")
             sandbox_analysis = {
@@ -639,13 +646,16 @@ def build_risk_score(orchestrator_result) -> Optional[MultiDimensionalRiskScore]
     if not isinstance(rs_dict, dict):
         return None
     
+    # Build dimensions with all fields
     dimensions = {}
     for dim_name, dim_data in rs_dict.get('dimensions', {}).items():
         if isinstance(dim_data, dict):
             dimensions[dim_name] = RiskDimension(
                 score=dim_data.get('score', 0),
                 level=dim_data.get('level', 'low'),
+                weight=dim_data.get('weight', 0.0),
                 indicators=dim_data.get('indicators', []),
+                details=dim_data.get('details', {}),
             )
     
     # Get primary classification
@@ -653,12 +663,24 @@ def build_risk_score(orchestrator_result) -> Optional[MultiDimensionalRiskScore]
     if hasattr(primary_class, 'value'):
         primary_class = primary_class.value
     
+    # Get secondary classifications
+    secondary = rs_dict.get('secondary_classifications', [])
+    secondary_list = [c.value if hasattr(c, 'value') else str(c) for c in secondary]
+    
     return MultiDimensionalRiskScore(
         overall_score=rs_dict.get('overall_score', 0),
         overall_level=rs_dict.get('overall_level', 'low'),
+        confidence=rs_dict.get('confidence', 0.0),
         primary_classification=str(primary_class),
+        secondary_classifications=secondary_list,
         dimensions=dimensions,
         top_indicators=rs_dict.get('top_indicators', []),
+        summary=rs_dict.get('summary', ''),
+        detailed_explanation=rs_dict.get('detailed_explanation', ''),
+        recommended_actions=rs_dict.get('recommended_actions', []),
+        mitre_techniques=rs_dict.get('mitre_techniques', []),
+        rules_triggered=rs_dict.get('rules_triggered', 0),
+        data_sources_available=rs_dict.get('data_sources_available', 0),
     )
 
 

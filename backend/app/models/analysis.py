@@ -162,16 +162,26 @@ class RiskDimension(BaseModel):
     """Single risk dimension with score and indicators."""
     score: int = Field(0)
     level: str = Field("low")
+    weight: float = Field(0.0, description="Weight of this dimension in overall score")
     indicators: List[str] = Field(default_factory=list)
+    details: Dict[str, Any] = Field(default_factory=dict, description="Additional dimension details")
 
 
 class MultiDimensionalRiskScore(BaseModel):
     """Multi-dimensional risk scoring result."""
     overall_score: int = Field(0)
     overall_level: str = Field("low")
+    confidence: float = Field(0.0, description="Confidence based on data availability")
     primary_classification: str = Field("unknown")
+    secondary_classifications: List[str] = Field(default_factory=list)
     dimensions: Dict[str, RiskDimension] = Field(default_factory=dict)
     top_indicators: List[str] = Field(default_factory=list)
+    summary: str = Field("", description="Human-readable summary")
+    detailed_explanation: str = Field("", description="Detailed breakdown")
+    recommended_actions: List[Dict[str, Any]] = Field(default_factory=list)
+    mitre_techniques: List[Dict[str, str]] = Field(default_factory=list)
+    rules_triggered: int = Field(0)
+    data_sources_available: int = Field(0)
 
 
 class AnalysisResult(BaseModel):
