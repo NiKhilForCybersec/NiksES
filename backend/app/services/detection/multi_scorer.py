@@ -533,17 +533,34 @@ class MultiDimensionalScorer:
         if weight_sum > 0:
             result.overall_score = int(weighted_sum / weight_sum)
         
-        # CRITICAL FIX: Don't let weighted average dilute critical findings
-        # If any dimension is very high, ensure overall score reflects severity
-        if max_score >= 90:
-            # CRITICAL finding - ensure minimum score of 65 (high)
-            result.overall_score = max(result.overall_score, 65)
-        elif max_score >= 70:
-            # HIGH finding - ensure minimum score of 45 (medium-high)
-            result.overall_score = max(result.overall_score, 45)
-        elif max_score >= 50:
-            # MEDIUM-HIGH finding - ensure minimum score of 35
-            result.overall_score = max(result.overall_score, 35)
+        # Check if this is likely a legitimate email
+        # If technical (auth) is low AND brand impersonation is low, 
+        # don't apply aggressive floors - trust the weighted average
+        technical_score = result.dimensions.get('technical', DimensionScore(dimension=RiskDimension.TECHNICAL)).score
+        brand_score = result.dimensions.get('brand_impersonation', DimensionScore(dimension=RiskDimension.BRAND_IMPERSONATION)).score
+        
+        # Only apply floors when there's evidence of malicious behavior beyond content
+        # If auth passes (technical=0) and no brand impersonation (brand=0), 
+        # trust the weighted average for content-only flags
+        should_apply_floor = technical_score > 10 or brand_score > 20
+        
+        # Also apply floor if the critical dimension is brand impersonation or social engineering
+        # (these are strong indicators regardless of auth)
+        if critical_dim in ['brand_impersonation', 'social_engineering'] and max_score >= 50:
+            should_apply_floor = True
+        
+        if should_apply_floor:
+            # CRITICAL FIX: Don't let weighted average dilute critical findings
+            # If any dimension is very high, ensure overall score reflects severity
+            if max_score >= 90:
+                # CRITICAL finding - ensure minimum score of 65 (high)
+                result.overall_score = max(result.overall_score, 65)
+            elif max_score >= 70:
+                # HIGH finding - ensure minimum score of 45 (medium-high)
+                result.overall_score = max(result.overall_score, 45)
+            elif max_score >= 50:
+                # MEDIUM-HIGH finding - ensure minimum score of 35
+                result.overall_score = max(result.overall_score, 35)
         
         # Additional boost if multiple high-risk dimensions
         high_dims = sum(1 for d in result.dimensions.values() if d.score >= 60)

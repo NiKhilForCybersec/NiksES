@@ -459,6 +459,33 @@ def build_analysis_result(
     ti_results_model = build_ti_results(orchestrator_result)
     risk_score_model = build_risk_score(orchestrator_result)
     
+    # Get unified score fields from orchestrator
+    # Priority: orchestrator.overall_score > risk_score.overall_score > detection.risk_score
+    unified_score = None
+    unified_level = None
+    unified_classification = None
+    
+    if hasattr(orchestrator_result, 'overall_score') and orchestrator_result.overall_score is not None:
+        unified_score = orchestrator_result.overall_score
+        unified_level = getattr(orchestrator_result, 'overall_level', 'unknown')
+        unified_classification = getattr(orchestrator_result, 'classification', 'unknown')
+    elif risk_score_model:
+        unified_score = risk_score_model.overall_score
+        unified_level = risk_score_model.overall_level
+        unified_classification = risk_score_model.primary_classification
+    else:
+        unified_score = detection.risk_score
+        unified_level = detection.risk_level.value if hasattr(detection.risk_level, 'value') else str(detection.risk_level)
+        unified_classification = detection.primary_classification.value if hasattr(detection.primary_classification, 'value') else str(detection.primary_classification)
+    
+    # Ensure string types for level and classification
+    if hasattr(unified_level, 'value'):
+        unified_level = unified_level.value
+    if hasattr(unified_classification, 'value'):
+        unified_classification = unified_classification.value
+    unified_level = str(unified_level).lower() if unified_level else 'unknown'
+    unified_classification = str(unified_classification).lower() if unified_classification else 'unknown'
+    
     return AnalysisResult(
         analysis_id=analysis_id,
         analyzed_at=datetime.utcnow(),
@@ -473,6 +500,9 @@ def build_analysis_result(
         lookalike_analysis=lookalike_analysis_model,
         ti_results=ti_results_model,
         risk_score=risk_score_model,
+        overall_score=unified_score,
+        overall_level=unified_level,
+        classification=unified_classification,
         iocs=iocs,
         api_keys_used=apis_configured,
         enrichment_errors=apis_errors,
@@ -705,7 +735,7 @@ def build_detection_results(result) -> DetectionResults:
         return DetectionResults(
             rules_triggered=[],
             rules_passed=[],
-            risk_score=result.overall_score or 0,
+            risk_score=result.overall_score if result.overall_score is not None else 0,
             risk_level=RiskLevel(level_str),
             confidence=0.5,
             primary_classification=EmailClassification(class_str),
@@ -714,7 +744,8 @@ def build_detection_results(result) -> DetectionResults:
     # If det is already a DetectionResults model, update it with unified score
     if isinstance(det, DetectionResults):
         # CRITICAL: Override the detection engine's raw score with the orchestrator's unified score
-        det.risk_score = result.overall_score or det.risk_score
+        # Use explicit None check because 0 is a valid score
+        det.risk_score = result.overall_score if result.overall_score is not None else det.risk_score
         det.risk_level = RiskLevel(level_str)
         return det
     
@@ -758,7 +789,8 @@ def build_detection_results(result) -> DetectionResults:
             rules_passed=[],
             # CRITICAL: Use orchestrator's unified score, not detection engine's raw score
             # The unified score applies multi-dimensional analysis and false positive suppression
-            risk_score=result.overall_score or det.get('risk_score', 0),
+            # Use explicit None check because 0 is a valid score
+            risk_score=result.overall_score if result.overall_score is not None else det.get('risk_score', 0),
             risk_level=RiskLevel(risk_level_val),
             confidence=det.get('confidence', 0.5),
             primary_classification=EmailClassification(class_val),
@@ -773,7 +805,7 @@ def build_detection_results(result) -> DetectionResults:
     return DetectionResults(
         rules_triggered=[],
         rules_passed=[],
-        risk_score=result.overall_score or 0,
+        risk_score=result.overall_score if result.overall_score is not None else 0,
         risk_level=RiskLevel(level_str),
         confidence=0.5,
         primary_classification=EmailClassification(class_str),

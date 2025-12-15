@@ -217,6 +217,12 @@ class AnalysisResult(BaseModel):
     ti_results: Optional[ThreatIntelResults] = Field(None, description="Threat intelligence fusion results")
     risk_score: Optional[MultiDimensionalRiskScore] = Field(None, description="Multi-dimensional risk score")
     
+    # UNIFIED SCORE FIELDS - These are the authoritative scores for display
+    # They come from the multi-dimensional risk_score, not raw detection
+    overall_score: Optional[int] = Field(None, description="Unified risk score (0-100)")
+    overall_level: Optional[str] = Field(None, description="Risk level (low/medium/high/critical)")
+    classification: Optional[str] = Field(None, description="Email classification")
+    
     # Extracted IOCs for export
     iocs: ExtractedIOCs = Field(..., description="Extracted IOCs")
     

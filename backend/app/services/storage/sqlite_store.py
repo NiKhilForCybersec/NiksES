@@ -136,6 +136,16 @@ class SQLiteAnalysisStore:
             if analysis.ai_triage:
                 ai_summary = analysis.ai_triage.summary
             
+            # Use unified score fields if available, otherwise fall back to detection
+            # This ensures the correct multi-dimensional score is saved
+            risk_score = analysis.overall_score if analysis.overall_score is not None else detection.risk_score
+            risk_level = analysis.overall_level if analysis.overall_level else (
+                detection.risk_level.value if hasattr(detection.risk_level, 'value') else str(detection.risk_level)
+            )
+            classification = analysis.classification if analysis.classification else (
+                detection.primary_classification.value if hasattr(detection.primary_classification, 'value') else str(detection.primary_classification)
+            )
+            
             # Serialize full data
             full_data = analysis.model_dump_json()
             
@@ -155,9 +165,9 @@ class SQLiteAnalysisStore:
                 sender_domain,
                 recipient_email,
                 email.message_id,
-                detection.risk_score,
-                detection.risk_level.value if hasattr(detection.risk_level, 'value') else str(detection.risk_level),
-                detection.primary_classification.value if hasattr(detection.primary_classification, 'value') else str(detection.primary_classification),
+                risk_score,
+                risk_level,
+                classification,
                 len(detection.rules_triggered),
                 len(email.attachments),
                 len(email.urls),

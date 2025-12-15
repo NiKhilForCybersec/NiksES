@@ -237,7 +237,7 @@ async def list_analyses(
     )
 
 
-@router.get("/{analysis_id}", response_model=AnalysisResult)
+@router.get("/{analysis_id}")
 async def get_analysis(
     analysis_id: str,
     analysis_store = Depends(get_analysis_store),
@@ -246,7 +246,7 @@ async def get_analysis(
     Get a specific analysis by ID.
     
     Returns:
-        Complete analysis result
+        Complete analysis result with unified score fields
     """
     if not analysis_store:
         raise HTTPException(status_code=404, detail="Analysis not found")
@@ -256,7 +256,41 @@ async def get_analysis(
     if not analysis:
         raise HTTPException(status_code=404, detail="Analysis not found")
     
-    return analysis
+    # Convert to dict for response transformation
+    response = analysis.model_dump()
+    
+    # CRITICAL: Ensure unified score fields are present
+    # Historical analyses may not have these fields, so we need to compute them
+    if response.get('overall_score') is None:
+        # Try to get from risk_score (multi-dimensional scorer)
+        if response.get('risk_score') and response['risk_score'].get('overall_score') is not None:
+            response['overall_score'] = response['risk_score']['overall_score']
+            response['overall_level'] = response['risk_score'].get('overall_level', 'unknown')
+            response['classification'] = response['risk_score'].get('primary_classification', 'unknown')
+            if isinstance(response['classification'], dict):
+                response['classification'] = response['classification'].get('value', 'unknown')
+        # Fallback to detection results
+        elif response.get('detection'):
+            response['overall_score'] = response['detection'].get('risk_score', 0)
+            risk_level = response['detection'].get('risk_level', 'unknown')
+            if isinstance(risk_level, dict):
+                risk_level = risk_level.get('value', 'unknown')
+            response['overall_level'] = str(risk_level).lower()
+            classification = response['detection'].get('primary_classification', 'unknown')
+            if isinstance(classification, dict):
+                classification = classification.get('value', 'unknown')
+            response['classification'] = str(classification).lower()
+        else:
+            response['overall_score'] = 0
+            response['overall_level'] = 'unknown'
+            response['classification'] = 'unknown'
+    
+    # Also ensure detection.risk_score matches unified score for consistency
+    if response.get('detection') and response.get('overall_score') is not None:
+        response['detection']['risk_score'] = response['overall_score']
+        response['detection']['risk_level'] = response['overall_level']
+    
+    return response
 
 
 @router.delete("/{analysis_id}")
