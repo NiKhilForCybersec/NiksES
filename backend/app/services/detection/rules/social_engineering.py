@@ -151,6 +151,19 @@ class AuthorityRule(DetectionRule):
         email: ParsedEmail,
         enrichment: Optional[EnrichmentResults] = None
     ) -> Optional[RuleMatch]:
+        # CRITICAL: Don't flag authority claims from LEGITIMATE senders
+        # If Apple sends email about "account security", that's legitimate!
+        sender_domain = self.get_sender_domain(email)
+        if sender_domain:
+            from app.utils.constants import BRAND_TARGETS
+            sender_domain_lower = sender_domain.lower()
+            for brand_id, brand_info in BRAND_TARGETS.items():
+                legitimate_domains = [d.lower() for d in brand_info.get("legitimate_domains", [])]
+                for legit in legitimate_domains:
+                    if sender_domain_lower == legit or sender_domain_lower.endswith(f".{legit}"):
+                        # Sender is from legitimate brand - don't flag authority claims
+                        return None
+        
         body_text = self.get_body_text(email)
         
         if not body_text:

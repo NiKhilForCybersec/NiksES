@@ -194,7 +194,7 @@ class AnalysisOrchestrator:
         
         # Calculate final score even if some components failed
         try:
-            result = self._calculate_final_score(result)
+            result = self._calculate_final_score(result, email)
         except Exception as e:
             self.logger.error(f"Scoring error: {e}")
             result.metadata.errors.append(f"Scoring error: {str(e)}")
@@ -466,6 +466,7 @@ class AnalysisOrchestrator:
     def _calculate_final_score(
         self,
         result: CompleteAnalysisResult,
+        email: Optional[ParsedEmail] = None,
     ) -> CompleteAnalysisResult:
         """Calculate final unified score from all components."""
         
@@ -500,8 +501,8 @@ class AnalysisOrchestrator:
         
         # Extract sender domain for legitimacy checks
         sender_domain = None
-        if result.email and result.email.sender:
-            sender_domain = result.email.sender.domain
+        if email and email.sender and email.sender.domain:
+            sender_domain = email.sender.domain
         
         # Calculate unified score
         result.risk_score = self.scorer.calculate_unified_score(

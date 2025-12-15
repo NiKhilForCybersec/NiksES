@@ -519,20 +519,38 @@ class MultiDimensionalScorer:
         
         weighted_sum = 0.0
         weight_sum = 0.0
+        max_score = 0
+        critical_dim = None
         
         for dim_name, dim_score in result.dimensions.items():
             weighted_sum += dim_score.score * dim_score.weight
             weight_sum += dim_score.weight
+            # Track the highest scoring dimension
+            if dim_score.score > max_score:
+                max_score = dim_score.score
+                critical_dim = dim_name
         
         if weight_sum > 0:
             result.overall_score = int(weighted_sum / weight_sum)
         
-        # Boost if multiple high-risk dimensions
+        # CRITICAL FIX: Don't let weighted average dilute critical findings
+        # If any dimension is very high, ensure overall score reflects severity
+        if max_score >= 90:
+            # CRITICAL finding - ensure minimum score of 65 (high)
+            result.overall_score = max(result.overall_score, 65)
+        elif max_score >= 70:
+            # HIGH finding - ensure minimum score of 45 (medium-high)
+            result.overall_score = max(result.overall_score, 45)
+        elif max_score >= 50:
+            # MEDIUM-HIGH finding - ensure minimum score of 35
+            result.overall_score = max(result.overall_score, 35)
+        
+        # Additional boost if multiple high-risk dimensions
         high_dims = sum(1 for d in result.dimensions.values() if d.score >= 60)
         if high_dims >= 3:
-            result.overall_score = min(100, result.overall_score + 10)
+            result.overall_score = min(100, result.overall_score + 15)
         elif high_dims >= 2:
-            result.overall_score = min(100, result.overall_score + 5)
+            result.overall_score = min(100, result.overall_score + 10)
         
         result.overall_level = self._score_to_level(result.overall_score)
         

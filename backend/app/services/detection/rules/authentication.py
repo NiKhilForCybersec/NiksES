@@ -286,6 +286,36 @@ class ReplyToMismatchRule(DetectionRule):
             return None
         
         if sender_domain != reply_to_domain:
+            # Check if both domains belong to the same legitimate brand
+            # e.g., id.apple.com and apple.com are both Apple
+            from app.utils.constants import BRAND_TARGETS
+            
+            sender_brand = None
+            reply_brand = None
+            
+            for brand_id, brand_info in BRAND_TARGETS.items():
+                legitimate_domains = [d.lower() for d in brand_info.get("legitimate_domains", [])]
+                
+                # Check sender domain
+                for legit in legitimate_domains:
+                    if sender_domain == legit or sender_domain.endswith(f".{legit}"):
+                        sender_brand = brand_id
+                        break
+                
+                # Check reply-to domain
+                for legit in legitimate_domains:
+                    if reply_to_domain == legit or reply_to_domain.endswith(f".{legit}"):
+                        reply_brand = brand_id
+                        break
+            
+            # If both belong to the same brand, this is legitimate
+            if sender_brand and sender_brand == reply_brand:
+                return None
+            
+            # Also allow if reply-to is subdomain of sender or vice versa
+            if sender_domain.endswith(f".{reply_to_domain}") or reply_to_domain.endswith(f".{sender_domain}"):
+                return None
+            
             return self.create_match(
                 evidence=[
                     f"From domain: {sender_domain}",

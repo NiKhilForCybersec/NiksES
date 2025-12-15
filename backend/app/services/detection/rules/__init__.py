@@ -21,6 +21,7 @@ from . import bec
 from . import lookalike
 from . import social_engineering
 from . import ip_reputation  # IP reputation/threat intelligence rules
+from . import brand_impersonation  # Brand spoofing and impersonation rules
 
 # Get all registered rules
 def get_all_rules():

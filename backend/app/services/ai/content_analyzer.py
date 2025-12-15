@@ -233,6 +233,33 @@ class ContentAnalyzer:
                     result.intent = AttackIntent.LEGITIMATE
                     result.confidence = 0.8
         
+        # Step 3b: Even if no spoofed_brand was detected, check if sender is legitimate brand
+        # and if so, credential/account-related content is likely legitimate
+        suspicious_intents = [
+            AttackIntent.CREDENTIAL_HARVEST, 
+            AttackIntent.ACCOUNT_TAKEOVER,
+            AttackIntent.PAYMENT_FRAUD,  # PayPal can legitimately mention payments
+            AttackIntent.GIFT_CARD_SCAM,  # Amazon can legitimately mention gift cards
+            AttackIntent.INVOICE_FRAUD,   # Legitimate businesses send invoices
+        ]
+        
+        if result.intent in suspicious_intents and email.sender:
+            # Check if sender is from a known legitimate brand domain
+            from app.utils.constants import BRAND_TARGETS
+            sender_domain = email.sender.domain.lower() if email.sender.domain else ""
+            
+            for brand_id, brand_info in BRAND_TARGETS.items():
+                legitimate_domains = [d.lower() for d in brand_info.get("legitimate_domains", [])]
+                for legit in legitimate_domains:
+                    if sender_domain == legit or sender_domain.endswith(f".{legit}"):
+                        # Sender is from legitimate brand - suspicious content is actually expected
+                        self.logger.info(f"Sender {sender_domain} is legitimate {brand_info['name']} - marking content as legitimate")
+                        result.intent = AttackIntent.LEGITIMATE
+                        result.confidence = 0.85
+                        break
+                if result.intent == AttackIntent.LEGITIMATE:
+                    break
+        
         # Step 4: Infer potential impact
         result.potential_impact = self._infer_impact(result)
         
