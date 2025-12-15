@@ -711,8 +711,11 @@ def build_detection_results(result) -> DetectionResults:
             primary_classification=EmailClassification(class_str),
         )
     
-    # If det is already a DetectionResults model
+    # If det is already a DetectionResults model, update it with unified score
     if isinstance(det, DetectionResults):
+        # CRITICAL: Override the detection engine's raw score with the orchestrator's unified score
+        det.risk_score = result.overall_score or det.risk_score
+        det.risk_level = RiskLevel(level_str)
         return det
     
     # If det is a Pydantic model with model_dump
@@ -753,7 +756,9 @@ def build_detection_results(result) -> DetectionResults:
         return DetectionResults(
             rules_triggered=rules_triggered,
             rules_passed=[],
-            risk_score=det.get('risk_score', result.overall_score or 0),
+            # CRITICAL: Use orchestrator's unified score, not detection engine's raw score
+            # The unified score applies multi-dimensional analysis and false positive suppression
+            risk_score=result.overall_score or det.get('risk_score', 0),
             risk_level=RiskLevel(risk_level_val),
             confidence=det.get('confidence', 0.5),
             primary_classification=EmailClassification(class_val),
@@ -1020,9 +1025,17 @@ def build_response_dict(analysis: AnalysisResult) -> Dict[str, Any]:
     response = convert_datetimes(response)
     
     # Add top-level fields frontend expects
-    response['overall_score'] = analysis.detection.risk_score
-    response['overall_level'] = analysis.detection.risk_level.value
-    response['classification'] = analysis.detection.primary_classification.value
+    # CRITICAL: Use the multi-dimensional risk_score (unified score), NOT detection.risk_score (raw detection engine score)
+    # The risk_score applies multi-dimensional analysis, weighted averaging, and false positive suppression
+    if analysis.risk_score:
+        response['overall_score'] = analysis.risk_score.overall_score
+        response['overall_level'] = analysis.risk_score.overall_level
+        response['classification'] = analysis.risk_score.primary_classification.value if hasattr(analysis.risk_score.primary_classification, 'value') else str(analysis.risk_score.primary_classification)
+    else:
+        # Fallback to detection if risk_score not available
+        response['overall_score'] = analysis.detection.risk_score
+        response['overall_level'] = analysis.detection.risk_level.value
+        response['classification'] = analysis.detection.primary_classification.value
     
     # Add detection_results for backward compatibility
     response['detection_results'] = response.get('detection', {})
