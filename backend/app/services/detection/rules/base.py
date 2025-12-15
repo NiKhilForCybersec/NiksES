@@ -17,12 +17,13 @@ logger = logging.getLogger(__name__)
 
 
 # Score weights by severity
+# These scores should reflect the actual risk - authentication failures are serious!
 SEVERITY_SCORES = {
-    RiskLevel.INFORMATIONAL: 2,
-    RiskLevel.LOW: 5,
-    RiskLevel.MEDIUM: 10,
-    RiskLevel.HIGH: 15,
-    RiskLevel.CRITICAL: 25,
+    RiskLevel.INFORMATIONAL: 5,
+    RiskLevel.LOW: 10,
+    RiskLevel.MEDIUM: 20,
+    RiskLevel.HIGH: 35,      # SPF/DKIM failures, malicious URLs
+    RiskLevel.CRITICAL: 50,   # Multiple auth failures, known malware
 }
 
 

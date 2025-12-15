@@ -308,10 +308,19 @@ class EnrichmentOrchestrator:
         if mx_data.get('blacklists'):
             blacklists_listed = [bl.get('name', '') for bl in mx_data['blacklists'] if bl.get('name')]
         
+        # Use AbuseIPDB country as fallback if GeoIP failed (e.g., blocked by firewall)
+        country = geo_data.get('country')
+        country_code = geo_data.get('country_code')
+        if not country_code and abuse_data.get('country_code'):
+            country_code = abuse_data.get('country_code')
+            # Convert country code to name if we only have code
+            if country_code and not country:
+                country = country_code  # At least show the code
+        
         enrichment = IPEnrichment(
             ip_address=ip,
-            country=geo_data.get('country'),
-            country_code=geo_data.get('country_code'),
+            country=country,
+            country_code=country_code,
             city=geo_data.get('city'),
             region=geo_data.get('region'),
             lat=geo_data.get('lat'),
@@ -319,7 +328,7 @@ class EnrichmentOrchestrator:
             timezone=geo_data.get('timezone'),
             asn=geo_data.get('asn'),
             as_org=geo_data.get('as_org'),
-            isp=geo_data.get('isp'),
+            isp=abuse_data.get('isp') or geo_data.get('isp'),  # AbuseIPDB also has ISP
             abuseipdb_score=abuse_data.get('score'),
             abuseipdb_reports=abuse_data.get('total_reports'),
             abuseipdb_verdict=abuse_data.get('verdict', ThreatIntelVerdict.UNKNOWN),
