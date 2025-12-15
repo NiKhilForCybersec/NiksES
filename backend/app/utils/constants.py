@@ -171,8 +171,50 @@ BRAND_TARGETS: Dict[str, Dict] = {
     },
     "apple": {
         "name": "Apple",
-        "keywords": ["apple", "icloud", "itunes", "app store", "apple id"],
-        "legitimate_domains": ["apple.com", "icloud.com", "me.com"]
+        "keywords": ["apple", "icloud", "itunes", "app store", "apple id", "appleid"],
+        "legitimate_domains": ["apple.com", "icloud.com", "me.com", "itunes.com", "mzstatic.com"]
+    },
+    # Indian Banks
+    "axis_bank": {
+        "name": "Axis Bank",
+        "keywords": ["axis bank", "axis"],
+        "legitimate_domains": ["axisbank.com", "trans.axisbank.com", "email.axisbank.com"]
+    },
+    "hdfc_bank": {
+        "name": "HDFC Bank",
+        "keywords": ["hdfc bank", "hdfc"],
+        "legitimate_domains": ["hdfcbank.com", "hdfcbank.net"]
+    },
+    "icici_bank": {
+        "name": "ICICI Bank",
+        "keywords": ["icici bank", "icici"],
+        "legitimate_domains": ["icicibank.com", "icicibank.co.in"]
+    },
+    "sbi": {
+        "name": "State Bank of India",
+        "keywords": ["sbi", "state bank of india", "state bank"],
+        "legitimate_domains": ["sbi.co.in", "onlinesbi.com"]
+    },
+    # US Banks
+    "chase": {
+        "name": "Chase",
+        "keywords": ["chase", "jpmorgan"],
+        "legitimate_domains": ["chase.com", "jpmorganchase.com"]
+    },
+    "bank_of_america": {
+        "name": "Bank of America",
+        "keywords": ["bank of america", "bofa"],
+        "legitimate_domains": ["bankofamerica.com", "bofa.com", "boa.com"]
+    },
+    "wells_fargo": {
+        "name": "Wells Fargo",
+        "keywords": ["wells fargo"],
+        "legitimate_domains": ["wellsfargo.com", "wf.com"]
+    },
+    "citi": {
+        "name": "Citibank",
+        "keywords": ["citibank", "citi"],
+        "legitimate_domains": ["citi.com", "citibank.com", "citicards.com"]
     },
 }
 

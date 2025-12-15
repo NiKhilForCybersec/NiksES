@@ -302,13 +302,20 @@ class AnalysisOrchestrator:
             # Extract domains to check
             domains_to_check = set()
             
-            # Sender domain
-            if email.sender and "@" in email.sender:
-                domains_to_check.add(email.sender.split("@")[1].lower())
+            # Sender domain - email.sender is an EmailAddress object
+            if email.sender:
+                if email.sender.domain:
+                    domains_to_check.add(email.sender.domain.lower())
+                elif email.sender.email and "@" in email.sender.email:
+                    domains_to_check.add(email.sender.email.split("@")[1].lower())
             
-            # Reply-to domain
-            if email.reply_to and "@" in email.reply_to:
-                domains_to_check.add(email.reply_to.split("@")[1].lower())
+            # Reply-to domain - email.reply_to is a list of EmailAddress objects
+            if email.reply_to:
+                for reply_addr in email.reply_to:
+                    if hasattr(reply_addr, 'domain') and reply_addr.domain:
+                        domains_to_check.add(reply_addr.domain.lower())
+                    elif hasattr(reply_addr, 'email') and reply_addr.email and "@" in reply_addr.email:
+                        domains_to_check.add(reply_addr.email.split("@")[1].lower())
             
             # URL domains
             if email.urls:
@@ -491,6 +498,11 @@ class AnalysisOrchestrator:
         if result.ti_results:
             ti_results = result.ti_results.to_dict()
         
+        # Extract sender domain for legitimacy checks
+        sender_domain = None
+        if result.email and result.email.sender:
+            sender_domain = result.email.sender.domain
+        
         # Calculate unified score
         result.risk_score = self.scorer.calculate_unified_score(
             detection_results=detection_results,
@@ -499,6 +511,7 @@ class AnalysisOrchestrator:
             lookalike_results=lookalike_results,
             ti_results=ti_results,
             header_analysis=result.header_analysis,
+            sender_domain=sender_domain,
         )
         
         # Set quick access fields

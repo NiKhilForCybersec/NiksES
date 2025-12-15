@@ -244,9 +244,10 @@ class ContentAnalyzer:
         No hardcoded brand list needed!
         
         Logic:
-        1. Check if email passes authentication (SPF, DKIM, DMARC)
-        2. Check if sender domain relates to the detected brand name
-        3. If both pass → sender IS the brand, not spoofing
+        1. Check if sender domain is a subdomain of known legitimate domains (highest trust)
+        2. Check if email passes authentication (SPF, DKIM, DMARC)
+        3. Check if sender domain relates to the detected brand name
+        4. If #1 OR (#2 AND #3) pass → sender IS the brand, not spoofing
         
         Args:
             email: ParsedEmail with auth results
@@ -257,6 +258,25 @@ class ContentAnalyzer:
         """
         if not detected_brand or not email.sender or not email.sender.domain:
             return False
+        
+        sender_domain = email.sender.domain.lower()
+        brand_lower = detected_brand.lower()
+        
+        # Step 0: Check if sender is a subdomain of known legitimate domains
+        # This is the highest trust signal - no auth needed for apple.com subdomains
+        from app.utils.constants import BRAND_TARGETS
+        for brand_id, brand_info in BRAND_TARGETS.items():
+            # Check if this brand matches the detected brand
+            if brand_info["name"].lower() in brand_lower or brand_lower in brand_info["name"].lower():
+                legitimate_domains = [d.lower() for d in brand_info.get("legitimate_domains", [])]
+                # Check if sender is exactly a legitimate domain or subdomain of one
+                if sender_domain in legitimate_domains:
+                    self.logger.info(f"Exact legitimate domain match: {sender_domain}")
+                    return True
+                for legit in legitimate_domains:
+                    if sender_domain.endswith(f".{legit}"):
+                        self.logger.info(f"Legitimate subdomain match: {sender_domain} is subdomain of {legit}")
+                        return True
         
         # Step 1: Check email authentication
         # DMARC=pass is the strongest signal - it means SPF or DKIM aligned with From domain

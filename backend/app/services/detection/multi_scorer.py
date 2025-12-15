@@ -177,6 +177,7 @@ class MultiDimensionalScorer:
         lookalike_results: Optional[Dict[str, Any]] = None,
         ti_results: Optional[Dict[str, Any]] = None,
         header_analysis: Optional[Dict[str, Any]] = None,
+        sender_domain: Optional[str] = None,  # Added to check sender legitimacy
     ) -> UnifiedRiskScore:
         """
         Calculate unified multi-dimensional risk score.
@@ -188,6 +189,7 @@ class MultiDimensionalScorer:
             lookalike_results: Lookalike domain detection results
             ti_results: Threat intelligence fusion results
             header_analysis: Email header analysis results
+            sender_domain: Sender's domain for legitimacy checks
             
         Returns:
             UnifiedRiskScore with complete assessment
@@ -208,7 +210,7 @@ class MultiDimensionalScorer:
         
         if lookalike_results or detection_results:
             result.dimensions[RiskDimension.BRAND_IMPERSONATION.value] = self._score_brand(
-                lookalike_results, detection_results
+                lookalike_results, detection_results, sender_domain
             )
         
         if content_analysis or detection_results:
@@ -327,24 +329,65 @@ class MultiDimensionalScorer:
         self,
         lookalike_results: Optional[Dict[str, Any]],
         detection_results: Optional[Dict[str, Any]],
+        sender_domain: Optional[str] = None,
     ) -> DimensionScore:
         """Score brand impersonation risk dimension."""
         dim = DimensionScore(dimension=RiskDimension.BRAND_IMPERSONATION)
         score = 0
         
+        # CRITICAL FIX: Check if sender IS a legitimate brand domain
+        # If sender is from apple.com/id.apple.com, don't flag for Apple impersonation
+        sender_is_legitimate_brand = False
+        sender_brand = None
+        
+        if sender_domain:
+            sender_domain_lower = sender_domain.lower()
+            from app.utils.constants import BRAND_TARGETS
+            
+            for brand_id, brand_info in BRAND_TARGETS.items():
+                legitimate_domains = [d.lower() for d in brand_info.get("legitimate_domains", [])]
+                # Check exact match or subdomain
+                for legit in legitimate_domains:
+                    if sender_domain_lower == legit or sender_domain_lower.endswith(f".{legit}"):
+                        sender_is_legitimate_brand = True
+                        sender_brand = brand_id
+                        self.logger.info(f"Sender {sender_domain} is legitimate {brand_info['name']} domain")
+                        break
+                if sender_is_legitimate_brand:
+                    break
+        
         # Lookalike detection results
         if lookalike_results and lookalike_results.get("has_lookalikes"):
-            confidence = lookalike_results.get("highest_confidence", 0)
-            score += int(confidence * 80)
-            
             target = lookalike_results.get("primary_target")
-            if target:
-                dim.indicators.append(f"Lookalike domain targeting {target}")
+            confidence = lookalike_results.get("highest_confidence", 0)
+            
+            # If sender IS the brand being "impersonated", this is a FALSE POSITIVE
+            # Example: Email from id.apple.com with URLs flagged as "Apple lookalike"
+            if sender_is_legitimate_brand and target and target.lower() == sender_brand:
+                self.logger.info(f"Suppressing brand impersonation - sender IS legitimate {sender_brand}")
+                dim.indicators.append(f"Sender verified as legitimate {sender_brand.title()}")
+                # Don't add lookalike score - sender is legitimate
+            else:
+                score += int(confidence * 80)
+                if target:
+                    dim.indicators.append(f"Lookalike domain targeting {target}")
         
-        # Brand impersonation rules
+        # Brand impersonation rules from detection engine
         if detection_results:
             for rule in detection_results.get("rules_triggered", []):
                 if rule.get("category") == "brand_impersonation":
+                    # Skip brand rules if sender is the legitimate brand
+                    rule_indicators = rule.get("indicators", [])
+                    rule_brand = None
+                    for ind in rule_indicators:
+                        if isinstance(ind, dict):
+                            rule_brand = ind.get("brand", "").lower()
+                            break
+                    
+                    if sender_is_legitimate_brand and rule_brand == sender_brand:
+                        self.logger.info(f"Suppressing brand rule - sender IS legitimate {sender_brand}")
+                        continue
+                    
                     severity = rule.get("severity", "low")
                     if severity == "critical":
                         score += 30
@@ -358,6 +401,11 @@ class MultiDimensionalScorer:
         dim.score = min(100, score)
         dim.level = self._score_to_level(dim.score)
         dim.weight = DIMENSION_WEIGHTS[RiskDimension.BRAND_IMPERSONATION]
+        
+        # If sender is legitimate brand and score is still > 0, add clarification
+        if sender_is_legitimate_brand and dim.score == 0:
+            dim.details["sender_verified"] = True
+            dim.details["verified_brand"] = sender_brand
         
         return dim
     
