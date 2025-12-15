@@ -99,6 +99,20 @@ const AdvancedAnalysisView: React.FC<AdvancedAnalysisViewProps> = ({ result, onE
     return 0;
   };
 
+  // Get unified score - prioritize orchestrator's score over detection engine
+  // The orchestrator applies false positive suppression and multi-dimensional analysis
+  const unifiedScore = (result as any).overall_score ?? 
+                       extractScore((result as any).risk_score) ?? 
+                       extractScore(result.detection?.risk_score) ?? 0;
+  
+  const unifiedLevel = ((result as any).overall_level ?? 
+                       (result as any).risk_score?.overall_level ?? 
+                       result.detection?.risk_level ?? 'unknown').toString().toLowerCase();
+  
+  const unifiedClassification = ((result as any).classification ?? 
+                                (result as any).risk_score?.primary_classification ?? 
+                                result.detection?.primary_classification ?? 'unknown').toString();
+
   // Get authentication status
   const getAuthStatus = (result?: string) => {
     if (!result) return { icon: HelpCircle, color: 'text-gray-400', bg: 'bg-gray-800', label: 'Not Checked' };
@@ -281,17 +295,17 @@ const AdvancedAnalysisView: React.FC<AdvancedAnalysisViewProps> = ({ result, onE
       </div>
 
       {/* Risk Score Banner */}
-      <div className={`px-6 py-4 ${getRiskColor(result.detection?.risk_level)}`}>
+      <div className={`px-6 py-4 ${getRiskColor(unifiedLevel)}`}>
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-6">
             <div className="text-center">
-              <div className="text-4xl font-bold">{extractScore(result.detection?.risk_score)}</div>
+              <div className="text-4xl font-bold">{unifiedScore}</div>
               <div className="text-xs uppercase tracking-wider opacity-80">Risk Score</div>
             </div>
             <div className="h-12 w-px bg-current opacity-30" />
             <div>
-              <div className="text-lg font-semibold uppercase">{result.detection?.risk_level || 'Unknown'}</div>
-              <div className="text-sm opacity-80">{result.detection?.primary_classification || 'Unknown Classification'}</div>
+              <div className="text-lg font-semibold uppercase">{unifiedLevel}</div>
+              <div className="text-sm opacity-80">{unifiedClassification.replace(/_/g, ' ')}</div>
             </div>
           </div>
           <div className="flex items-center space-x-4">
@@ -546,30 +560,30 @@ const AdvancedAnalysisView: React.FC<AdvancedAnalysisViewProps> = ({ result, onE
           <div className="space-y-6">
             {/* Overall Risk Score Header */}
             <div className={`rounded-lg p-6 border-2 ${
-              extractScore(result.detection?.risk_score) >= 70 ? 'bg-red-900/30 border-red-500' :
-              extractScore(result.detection?.risk_score) >= 40 ? 'bg-orange-900/30 border-orange-500' :
-              extractScore(result.detection?.risk_score) >= 20 ? 'bg-yellow-900/30 border-yellow-500' :
+              unifiedScore >= 70 ? 'bg-red-900/30 border-red-500' :
+              unifiedScore >= 40 ? 'bg-orange-900/30 border-orange-500' :
+              unifiedScore >= 20 ? 'bg-yellow-900/30 border-yellow-500' :
               'bg-green-900/30 border-green-500'
             }`}>
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center space-x-4">
                   <div className={`w-20 h-20 rounded-full flex items-center justify-center text-3xl font-bold ${
-                    extractScore(result.detection?.risk_score) >= 70 ? 'bg-red-600' :
-                    extractScore(result.detection?.risk_score) >= 40 ? 'bg-orange-600' :
-                    extractScore(result.detection?.risk_score) >= 20 ? 'bg-yellow-600 text-black' :
+                    unifiedScore >= 70 ? 'bg-red-600' :
+                    unifiedScore >= 40 ? 'bg-orange-600' :
+                    unifiedScore >= 20 ? 'bg-yellow-600 text-black' :
                     'bg-green-600'
                   }`}>
-                    {extractScore(result.detection?.risk_score)}
+                    {unifiedScore}
                   </div>
                   <div>
                     <h2 className="text-2xl font-bold">Overall Risk Assessment</h2>
                     <p className={`text-lg font-semibold ${
-                      (result.detection?.risk_level || '').toLowerCase() === 'critical' ? 'text-red-400' :
-                      (result.detection?.risk_level || '').toLowerCase() === 'high' ? 'text-orange-400' :
-                      (result.detection?.risk_level || '').toLowerCase() === 'medium' ? 'text-yellow-400' :
+                      (unifiedLevel) === 'critical' ? 'text-red-400' :
+                      (unifiedLevel) === 'high' ? 'text-orange-400' :
+                      (unifiedLevel) === 'medium' ? 'text-yellow-400' :
                       'text-green-400'
                     }`}>
-                      {(result.detection?.risk_level || 'Unknown').toUpperCase()}
+                      {unifiedLevel.toUpperCase()}
                     </p>
                   </div>
                 </div>
@@ -598,12 +612,12 @@ const AdvancedAnalysisView: React.FC<AdvancedAnalysisViewProps> = ({ result, onE
               <div className="font-mono text-sm space-y-1">
                 {/* Root */}
                 <div className={`font-bold text-lg ${
-                  extractScore(result.detection?.risk_score) >= 70 ? 'text-red-400' :
-                  extractScore(result.detection?.risk_score) >= 40 ? 'text-orange-400' :
+                  unifiedScore >= 70 ? 'text-red-400' :
+                  unifiedScore >= 40 ? 'text-orange-400' :
                   'text-green-400'
                 }`}>
-                  Overall Risk: {extractScore(result.detection?.risk_score)}/100 ({String(result.detection?.risk_level || 'Unknown')})
-                  {extractScore(result.detection?.risk_score) >= 70 && ' ⚠️'}
+                  Overall Risk: {unifiedScore}/100 ({unifiedLevel})
+                  {unifiedScore >= 70 && ' ⚠️'}
                 </div>
 
                 {/* Social Engineering Branch */}
@@ -955,7 +969,7 @@ const AdvancedAnalysisView: React.FC<AdvancedAnalysisViewProps> = ({ result, onE
 
               <div className="space-y-3">
                 {/* Auto-generated key findings based on analysis */}
-                {extractScore(result.detection?.risk_score) >= 70 && (
+                {unifiedScore >= 70 && (
                   <div className="flex items-start space-x-3 p-3 bg-red-900/30 rounded-lg border border-red-500">
                     <XCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
                     <div>
@@ -1019,7 +1033,7 @@ const AdvancedAnalysisView: React.FC<AdvancedAnalysisViewProps> = ({ result, onE
                 )}
 
                 {/* If nothing notable */}
-                {extractScore(result.detection?.risk_score) < 20 && (
+                {unifiedScore < 20 && (
                   <div className="flex items-start space-x-3 p-3 bg-green-900/30 rounded-lg border border-green-500">
                     <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
                     <div>
@@ -1041,7 +1055,7 @@ const AdvancedAnalysisView: React.FC<AdvancedAnalysisViewProps> = ({ result, onE
               </h2>
 
               <div className="space-y-2">
-                {extractScore(result.detection?.risk_score) >= 70 ? (
+                {unifiedScore >= 70 ? (
                   <>
                     <div className="flex items-center space-x-2 text-red-400">
                       <span className="font-bold">1.</span>
@@ -1060,7 +1074,7 @@ const AdvancedAnalysisView: React.FC<AdvancedAnalysisViewProps> = ({ result, onE
                       <span>Submit IOCs to threat intelligence platform</span>
                     </div>
                   </>
-                ) : extractScore(result.detection?.risk_score) >= 40 ? (
+                ) : unifiedScore >= 40 ? (
                   <>
                     <div className="flex items-center space-x-2 text-orange-400">
                       <span className="font-bold">1.</span>
