@@ -98,7 +98,15 @@ class URLScanClient:
         if self.session and not self.session.closed:
             await self.session.close()
     
+    def _refresh_api_key(self):
+        """Refresh API key from environment if not set."""
+        if not self.api_key:
+            self.api_key = os.getenv("URLSCAN_API_KEY")
+            if self.api_key:
+                logger.info(f"Refreshed URLScan.io API key from environment ({len(self.api_key)} chars)")
+    
     def is_configured(self) -> bool:
+        self._refresh_api_key()
         return bool(self.api_key)
     
     async def submit_url(self, url: str, visibility: str = "unlisted") -> Optional[str]:

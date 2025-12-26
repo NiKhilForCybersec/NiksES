@@ -774,8 +774,25 @@ class SandboxService:
         self._enabled = self.client.is_configured
         logger.info(f"SandboxService initialized: client_configured={self.client.is_configured}, enabled={self._enabled}")
     
+    def _refresh_api_key(self):
+        """
+        Refresh API key from environment.
+        This handles the case where the env var was set AFTER service initialization.
+        """
+        current_key = os.getenv("HYBRID_ANALYSIS_API_KEY", "")
+        if current_key and not self.client.is_configured:
+            logger.info(f"Refreshing Hybrid Analysis API key from environment ({len(current_key)} chars)")
+            self.client.update_api_key(current_key)
+            self._enabled = True
+        elif current_key and current_key != self.client.api_key:
+            logger.info(f"API key changed, updating...")
+            self.client.update_api_key(current_key)
+    
     @property
     def is_enabled(self) -> bool:
+        # Refresh API key from environment on each check
+        self._refresh_api_key()
+        
         # Return True if both enabled AND client is configured
         enabled = self._enabled and self.client.is_configured
         logger.debug(f"SandboxService.is_enabled check: _enabled={self._enabled}, client_configured={self.client.is_configured}, result={enabled}")

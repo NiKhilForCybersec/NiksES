@@ -433,6 +433,9 @@ export interface AnalysisResult {
   classification?: EmailClassification | string;
   verdict?: string;
   critical_findings?: number;
+  
+  // SMS/URL text analysis result (when analyzing text instead of email)
+  _textAnalysis?: any;
 }
 
 // =============================================================================
