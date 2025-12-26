@@ -87,16 +87,6 @@ class URLScanClient:
     
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or os.getenv("URLSCAN_API_KEY")
-        self.session: Optional[aiohttp.ClientSession] = None
-    
-    async def _get_session(self) -> aiohttp.ClientSession:
-        if self.session is None or self.session.closed:
-            self.session = aiohttp.ClientSession()
-        return self.session
-    
-    async def close(self):
-        if self.session and not self.session.closed:
-            await self.session.close()
     
     def _refresh_api_key(self):
         """Refresh API key from environment if not set."""
@@ -115,7 +105,6 @@ class URLScanClient:
             logger.warning("URLScan.io API key not configured")
             return None
         
-        session = await self._get_session()
         headers = {
             "API-Key": self.api_key,
             "Content-Type": "application/json"
@@ -126,43 +115,43 @@ class URLScanClient:
         }
         
         try:
-            async with session.post(
-                f"{self.BASE_URL}/scan/",
-                headers=headers,
-                json=payload,
-                timeout=aiohttp.ClientTimeout(total=30)
-            ) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    return data.get("uuid")
-                elif response.status == 429:
-                    logger.warning("URLScan.io rate limit exceeded")
-                    return None
-                else:
-                    error = await response.text()
-                    logger.error(f"URLScan.io submit error: {response.status} - {error}")
-                    return None
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    f"{self.BASE_URL}/scan/",
+                    headers=headers,
+                    json=payload,
+                    timeout=aiohttp.ClientTimeout(total=30)
+                ) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        return data.get("uuid")
+                    elif response.status == 429:
+                        logger.warning("URLScan.io rate limit exceeded")
+                        return None
+                    else:
+                        error = await response.text()
+                        logger.error(f"URLScan.io submit error: {response.status} - {error}")
+                        return None
         except Exception as e:
             logger.error(f"URLScan.io submit exception: {e}")
             return None
     
     async def get_result(self, task_id: str) -> Optional[Dict[str, Any]]:
         """Get scan result by task UUID."""
-        session = await self._get_session()
-        
         try:
-            async with session.get(
-                f"{self.BASE_URL}/result/{task_id}/",
-                timeout=aiohttp.ClientTimeout(total=30)
-            ) as response:
-                if response.status == 200:
-                    return await response.json()
-                elif response.status == 404:
-                    # Not ready yet
-                    return None
-                else:
-                    logger.error(f"URLScan.io result error: {response.status}")
-                    return None
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    f"{self.BASE_URL}/result/{task_id}/",
+                    timeout=aiohttp.ClientTimeout(total=30)
+                ) as response:
+                    if response.status == 200:
+                        return await response.json()
+                    elif response.status == 404:
+                        # Not ready yet
+                        return None
+                    else:
+                        logger.error(f"URLScan.io result error: {response.status}")
+                        return None
         except Exception as e:
             logger.error(f"URLScan.io result exception: {e}")
             return None
@@ -288,81 +277,71 @@ class CuckooClient:
     def __init__(self, base_url: Optional[str] = None, api_key: Optional[str] = None):
         self.base_url = base_url or os.getenv("CUCKOO_API_URL", "http://localhost:8090")
         self.api_key = api_key or os.getenv("CUCKOO_API_KEY")
-        self.session: Optional[aiohttp.ClientSession] = None
-    
-    async def _get_session(self) -> aiohttp.ClientSession:
-        if self.session is None or self.session.closed:
-            self.session = aiohttp.ClientSession()
-        return self.session
-    
-    async def close(self):
-        if self.session and not self.session.closed:
-            await self.session.close()
     
     def is_configured(self) -> bool:
         return bool(self.base_url)
     
     async def submit_url(self, url: str) -> Optional[int]:
         """Submit URL for analysis. Returns task ID."""
-        session = await self._get_session()
         headers = {}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
         
         try:
-            async with session.post(
-                f"{self.base_url}/tasks/create/url",
-                headers=headers,
-                data={"url": url},
-                timeout=aiohttp.ClientTimeout(total=30)
-            ) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    return data.get("task_id")
-                else:
-                    logger.error(f"Cuckoo submit error: {response.status}")
-                    return None
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    f"{self.base_url}/tasks/create/url",
+                    headers=headers,
+                    data={"url": url},
+                    timeout=aiohttp.ClientTimeout(total=30)
+                ) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        return data.get("task_id")
+                    else:
+                        logger.error(f"Cuckoo submit error: {response.status}")
+                        return None
         except Exception as e:
             logger.error(f"Cuckoo submit exception: {e}")
             return None
     
     async def get_status(self, task_id: int) -> Optional[str]:
         """Get task status."""
-        session = await self._get_session()
         headers = {}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
         
         try:
-            async with session.get(
-                f"{self.base_url}/tasks/view/{task_id}",
-                headers=headers,
-                timeout=aiohttp.ClientTimeout(total=30)
-            ) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    return data.get("task", {}).get("status")
-                return None
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    f"{self.base_url}/tasks/view/{task_id}",
+                    headers=headers,
+                    timeout=aiohttp.ClientTimeout(total=30)
+                ) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        return data.get("task", {}).get("status")
+                    return None
         except Exception as e:
             logger.error(f"Cuckoo status exception: {e}")
             return None
     
     async def get_report(self, task_id: int) -> Optional[Dict[str, Any]]:
         """Get analysis report."""
-        session = await self._get_session()
         headers = {}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
         
         try:
-            async with session.get(
-                f"{self.base_url}/tasks/report/{task_id}",
-                headers=headers,
-                timeout=aiohttp.ClientTimeout(total=60)
-            ) as response:
-                if response.status == 200:
-                    return await response.json()
-                return None
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    f"{self.base_url}/tasks/report/{task_id}",
+                    headers=headers,
+                    timeout=aiohttp.ClientTimeout(total=60)
+                ) as response:
+                    if response.status == 200:
+                        return await response.json()
+                    return None
         except Exception as e:
             logger.error(f"Cuckoo report exception: {e}")
             return None

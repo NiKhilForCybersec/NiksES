@@ -110,6 +110,30 @@ class AIAnalysisResult(BaseModel):
     confidence: float = 0.0
 
 
+def _ensure_list(value: Any) -> List[str]:
+    """
+    Safely convert a value to a list of strings.
+    Handles cases where AI returns a string instead of a list.
+    """
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [str(item) for item in value if item]
+    if isinstance(value, str):
+        # If it's a string, check if it contains list-like content
+        value = value.strip()
+        if not value or value.lower() in ('none', 'n/a', 'none detected', 'null'):
+            return []
+        # If it looks like a single item, wrap it in a list
+        if ',' in value:
+            return [item.strip() for item in value.split(',') if item.strip()]
+        if '\n' in value:
+            return [item.strip() for item in value.split('\n') if item.strip()]
+        # Single string item
+        return [value] if value else []
+    return []
+
+
 class TextAnalysisResponse(BaseModel):
     """Response model for text/SMS/URL analysis."""
     analysis_id: str
@@ -938,14 +962,19 @@ Always respond in valid JSON format."""
             
             data = json.loads(content)
             
+            # Safely extract list fields (AI sometimes returns strings instead of lists)
+            key_findings = _ensure_list(data.get("KEY_FINDINGS", data.get("key_findings")))
+            social_eng = _ensure_list(data.get("SOCIAL_ENGINEERING", data.get("social_engineering")))
+            recommendations = _ensure_list(data.get("RECOMMENDATIONS", data.get("recommendations")))
+            
             return AIAnalysisResult(
                 enabled=True,
                 provider=provider_name,
-                summary=data.get("SUMMARY", data.get("summary", "")),
-                threat_assessment=data.get("THREAT_ASSESSMENT", data.get("threat_assessment", "UNKNOWN")),
-                key_findings=data.get("KEY_FINDINGS", data.get("key_findings", [])),
-                social_engineering_tactics=data.get("SOCIAL_ENGINEERING", data.get("social_engineering", [])),
-                recommendations=data.get("RECOMMENDATIONS", data.get("recommendations", [])),
+                summary=str(data.get("SUMMARY", data.get("summary", "")))[:1000],
+                threat_assessment=str(data.get("THREAT_ASSESSMENT", data.get("threat_assessment", "UNKNOWN"))),
+                key_findings=key_findings,
+                social_engineering_tactics=social_eng,
+                recommendations=recommendations,
                 confidence=0.85 if patterns else 0.7,
             )
         except json.JSONDecodeError:
