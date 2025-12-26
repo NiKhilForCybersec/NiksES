@@ -403,6 +403,8 @@ function App() {
     });
 
     try {
+      console.log('Starting text analysis...', { textSource, isUrlMode });
+      
       const response = await apiClient.post('/analyze/text', {
         text: textMessage,
         sender: '',
@@ -412,8 +414,13 @@ function App() {
         enable_url_sandbox: isUrlMode, // Enable sandbox for URL mode
       });
 
+      console.log('API Response received:', response.status, response.data);
 
       const textResult = response.data;
+      
+      if (!textResult || !textResult.analysis_id) {
+        throw new Error('Invalid response: missing analysis_id');
+      }
       
       // Store raw result for TextAnalysisResults component
       setTextAnalysisResult(textResult);
@@ -422,76 +429,93 @@ function App() {
       const analysisType = isUrlMode ? 'URL' : textSource.toUpperCase();
       const urlCount = textResult.urls_found?.length || 0;
       
-      const pseudoEmailResult: AnalysisResult = {
-        analysis_id: textResult.analysis_id,
-        analyzed_at: textResult.analyzed_at,
-        analysis_duration_ms: 500,
-        email: {
-          subject: isUrlMode 
-            ? `URL Analysis: ${urlCount} URL(s) analyzed`
-            : `${analysisType} Message Analysis`,
-          sender: { 
-            email: isUrlMode ? 'url@analysis' : 'unknown@sms', 
-            display_name: isUrlMode ? 'URL Scanner' : `${analysisType} Sender`, 
-            domain: isUrlMode ? 'analysis' : 'sms' 
+      // Build pseudoEmailResult with defensive checks
+      let pseudoEmailResult: AnalysisResult;
+      try {
+        pseudoEmailResult = {
+          analysis_id: textResult.analysis_id || 'unknown',
+          analyzed_at: textResult.analyzed_at || new Date().toISOString(),
+          analysis_duration_ms: 500,
+          email: {
+            subject: isUrlMode 
+              ? `URL Analysis: ${urlCount} URL(s) analyzed`
+              : `${analysisType} Message Analysis`,
+            sender: { 
+              email: isUrlMode ? 'url@analysis' : 'unknown@sms', 
+              display_name: isUrlMode ? 'URL Scanner' : `${analysisType} Sender`, 
+              domain: isUrlMode ? 'analysis' : 'sms' 
+            },
+            recipients: { to: ['security@analysis'] },
+            body_text: textResult.original_text || textMessage || '',
+            urls: (textResult.urls_found || []).map((url: string) => ({ url, display_text: url })),
+            attachments: [],
           },
-          recipients: { to: ['security@analysis'] },
-          body_text: textResult.original_text || textMessage,
-          urls: textResult.urls_found?.map((url: string) => ({ url, display_text: url })) || [],
-          attachments: [],
-        },
-        authentication: {},
-        detection: {
-          risk_score: textResult.overall_score,
-          risk_level: textResult.overall_level,
-          verdict: textResult.is_threat ? 'malicious' : 'clean',
-          primary_classification: textResult.classification,
-          confidence: textResult.confidence,
-          rules_triggered: textResult.patterns_matched?.map((p: any) => ({
-            rule_id: p.pattern_id,
-            name: p.name,
-            description: p.description,
-            severity: p.severity,
-            category: isUrlMode ? 'url_threat' : 'smishing',
-            mitre_technique: p.mitre_technique,
-          })) || [],
-        },
-        iocs: {
-          domains: textResult.domains_found || [],
-          urls: textResult.urls_found || [],
-          ips: textResult.ips_found || [],
-          email_addresses: [],
-          file_hashes_sha256: [],
-        },
-        ai_triage: {
-          enabled: textResult.ai_analysis?.enabled || false,
-          provider: textResult.ai_analysis?.provider || 'pattern-matching',
-          summary: textResult.ai_analysis?.summary || (
-            textResult.is_threat 
-              ? `⚠️ ${textResult.classification.replace(/_/g, ' ').toUpperCase()} detected with ${textResult.overall_score}% threat score.`
-              : '✅ No significant threats detected.'
-          ),
-          key_findings: textResult.ai_analysis?.key_findings || textResult.threat_indicators || [],
-          recommendations: textResult.ai_analysis?.recommendations || textResult.recommendations || [],
-          recommended_actions: isUrlMode 
-            ? [
-                { action: 'block_url', label: 'Block URL(s)', priority: 'high' },
-                { action: 'report_phishing', label: 'Report to PhishTank', priority: 'medium' },
-              ]
-            : [],
-        },
-      };
+          authentication: {},
+          detection: {
+            risk_score: textResult.overall_score || 0,
+            risk_level: textResult.overall_level || 'unknown',
+            verdict: textResult.is_threat ? 'malicious' : 'clean',
+            primary_classification: textResult.classification || 'unknown',
+            confidence: textResult.confidence || 0,
+            rules_triggered: (textResult.patterns_matched || []).map((p: any) => ({
+              rule_id: p.pattern_id || 'unknown',
+              name: p.name || 'Unknown Pattern',
+              description: p.description || '',
+              severity: p.severity || 'low',
+              category: isUrlMode ? 'url_threat' : 'smishing',
+              mitre_technique: p.mitre_technique || '',
+            })),
+          },
+          iocs: {
+            domains: textResult.domains_found || [],
+            urls: textResult.urls_found || [],
+            ips: textResult.ips_found || [],
+            email_addresses: [],
+            file_hashes_sha256: [],
+          },
+          ai_triage: {
+            enabled: textResult.ai_analysis?.enabled || false,
+            provider: textResult.ai_analysis?.provider || 'pattern-matching',
+            summary: textResult.ai_analysis?.summary || (
+              textResult.is_threat 
+                ? `⚠️ ${(textResult.classification || 'threat').replace(/_/g, ' ').toUpperCase()} detected with ${textResult.overall_score || 0}% threat score.`
+                : '✅ No significant threats detected.'
+            ),
+            key_findings: textResult.ai_analysis?.key_findings || textResult.threat_indicators || [],
+            recommendations: textResult.ai_analysis?.recommendations || textResult.recommendations || [],
+            recommended_actions: isUrlMode 
+              ? [
+                  { action: 'block_url', label: 'Block URL(s)', priority: 'high' },
+                  { action: 'report_phishing', label: 'Report to PhishTank', priority: 'medium' },
+                ]
+              : [],
+          },
+        };
+        console.log('PseudoEmailResult constructed:', pseudoEmailResult.analysis_id);
+      } catch (buildError) {
+        console.error('Error building pseudoEmailResult:', buildError);
+        throw new Error(`Failed to process analysis result: ${buildError}`);
+      }
 
       setResult(pseudoEmailResult);
       setEnhancedResult(pseudoEmailResult);
       setAnalysisComplete(true);
+      
+      console.log('Analysis complete, result set:', pseudoEmailResult.analysis_id);
       
       const threatLabel = textResult.is_threat ? '⚠️ Threats detected!' : '✅ No threats';
       toast.success(isUrlMode ? `${urlCount} URL(s) analyzed - ${threatLabel}` : `Analysis complete - ${threatLabel}`);
 
     } catch (error: any) {
       console.error('Analysis error:', error);
-      toast.error(error.response?.data?.detail || 'Failed to analyze');
+      console.error('Error response:', error.response?.data);
+      
+      // Reset progress on error
+      setShowProgress(false);
+      setAnalysisSteps(createUrlSmsAnalysisSteps(analysisTypeToUse));
+      
+      const errorMessage = error.response?.data?.detail || error.message || 'Failed to analyze';
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
