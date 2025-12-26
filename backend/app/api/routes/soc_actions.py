@@ -286,4 +286,36 @@ Based on a recent security event, we wanted to share some tips on recognizing {t
 3. Be suspicious of urgency and pressure tactics
 4. When in doubt, ask IT Security
 
-**Resources
+**Resources:**
+- [Internal Security Portal]: {security_portal_url}
+- [Report Suspicious Emails]: {report_email}
+
+Stay vigilant and thank you for helping keep our organization secure!
+
+{company_name} Security Team
+""",
+    },
+}
+
+
+# ============================================================================
+# API Endpoints
+# ============================================================================
+
+@router.post("/generate-notification")
+async def generate_notification(request: NotificationRequest):
+    """Generate a notification email based on template."""
+    template = NOTIFICATION_TEMPLATES.get(request.notification_type)
+    if not template:
+        raise HTTPException(status_code=400, detail=f"Unknown notification type: {request.notification_type}")
+    
+    # Format template with provided values
+    subject = template["subject"].format(**request.template_values)
+    body = template["body"].format(**request.template_values)
+    
+    return {
+        "notification_type": request.notification_type,
+        "subject": subject,
+        "body": body,
+        "generated_at": datetime.utcnow().isoformat()
+    }

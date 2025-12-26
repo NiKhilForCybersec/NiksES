@@ -770,11 +770,16 @@ class SandboxService:
     
     def __init__(self):
         self.client = HybridAnalysisClient()
-        self._enabled = False
+        # Auto-enable if client has API key configured
+        self._enabled = self.client.is_configured
+        logger.info(f"SandboxService initialized: client_configured={self.client.is_configured}, enabled={self._enabled}")
     
     @property
     def is_enabled(self) -> bool:
-        return self._enabled and self.client.is_configured
+        # Return True if both enabled AND client is configured
+        enabled = self._enabled and self.client.is_configured
+        logger.debug(f"SandboxService.is_enabled check: _enabled={self._enabled}, client_configured={self.client.is_configured}, result={enabled}")
+        return enabled
     
     def configure(self, api_key: str = None, enabled: bool = True):
         """Configure sandbox service."""
@@ -976,10 +981,11 @@ def get_sandbox_service() -> SandboxService:
     """Get the global sandbox service instance."""
     global _sandbox_service
     if _sandbox_service is None:
-        _sandbox_service = SandboxService()
+        logger.info("=== SANDBOX SERVICE INITIALIZATION ===")
         
-        # Try to get API key from multiple sources
+        # Check environment variable first
         api_key = os.getenv("HYBRID_ANALYSIS_API_KEY", "")
+        logger.info(f"HYBRID_ANALYSIS_API_KEY from env: {'SET (' + str(len(api_key)) + ' chars)' if api_key else 'NOT SET'}")
         
         # Also try to load from settings if env var not set
         if not api_key:
@@ -988,14 +994,21 @@ def get_sandbox_service() -> SandboxService:
                 settings = get_settings()
                 api_key = getattr(settings, 'hybrid_analysis_api_key', '') or ''
                 if api_key:
-                    logger.info("Loaded Hybrid Analysis API key from settings")
+                    logger.info(f"Loaded Hybrid Analysis API key from settings ({len(api_key)} chars)")
             except Exception as e:
                 logger.debug(f"Could not load settings for sandbox: {e}")
         
+        # Create service
+        _sandbox_service = SandboxService()
+        
+        # Configure with API key if found
         if api_key:
             _sandbox_service.configure(api_key=api_key, enabled=True)
-            logger.info(f"Sandbox service auto-configured: enabled=True")
+            logger.info(f"Sandbox service configured: enabled=True, api_key_length={len(api_key)}")
         else:
-            logger.info("Sandbox service: No API key found (env or settings)")
+            logger.warning("Sandbox service: No API key found - sandbox analysis will be disabled")
+        
+        logger.info(f"Sandbox service final state: is_enabled={_sandbox_service.is_enabled}, client_configured={_sandbox_service.client.is_configured}")
+        logger.info("=== END SANDBOX SERVICE INITIALIZATION ===")
             
     return _sandbox_service

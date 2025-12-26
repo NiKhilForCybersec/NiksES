@@ -18,6 +18,7 @@ import { apiClient } from './services/api';
 import AdvancedRulesManager from './components/rules/AdvancedRulesManager';
 import Dashboard from './components/dashboard/Dashboard';
 import AdvancedAnalysisView from './components/analysis/AdvancedAnalysisView';
+import TextAnalysisResults from './components/analysis/TextAnalysisResults';
 import AnalysisProgress, { 
   AnalysisStep, 
   createAnalysisSteps 
@@ -138,7 +139,8 @@ function App() {
   // SMS/Text analysis state
   const [inputType, setInputType] = useState<'email' | 'sms'>('email');
   const [textMessage, setTextMessage] = useState('');
-  const [textSource, setTextSource] = useState<'sms' | 'whatsapp' | 'telegram' | 'other'>('sms');
+  const [textSource, setTextSource] = useState<'sms' | 'whatsapp' | 'telegram' | 'other' | 'url'>('sms');
+  const [textAnalysisResult, setTextAnalysisResult] = useState<any>(null); // Raw SMS/URL analysis result
 
   // Load initial settings
   useEffect(() => {
@@ -367,22 +369,27 @@ function App() {
   // Analyze text/SMS message
   const analyzeText = async () => {
     if (!textMessage.trim()) {
-      toast.error('Please enter a message to analyze');
+      toast.error(textSource === 'url' ? 'Please enter URL(s) to analyze' : 'Please enter a message to analyze');
       return;
     }
+
+    const isUrlMode = textSource === 'url';
 
     setLoading(true);
     setResult(null);
     setEnhancedResult(null);
+    setTextAnalysisResult(null);
     setAnalysisComplete(false);
     setShowProgress(true);
 
-    // Simplified progress for text analysis (faster)
+    // Progress steps for text/URL analysis
     const textSteps = [
       { id: 'parse', delay: 100 },
-      { id: 'urls', delay: 150 },
-      { id: 'detection', delay: 200 },
-      { id: 'scoring', delay: 100 },
+      { id: 'urls', delay: 200 },
+      { id: 'detection', delay: 300 },
+      { id: 'enrichment', delay: 400 },
+      { id: 'ai', delay: 500 },
+      { id: 'scoring', delay: 150 },
     ];
 
     let totalDelay = 0;
@@ -405,27 +412,43 @@ function App() {
     });
 
     try {
-      console.log('=== SENDING TEXT ANALYSIS REQUEST ===');
+      console.log(`=== SENDING ${isUrlMode ? 'URL' : 'TEXT'} ANALYSIS REQUEST ===`);
       const response = await apiClient.post('/analyze/text', {
         text: textMessage,
         sender: '',
         source: textSource,
+        enable_url_enrichment: true,
+        enable_ai_analysis: true,
+        enable_url_sandbox: isUrlMode, // Enable sandbox for URL mode
       });
 
-      console.log('=== TEXT ANALYSIS RESPONSE ===');
+      console.log('=== ANALYSIS RESPONSE ===');
       console.log(JSON.stringify(response.data, null, 2));
 
-      // Convert text analysis result to email-like structure for display
       const textResult = response.data;
+      
+      // Store raw result for TextAnalysisResults component
+      setTextAnalysisResult(textResult);
+      
+      // Also create email-like structure for compatibility with existing views
+      const analysisType = isUrlMode ? 'URL' : textSource.toUpperCase();
+      const urlCount = textResult.urls_found?.length || 0;
+      
       const pseudoEmailResult: AnalysisResult = {
         analysis_id: textResult.analysis_id,
         analyzed_at: textResult.analyzed_at,
         analysis_duration_ms: 500,
         email: {
-          subject: `${textSource.toUpperCase()} Message Analysis`,
-          sender: { email: 'unknown@sms', display_name: 'SMS Sender', domain: 'sms' },
-          recipients: { to: ['recipient@unknown'] },
-          body_text: textMessage,
+          subject: isUrlMode 
+            ? `URL Analysis: ${urlCount} URL(s) analyzed`
+            : `${analysisType} Message Analysis`,
+          sender: { 
+            email: isUrlMode ? 'url@analysis' : 'unknown@sms', 
+            display_name: isUrlMode ? 'URL Scanner' : `${analysisType} Sender`, 
+            domain: isUrlMode ? 'analysis' : 'sms' 
+          },
+          recipients: { to: ['security@analysis'] },
+          body_text: textResult.original_text || textMessage,
           urls: textResult.urls_found?.map((url: string) => ({ url, display_text: url })) || [],
           attachments: [],
         },
@@ -433,44 +456,56 @@ function App() {
         detection: {
           risk_score: textResult.overall_score,
           risk_level: textResult.overall_level,
-          verdict: textResult.is_likely_scam ? 'malicious' : 'clean',
+          verdict: textResult.is_threat ? 'malicious' : 'clean',
           primary_classification: textResult.classification,
           confidence: textResult.confidence,
-          rules_triggered: textResult.scam_patterns_matched?.map((p: any) => ({
+          rules_triggered: textResult.patterns_matched?.map((p: any) => ({
             rule_id: p.pattern_id,
             name: p.name,
             description: p.description,
             severity: p.severity,
-            category: 'smishing',
+            category: isUrlMode ? 'url_threat' : 'smishing',
+            mitre_technique: p.mitre_technique,
           })) || [],
         },
         iocs: {
-          domains: [],
+          domains: textResult.domains_found || [],
           urls: textResult.urls_found || [],
-          ips: [],
+          ips: textResult.ips_found || [],
           email_addresses: [],
           file_hashes_sha256: [],
         },
         ai_triage: {
-          enabled: true,
-          provider: 'pattern-matching',
-          summary: textResult.is_likely_scam 
-            ? `This ${textSource.toUpperCase()} message shows signs of a ${textResult.classification.replace('smishing_', '').replace('_', ' ')} scam.`
-            : 'This message appears to be legitimate.',
-          key_findings: textResult.indicators || [],
-          recommendations: textResult.recommendations || [],
-          recommended_actions: [],
+          enabled: textResult.ai_analysis?.enabled || false,
+          provider: textResult.ai_analysis?.provider || 'pattern-matching',
+          summary: textResult.ai_analysis?.summary || (
+            textResult.is_threat 
+              ? `⚠️ ${textResult.classification.replace(/_/g, ' ').toUpperCase()} detected with ${textResult.overall_score}% threat score.`
+              : '✅ No significant threats detected.'
+          ),
+          key_findings: textResult.ai_analysis?.key_findings || textResult.threat_indicators || [],
+          recommendations: textResult.ai_analysis?.recommendations || textResult.recommendations || [],
+          recommended_actions: isUrlMode 
+            ? [
+                { action: 'block_url', label: 'Block URL(s)', priority: 'high' },
+                { action: 'report_phishing', label: 'Report to PhishTank', priority: 'medium' },
+              ]
+            : [],
         },
+        // Store the full text analysis for dedicated view
+        _textAnalysis: textResult,
       };
 
       setResult(pseudoEmailResult);
       setEnhancedResult(pseudoEmailResult);
       setAnalysisComplete(true);
-      toast.success('Text analysis complete!');
+      
+      const threatLabel = textResult.is_threat ? '⚠️ Threats detected!' : '✅ No threats';
+      toast.success(isUrlMode ? `${urlCount} URL(s) analyzed - ${threatLabel}` : `Analysis complete - ${threatLabel}`);
 
     } catch (error: any) {
-      console.error('Text analysis error:', error);
-      toast.error(error.response?.data?.detail || 'Failed to analyze text');
+      console.error('Analysis error:', error);
+      toast.error(error.response?.data?.detail || 'Failed to analyze');
     } finally {
       setLoading(false);
     }
@@ -920,54 +955,113 @@ function App() {
                 </>
               ) : (
                 <>
-                  {/* SMS/Text Message Mode */}
+                  {/* SMS/Text/URL Analysis Mode */}
                   <div className="space-y-4">
-                    {/* Source selector */}
-                    <div className="flex gap-2">
-                      {[
-                        { value: 'sms', label: 'SMS', icon: Smartphone },
-                        { value: 'whatsapp', label: 'WhatsApp', icon: MessageSquare },
-                        { value: 'telegram', label: 'Telegram', icon: MessageSquare },
-                        { value: 'other', label: 'Other', icon: MessageSquare },
-                      ].map(({ value, label, icon: Icon }) => (
-                        <button
-                          key={value}
-                          onClick={() => setTextSource(value as any)}
-                          className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-medium transition flex items-center justify-center gap-1 ${
-                            textSource === value
-                              ? 'bg-green-600 text-white'
-                              : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
-                          }`}
-                        >
-                          <Icon className="w-3 h-3" />
-                          {label}
-                        </button>
-                      ))}
+                    {/* Analysis Type Selector */}
+                    <div className="flex gap-2 p-1 bg-slate-900 rounded-lg">
+                      <button
+                        onClick={() => setTextSource('sms')}
+                        className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition flex items-center justify-center gap-2 ${
+                          textSource !== 'url'
+                            ? 'bg-green-600 text-white'
+                            : 'text-slate-400 hover:text-white hover:bg-slate-700'
+                        }`}
+                      >
+                        <MessageSquare className="w-4 h-4" />
+                        SMS / Message
+                      </button>
+                      <button
+                        onClick={() => setTextSource('url')}
+                        className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition flex items-center justify-center gap-2 ${
+                          textSource === 'url'
+                            ? 'bg-purple-600 text-white'
+                            : 'text-slate-400 hover:text-white hover:bg-slate-700'
+                        }`}
+                      >
+                        <Link className="w-4 h-4" />
+                        URL Analysis
+                      </button>
                     </div>
 
-                    {/* Message input */}
-                    <textarea
-                      value={textMessage}
-                      onChange={(e) => setTextMessage(e.target.value)}
-                      placeholder="Paste the suspicious SMS or message text here..."
-                      className="w-full h-40 p-4 bg-slate-900 border border-slate-600 rounded-xl text-white placeholder-slate-500 focus:ring-2 focus:ring-green-500 focus:border-green-500 resize-none"
-                    />
+                    {textSource !== 'url' ? (
+                      <>
+                        {/* SMS Source selector */}
+                        <div className="flex gap-2">
+                          {[
+                            { value: 'sms', label: 'SMS', icon: Smartphone },
+                            { value: 'whatsapp', label: 'WhatsApp', icon: MessageSquare },
+                            { value: 'telegram', label: 'Telegram', icon: MessageSquare },
+                            { value: 'other', label: 'Other', icon: MessageSquare },
+                          ].map(({ value, label, icon: Icon }) => (
+                            <button
+                              key={value}
+                              onClick={() => setTextSource(value as any)}
+                              className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-medium transition flex items-center justify-center gap-1 ${
+                                textSource === value
+                                  ? 'bg-green-600 text-white'
+                                  : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+                              }`}
+                            >
+                              <Icon className="w-3 h-3" />
+                              {label}
+                            </button>
+                          ))}
+                        </div>
 
-                    <div className="flex items-center justify-between text-xs text-slate-500">
-                      <span>{textMessage.length} characters</span>
-                      <span>Max 5000 characters</span>
-                    </div>
-                  </div>
+                        {/* Message input */}
+                        <textarea
+                          value={textMessage}
+                          onChange={(e) => setTextMessage(e.target.value)}
+                          placeholder="Paste the suspicious SMS or message text here...&#10;&#10;Example: USPS: Your package is held due to unpaid customs fees. Pay $3.99 now: https://usps-delivery.tk/pay"
+                          className="w-full h-40 p-4 bg-slate-900 border border-slate-600 rounded-xl text-white placeholder-slate-500 focus:ring-2 focus:ring-green-500 focus:border-green-500 resize-none"
+                        />
 
-                  {/* SMS Analysis Info */}
-                  <div className="mt-4 p-3 bg-slate-700/50 rounded-lg border border-slate-600">
-                    <div className="flex items-center gap-2">
-                      <AlertTriangle className="w-4 h-4 text-orange-400" />
-                      <span className="text-sm font-medium text-slate-200">Smishing Analysis</span>
-                    </div>
-                    <p className="text-xs text-slate-400 mt-1 ml-6">
-                      Detects package scams, banking phishing, prize fraud, government impersonation
-                    </p>
+                        <div className="flex items-center justify-between text-xs text-slate-500">
+                          <span>{textMessage.length} characters</span>
+                          <span>URLs will be auto-detected and analyzed</span>
+                        </div>
+
+                        {/* SMS Analysis Info */}
+                        <div className="p-3 bg-slate-700/50 rounded-lg border border-slate-600">
+                          <div className="flex items-center gap-2">
+                            <AlertTriangle className="w-4 h-4 text-orange-400" />
+                            <span className="text-sm font-medium text-slate-200">Smishing Detection</span>
+                          </div>
+                          <p className="text-xs text-slate-400 mt-1 ml-6">
+                            Detects package scams, banking phishing, prize fraud, government impersonation + URL threat intel
+                          </p>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        {/* URL Input Mode */}
+                        <div className="space-y-3">
+                          <label className="text-sm text-slate-300 font-medium">Paste suspicious URL(s)</label>
+                          <textarea
+                            value={textMessage}
+                            onChange={(e) => setTextMessage(e.target.value)}
+                            placeholder="https://suspicious-site.com/login&#10;https://bit.ly/abc123&#10;&#10;One URL per line, or paste multiple URLs"
+                            className="w-full h-32 p-4 bg-slate-900 border border-slate-600 rounded-xl text-white placeholder-slate-500 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 resize-none font-mono text-sm"
+                          />
+                        </div>
+
+                        <div className="flex items-center justify-between text-xs text-slate-500">
+                          <span>{(textMessage.match(/https?:\/\/[^\s]+/gi) || []).length} URL(s) detected</span>
+                          <span>Supports shortened URLs</span>
+                        </div>
+
+                        {/* URL Analysis Info */}
+                        <div className="p-3 bg-slate-700/50 rounded-lg border border-purple-600/50">
+                          <div className="flex items-center gap-2">
+                            <Link className="w-4 h-4 text-purple-400" />
+                            <span className="text-sm font-medium text-slate-200">URL Threat Analysis</span>
+                          </div>
+                          <p className="text-xs text-slate-400 mt-1 ml-6">
+                            VirusTotal, PhishTank, URLhaus, domain reputation, redirect chain analysis
+                          </p>
+                        </div>
+                      </>
+                    )}
                   </div>
 
                   <button
@@ -975,7 +1069,9 @@ function App() {
                     disabled={!textMessage.trim() || loading}
                     className={`w-full mt-4 py-3 rounded-lg font-semibold transition flex items-center justify-center gap-2 ${
                       textMessage.trim() && !loading
-                        ? 'bg-green-600 hover:bg-green-700 text-white'
+                        ? textSource === 'url' 
+                          ? 'bg-purple-600 hover:bg-purple-700 text-white'
+                          : 'bg-green-600 hover:bg-green-700 text-white'
                         : 'bg-slate-700 text-slate-400 cursor-not-allowed'
                     }`}
                   >
@@ -987,7 +1083,7 @@ function App() {
                     ) : (
                       <>
                         <Shield className="w-5 h-5" />
-                        Analyze Message
+                        {textSource === 'url' ? 'Analyze URL(s)' : 'Analyze Message'}
                       </>
                     )}
                   </button>
@@ -1129,21 +1225,50 @@ function App() {
       {/* Full Analysis View Modal */}
       {fullAnalysisOpen && result && (
         <div className="fixed inset-0 z-50 overflow-auto">
-          <AdvancedAnalysisView
-            result={{
-              ...result,
-              // Merge enhanced analysis data if available
-              ...(enhancedResult ? {
-                se_analysis: enhancedResult.se_analysis,
-                content_analysis: enhancedResult.content_analysis,
-                lookalike_analysis: enhancedResult.lookalike_analysis,
-                ti_results: enhancedResult.ti_results,
-                risk_score: enhancedResult.risk_score,
-              } : {})
-            }}
-            onExport={exportResults}
-            onBack={() => setFullAnalysisOpen(false)}
-          />
+          {/* Check if this is SMS/URL analysis */}
+          {textAnalysisResult ? (
+            <div className="min-h-screen bg-slate-900 p-6">
+              <div className="max-w-4xl mx-auto">
+                <div className="flex items-center justify-between mb-6">
+                  <h1 className="text-2xl font-bold text-white">
+                    {textAnalysisResult.analysis_type === 'url' ? '🔗 URL Analysis' : '📱 SMS/Message Analysis'}
+                  </h1>
+                  <button
+                    onClick={() => {
+                      setFullAnalysisOpen(false);
+                      setTextAnalysisResult(null);
+                    }}
+                    className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition"
+                  >
+                    ← Back to Dashboard
+                  </button>
+                </div>
+                <TextAnalysisResults 
+                  result={textAnalysisResult}
+                  onClose={() => {
+                    setFullAnalysisOpen(false);
+                    setTextAnalysisResult(null);
+                  }}
+                />
+              </div>
+            </div>
+          ) : (
+            <AdvancedAnalysisView
+              result={{
+                ...result,
+                // Merge enhanced analysis data if available
+                ...(enhancedResult ? {
+                  se_analysis: enhancedResult.se_analysis,
+                  content_analysis: enhancedResult.content_analysis,
+                  lookalike_analysis: enhancedResult.lookalike_analysis,
+                  ti_results: enhancedResult.ti_results,
+                  risk_score: enhancedResult.risk_score,
+                } : {})
+              }}
+              onExport={exportResults}
+              onBack={() => setFullAnalysisOpen(false)}
+            />
+          )}
         </div>
       )}
 
