@@ -12,7 +12,7 @@ import {
   AlertCircle, CheckCircle, XCircle, Info,
   BookOpen, LayoutDashboard, Mail,
   Paperclip, Link, Key, Database,
-  Target, Brain, Zap
+  Target, Brain, Zap, Smartphone, MessageSquare
 } from 'lucide-react';
 import { apiClient } from './services/api';
 import AdvancedRulesManager from './components/rules/AdvancedRulesManager';
@@ -134,6 +134,11 @@ function App() {
   const [dragActive, setDragActive] = useState(false);
   const [debugMode, setDebugMode] = useState(false);
   const [globalSettings, setGlobalSettings] = useState<SettingsState | null>(null);
+
+  // SMS/Text analysis state
+  const [inputType, setInputType] = useState<'email' | 'sms'>('email');
+  const [textMessage, setTextMessage] = useState('');
+  const [textSource, setTextSource] = useState<'sms' | 'whatsapp' | 'telegram' | 'other'>('sms');
 
   // Load initial settings
   useEffect(() => {
@@ -356,6 +361,118 @@ function App() {
       setTimeout(() => {
         setLoading(false);
       }, progressDuration);
+    }
+  };
+
+  // Analyze text/SMS message
+  const analyzeText = async () => {
+    if (!textMessage.trim()) {
+      toast.error('Please enter a message to analyze');
+      return;
+    }
+
+    setLoading(true);
+    setResult(null);
+    setEnhancedResult(null);
+    setAnalysisComplete(false);
+    setShowProgress(true);
+
+    // Simplified progress for text analysis (faster)
+    const textSteps = [
+      { id: 'parse', delay: 100 },
+      { id: 'urls', delay: 150 },
+      { id: 'detection', delay: 200 },
+      { id: 'scoring', delay: 100 },
+    ];
+
+    let totalDelay = 0;
+    textSteps.forEach((update) => {
+      setTimeout(() => {
+        setAnalysisSteps((prev) =>
+          prev.map((step) =>
+            step.id === update.id ? { ...step, status: 'running' as const } : step
+          )
+        );
+      }, totalDelay);
+      totalDelay += update.delay;
+      setTimeout(() => {
+        setAnalysisSteps((prev) =>
+          prev.map((step) =>
+            step.id === update.id ? { ...step, status: 'success' as const, duration: update.delay } : step
+          )
+        );
+      }, totalDelay);
+    });
+
+    try {
+      console.log('=== SENDING TEXT ANALYSIS REQUEST ===');
+      const response = await apiClient.post('/analyze/text', {
+        text: textMessage,
+        sender: '',
+        source: textSource,
+      });
+
+      console.log('=== TEXT ANALYSIS RESPONSE ===');
+      console.log(JSON.stringify(response.data, null, 2));
+
+      // Convert text analysis result to email-like structure for display
+      const textResult = response.data;
+      const pseudoEmailResult: AnalysisResult = {
+        analysis_id: textResult.analysis_id,
+        analyzed_at: textResult.analyzed_at,
+        analysis_duration_ms: 500,
+        email: {
+          subject: `${textSource.toUpperCase()} Message Analysis`,
+          sender: { email: 'unknown@sms', display_name: 'SMS Sender', domain: 'sms' },
+          recipients: { to: ['recipient@unknown'] },
+          body_text: textMessage,
+          urls: textResult.urls_found?.map((url: string) => ({ url, display_text: url })) || [],
+          attachments: [],
+        },
+        authentication: {},
+        detection: {
+          risk_score: textResult.overall_score,
+          risk_level: textResult.overall_level,
+          verdict: textResult.is_likely_scam ? 'malicious' : 'clean',
+          primary_classification: textResult.classification,
+          confidence: textResult.confidence,
+          rules_triggered: textResult.scam_patterns_matched?.map((p: any) => ({
+            rule_id: p.pattern_id,
+            name: p.name,
+            description: p.description,
+            severity: p.severity,
+            category: 'smishing',
+          })) || [],
+        },
+        iocs: {
+          domains: [],
+          urls: textResult.urls_found || [],
+          ips: [],
+          email_addresses: [],
+          file_hashes_sha256: [],
+        },
+        ai_triage: {
+          enabled: true,
+          provider: 'pattern-matching',
+          summary: textResult.is_likely_scam 
+            ? `This ${textSource.toUpperCase()} message shows signs of a ${textResult.classification.replace('smishing_', '').replace('_', ' ')} scam.`
+            : 'This message appears to be legitimate.',
+          key_findings: textResult.indicators || [],
+          recommendations: textResult.recommendations || [],
+          recommended_actions: [],
+        },
+      };
+
+      setResult(pseudoEmailResult);
+      setEnhancedResult(pseudoEmailResult);
+      setAnalysisComplete(true);
+      toast.success('Text analysis complete!');
+
+    } catch (error: any) {
+      console.error('Text analysis error:', error);
+      toast.error(error.response?.data?.detail || 'Failed to analyze text');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -586,7 +703,7 @@ function App() {
           </div>
           <div>
             <h1 className="text-xl font-bold">NiksES</h1>
-            <p className="text-xs text-slate-400">Email Security Analysis</p>
+            <p className="text-xs text-slate-400">Email & SMS Security Analysis</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -686,96 +803,196 @@ function App() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Left Panel - Upload & Progress */}
           <div className="space-y-6">
-            {/* Upload Area */}
+            {/* Input Area with Tabs */}
             <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
-              <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                <Upload className="w-5 h-5 text-blue-400" />
-                Upload Email
-              </h2>
-              
-              <div
-                className={`border-2 border-dashed rounded-xl p-8 text-center transition-all ${
-                  dragActive 
-                    ? 'border-blue-500 bg-blue-500/10' 
-                    : 'border-slate-600 hover:border-slate-500'
-                }`}
-                onDragEnter={handleDrag}
-                onDragLeave={handleDrag}
-                onDragOver={handleDrag}
-                onDrop={handleDrop}
-              >
-                <input
-                  type="file"
-                  accept=".eml,.msg"
-                  onChange={handleFileSelect}
-                  className="hidden"
-                  id="file-upload"
-                />
-                <label htmlFor="file-upload" className="cursor-pointer">
-                  <div className="flex flex-col items-center gap-3">
-                    {file ? (
+              {/* Input Type Tabs */}
+              <div className="flex gap-2 mb-4">
+                <button
+                  onClick={() => setInputType('email')}
+                  className={`flex-1 py-2 px-4 rounded-lg font-medium transition flex items-center justify-center gap-2 ${
+                    inputType === 'email'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                  }`}
+                >
+                  <Mail className="w-4 h-4" />
+                  <span className="font-medium">Email</span>
+                </button>
+                <button
+                  onClick={() => setInputType('sms')}
+                  className={`flex-1 py-2 px-4 rounded-lg font-medium transition flex items-center justify-center gap-2 ${
+                    inputType === 'sms'
+                      ? 'bg-green-600 text-white'
+                      : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                  }`}
+                >
+                  <Smartphone className="w-4 h-4" />
+                  <span className="font-medium">SMS / Message</span>
+                </button>
+              </div>
+
+              {inputType === 'email' ? (
+                <>
+                  {/* Email Upload Mode */}
+                  <div
+                    className={`border-2 border-dashed rounded-xl p-8 text-center transition-all ${
+                      dragActive 
+                        ? 'border-blue-500 bg-blue-500/10' 
+                        : 'border-slate-600 hover:border-slate-500'
+                    }`}
+                    onDragEnter={handleDrag}
+                    onDragLeave={handleDrag}
+                    onDragOver={handleDrag}
+                    onDrop={handleDrop}
+                  >
+                    <input
+                      type="file"
+                      accept=".eml,.msg"
+                      onChange={handleFileSelect}
+                      className="hidden"
+                      id="file-upload"
+                    />
+                    <label htmlFor="file-upload" className="cursor-pointer">
+                      <div className="flex flex-col items-center gap-3">
+                        {file ? (
+                          <>
+                            <div className="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center">
+                              <Mail className="w-8 h-8 text-green-400" />
+                            </div>
+                            <div>
+                              <p className="text-lg font-medium text-green-400">{file.name}</p>
+                              <p className="text-sm text-slate-400">
+                                {(file.size / 1024).toFixed(1)} KB
+                              </p>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="w-16 h-16 bg-slate-700 rounded-full flex items-center justify-center">
+                              <Upload className="w-8 h-8 text-slate-400" />
+                            </div>
+                            <div>
+                              <p className="text-slate-300">
+                                Drop your email file here
+                              </p>
+                              <p className="text-sm text-slate-500">
+                                or click to browse (.eml, .msg)
+                              </p>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </label>
+                  </div>
+
+                  {/* Analysis Info */}
+                  <div className="mt-4 p-3 bg-slate-700/50 rounded-lg border border-slate-600">
+                    <div className="flex items-center gap-2">
+                      <Zap className="w-4 h-4 text-yellow-400" />
+                      <span className="text-sm font-medium text-slate-200">Full Email Analysis</span>
+                    </div>
+                    <p className="text-xs text-slate-400 mt-1 ml-6">
+                      Detection rules, SE analysis, content deconstruction, lookalike detection, TI fusion
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={analyzeEmail}
+                    disabled={!file || loading}
+                    className={`w-full mt-4 py-3 rounded-lg font-semibold transition flex items-center justify-center gap-2 ${
+                      file && !loading
+                        ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                        : 'bg-slate-700 text-slate-400 cursor-not-allowed'
+                    }`}
+                  >
+                    {loading ? (
                       <>
-                        <div className="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center">
-                          <Mail className="w-8 h-8 text-green-400" />
-                        </div>
-                        <div>
-                          <p className="text-lg font-medium text-green-400">{file.name}</p>
-                          <p className="text-sm text-slate-400">
-                            {(file.size / 1024).toFixed(1)} KB
-                          </p>
-                        </div>
+                        <RefreshCw className="w-5 h-5 animate-spin" />
+                        Analyzing...
                       </>
                     ) : (
                       <>
-                        <div className="w-16 h-16 bg-slate-700 rounded-full flex items-center justify-center">
-                          <Upload className="w-8 h-8 text-slate-400" />
-                        </div>
-                        <div>
-                          <p className="text-slate-300">
-                            Drop your email file here
-                          </p>
-                          <p className="text-sm text-slate-500">
-                            or click to browse (.eml, .msg)
-                          </p>
-                        </div>
+                        <Shield className="w-5 h-5" />
+                        Analyze Email
                       </>
                     )}
+                  </button>
+                </>
+              ) : (
+                <>
+                  {/* SMS/Text Message Mode */}
+                  <div className="space-y-4">
+                    {/* Source selector */}
+                    <div className="flex gap-2">
+                      {[
+                        { value: 'sms', label: 'SMS', icon: Smartphone },
+                        { value: 'whatsapp', label: 'WhatsApp', icon: MessageSquare },
+                        { value: 'telegram', label: 'Telegram', icon: MessageSquare },
+                        { value: 'other', label: 'Other', icon: MessageSquare },
+                      ].map(({ value, label, icon: Icon }) => (
+                        <button
+                          key={value}
+                          onClick={() => setTextSource(value as any)}
+                          className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-medium transition flex items-center justify-center gap-1 ${
+                            textSource === value
+                              ? 'bg-green-600 text-white'
+                              : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+                          }`}
+                        >
+                          <Icon className="w-3 h-3" />
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Message input */}
+                    <textarea
+                      value={textMessage}
+                      onChange={(e) => setTextMessage(e.target.value)}
+                      placeholder="Paste the suspicious SMS or message text here..."
+                      className="w-full h-40 p-4 bg-slate-900 border border-slate-600 rounded-xl text-white placeholder-slate-500 focus:ring-2 focus:ring-green-500 focus:border-green-500 resize-none"
+                    />
+
+                    <div className="flex items-center justify-between text-xs text-slate-500">
+                      <span>{textMessage.length} characters</span>
+                      <span>Max 5000 characters</span>
+                    </div>
                   </div>
-                </label>
-              </div>
 
-              {/* Analysis Info */}
-              <div className="mt-4 p-3 bg-slate-700/50 rounded-lg border border-slate-600">
-                <div className="flex items-center gap-2">
-                  <Zap className="w-4 h-4 text-yellow-400" />
-                  <span className="text-sm font-medium text-slate-200">Unified Analysis</span>
-                </div>
-                <p className="text-xs text-slate-400 mt-1 ml-6">
-                  Detection rules, SE analysis, content deconstruction, lookalike detection, TI fusion
-                </p>
-              </div>
+                  {/* SMS Analysis Info */}
+                  <div className="mt-4 p-3 bg-slate-700/50 rounded-lg border border-slate-600">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4 text-orange-400" />
+                      <span className="text-sm font-medium text-slate-200">Smishing Analysis</span>
+                    </div>
+                    <p className="text-xs text-slate-400 mt-1 ml-6">
+                      Detects package scams, banking phishing, prize fraud, government impersonation
+                    </p>
+                  </div>
 
-              <button
-                onClick={analyzeEmail}
-                disabled={!file || loading}
-                className={`w-full mt-4 py-3 rounded-lg font-semibold transition flex items-center justify-center gap-2 ${
-                  file && !loading
-                    ? 'bg-blue-600 hover:bg-blue-700 text-white'
-                    : 'bg-slate-700 text-slate-400 cursor-not-allowed'
-                }`}
-              >
-                {loading ? (
-                  <>
-                    <RefreshCw className="w-5 h-5 animate-spin" />
-                    Analyzing...
-                  </>
-                ) : (
-                  <>
-                    <Shield className="w-5 h-5" />
-                    Analyze Email
-                  </>
-                )}
-              </button>
+                  <button
+                    onClick={analyzeText}
+                    disabled={!textMessage.trim() || loading}
+                    className={`w-full mt-4 py-3 rounded-lg font-semibold transition flex items-center justify-center gap-2 ${
+                      textMessage.trim() && !loading
+                        ? 'bg-green-600 hover:bg-green-700 text-white'
+                        : 'bg-slate-700 text-slate-400 cursor-not-allowed'
+                    }`}
+                  >
+                    {loading ? (
+                      <>
+                        <RefreshCw className="w-5 h-5 animate-spin" />
+                        Analyzing...
+                      </>
+                    ) : (
+                      <>
+                        <Shield className="w-5 h-5" />
+                        Analyze Message
+                      </>
+                    )}
+                  </button>
+                </>
+              )}
             </div>
 
             {/* Analysis Progress */}
