@@ -18,7 +18,10 @@ import {
   AlertTriangle,
   ChevronDown,
   ChevronRight,
+  MessageSquare,
 } from 'lucide-react';
+
+export type AnalysisType = 'email' | 'url' | 'sms';
 
 export interface AnalysisStep {
   id: string;
@@ -35,10 +38,27 @@ interface AnalysisProgressProps {
   steps: AnalysisStep[];
   isComplete: boolean;
   currentStep: string;
+  analysisType?: AnalysisType;
 }
 
-const AnalysisProgress: React.FC<AnalysisProgressProps> = ({ steps, isComplete, currentStep }) => {
+const AnalysisProgress: React.FC<AnalysisProgressProps> = ({ 
+  steps, 
+  isComplete, 
+  currentStep,
+  analysisType = 'email'
+}) => {
   const [expandedSteps, setExpandedSteps] = useState<Set<string>>(new Set());
+
+  const getAnalysisLabel = () => {
+    switch (analysisType) {
+      case 'url':
+        return isComplete ? 'URL analysis complete' : 'Analyzing URL...';
+      case 'sms':
+        return isComplete ? 'SMS analysis complete' : 'Analyzing SMS/Message...';
+      default:
+        return isComplete ? 'Email analysis complete' : 'Analyzing email...';
+    }
+  };
 
   const toggleStep = (stepId: string) => {
     const newExpanded = new Set(expandedSteps);
@@ -88,7 +108,7 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({ steps, isComplete, 
           Analysis Progress
         </h3>
         <p className="text-sm text-gray-600 mt-1">
-          {isComplete ? 'Analysis complete' : 'Analyzing email...'}
+          {getAnalysisLabel()}
         </p>
       </div>
 
@@ -184,7 +204,7 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({ steps, isComplete, 
   );
 };
 
-// Helper function to generate default analysis steps
+// Helper function to generate default analysis steps for EMAIL
 export const createAnalysisSteps = (): AnalysisStep[] => [
   {
     id: 'parse',
@@ -253,6 +273,59 @@ export const createAnalysisSteps = (): AnalysisStep[] => [
     id: 'report',
     name: 'Generate Report',
     description: 'Compile final analysis results',
+    status: 'pending',
+    icon: <FileText className="w-4 h-4" />,
+  },
+];
+
+// Helper function to generate analysis steps for URL/SMS
+export const createUrlSmsAnalysisSteps = (type: 'url' | 'sms' = 'url'): AnalysisStep[] => [
+  {
+    id: 'parse',
+    name: type === 'url' ? 'Parse URL' : 'Parse Message',
+    description: type === 'url' ? 'Extract URL components and domain' : 'Extract URLs and text patterns',
+    status: 'pending',
+    icon: type === 'url' ? <Link className="w-4 h-4" /> : <MessageSquare className="w-4 h-4" />,
+  },
+  {
+    id: 'patterns',
+    name: 'Pattern Detection',
+    description: 'Detect smishing, phishing, and scam patterns',
+    status: 'pending',
+    icon: <Shield className="w-4 h-4" />,
+  },
+  {
+    id: 'enrichment',
+    name: 'URL Threat Intelligence',
+    description: 'Check URLhaus, PhishTank, VirusTotal',
+    status: 'pending',
+    icon: <Database className="w-4 h-4" />,
+  },
+  {
+    id: 'sandbox',
+    name: 'URL Sandbox Analysis',
+    description: 'Dynamic analysis via URLScan.io',
+    status: 'pending',
+    icon: <Globe className="w-4 h-4" />,
+  },
+  {
+    id: 'scoring',
+    name: 'Calculate Risk Score',
+    description: 'Compute overall threat level',
+    status: 'pending',
+    icon: <Target className="w-4 h-4" />,
+  },
+  {
+    id: 'ai',
+    name: 'AI Analysis',
+    description: 'Generate threat assessment',
+    status: 'pending',
+    icon: <Brain className="w-4 h-4" />,
+  },
+  {
+    id: 'report',
+    name: 'Generate Report',
+    description: 'Compile analysis results',
     status: 'pending',
     icon: <FileText className="w-4 h-4" />,
   },

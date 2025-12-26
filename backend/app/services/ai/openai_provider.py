@@ -44,19 +44,6 @@ class OpenAIProvider(BaseAIProvider):
     ):
         super().__init__(api_key, model, timeout, max_retries)
         self.organization = organization
-        self._session: Optional[aiohttp.ClientSession] = None
-    
-    async def _get_session(self) -> aiohttp.ClientSession:
-        """Get or create aiohttp session."""
-        if self._session is None or self._session.closed:
-            timeout = aiohttp.ClientTimeout(total=self.timeout)
-            self._session = aiohttp.ClientSession(timeout=timeout)
-        return self._session
-    
-    async def close(self):
-        """Close the session."""
-        if self._session and not self._session.closed:
-            await self._session.close()
     
     def _get_headers(self) -> Dict[str, str]:
         """Get API request headers."""
@@ -90,8 +77,6 @@ class OpenAIProvider(BaseAIProvider):
         if not self.is_configured():
             raise AIConfigurationError("OpenAI API key not configured")
         
-        session = await self._get_session()
-        
         # Build messages
         messages = []
         if system_prompt:
@@ -108,46 +93,49 @@ class OpenAIProvider(BaseAIProvider):
         
         # Make request with retries
         last_error = None
+        timeout = aiohttp.ClientTimeout(total=self.timeout)
+        
         for attempt in range(self.max_retries):
             try:
-                async with session.post(
-                    self.API_URL,
-                    headers=self._get_headers(),
-                    json=payload,
-                ) as response:
-                    data = await response.json()
-                    
-                    if response.status == 200:
-                        # Extract content
-                        choice = data.get("choices", [{}])[0]
-                        content = choice.get("message", {}).get("content", "")
+                async with aiohttp.ClientSession(timeout=timeout) as session:
+                    async with session.post(
+                        self.API_URL,
+                        headers=self._get_headers(),
+                        json=payload,
+                    ) as response:
+                        data = await response.json()
                         
-                        # Calculate tokens
-                        usage = data.get("usage", {})
-                        tokens = usage.get("total_tokens", 0)
+                        if response.status == 200:
+                            # Extract content
+                            choice = data.get("choices", [{}])[0]
+                            content = choice.get("message", {}).get("content", "")
+                            
+                            # Calculate tokens
+                            usage = data.get("usage", {})
+                            tokens = usage.get("total_tokens", 0)
+                            
+                            return AIResponse(
+                                content=content,
+                                model=data.get("model", self.model),
+                                tokens_used=tokens,
+                                finish_reason=choice.get("finish_reason", "unknown"),
+                                raw_response=data,
+                            )
                         
-                        return AIResponse(
-                            content=content,
-                            model=data.get("model", self.model),
-                            tokens_used=tokens,
-                            finish_reason=choice.get("finish_reason", "unknown"),
-                            raw_response=data,
-                        )
-                    
-                    elif response.status == 429:
-                        # Rate limited - wait and retry
-                        wait_time = 2 ** attempt
-                        self.logger.warning(f"Rate limited, waiting {wait_time}s")
-                        await asyncio.sleep(wait_time)
-                        last_error = AIRateLimitError("Rate limit exceeded")
-                        continue
-                    
-                    elif response.status == 401:
-                        raise AIConfigurationError("Invalid API key")
-                    
-                    else:
-                        error_msg = data.get("error", {}).get("message", str(data))
-                        raise AIProviderError(f"API error ({response.status}): {error_msg}")
+                        elif response.status == 429:
+                            # Rate limited - wait and retry
+                            wait_time = 2 ** attempt
+                            self.logger.warning(f"Rate limited, waiting {wait_time}s")
+                            await asyncio.sleep(wait_time)
+                            last_error = AIRateLimitError("Rate limit exceeded")
+                            continue
+                        
+                        elif response.status == 401:
+                            raise AIConfigurationError("Invalid API key")
+                        
+                        else:
+                            error_msg = data.get("error", {}).get("message", str(data))
+                            raise AIProviderError(f"API error ({response.status}): {error_msg}")
             
             except asyncio.TimeoutError:
                 last_error = AITimeoutError(f"Request timed out after {self.timeout}s")

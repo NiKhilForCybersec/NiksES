@@ -21,7 +21,9 @@ import AdvancedAnalysisView from './components/analysis/AdvancedAnalysisView';
 import TextAnalysisResults from './components/analysis/TextAnalysisResults';
 import AnalysisProgress, { 
   AnalysisStep, 
-  createAnalysisSteps 
+  AnalysisType,
+  createAnalysisSteps,
+  createUrlSmsAnalysisSteps
 } from './components/analysis/AnalysisProgress';
 import ResultsPanel from './components/analysis/ResultsPanel';
 import { SettingsModal, APIStatusIndicator, APISetupBanner, SettingsState } from './components/settings';
@@ -162,6 +164,7 @@ function App() {
   const [analysisSteps, setAnalysisSteps] = useState<AnalysisStep[]>(createAnalysisSteps());
   const [analysisComplete, setAnalysisComplete] = useState(false);
   const [showProgress, setShowProgress] = useState(false);
+  const [currentAnalysisType, setCurrentAnalysisType] = useState<AnalysisType>('email');
 
   // Handle file drop
   const handleDrag = useCallback((e: React.DragEvent) => {
@@ -254,6 +257,7 @@ function App() {
     setResult(null);
     setEnhancedResult(null);
     setAnalysisComplete(false);
+    setCurrentAnalysisType('email');
     setAnalysisSteps(createAnalysisSteps());
 
     const progressDuration = simulateProgress();
@@ -355,6 +359,7 @@ function App() {
     }
 
     const isUrlMode = textSource === 'url';
+    const analysisTypeToUse: AnalysisType = isUrlMode ? 'url' : 'sms';
 
     setLoading(true);
     setResult(null);
@@ -362,15 +367,20 @@ function App() {
     setTextAnalysisResult(null);
     setAnalysisComplete(false);
     setShowProgress(true);
+    setCurrentAnalysisType(analysisTypeToUse);
+    
+    // Reset to URL/SMS specific steps
+    setAnalysisSteps(createUrlSmsAnalysisSteps(analysisTypeToUse));
 
-    // Progress steps for text/URL analysis
+    // Progress steps for text/URL analysis (matching createUrlSmsAnalysisSteps ids)
     const textSteps = [
       { id: 'parse', delay: 100 },
-      { id: 'urls', delay: 200 },
-      { id: 'detection', delay: 300 },
+      { id: 'patterns', delay: 200 },
       { id: 'enrichment', delay: 400 },
-      { id: 'ai', delay: 500 },
+      { id: 'sandbox', delay: 500 },
       { id: 'scoring', delay: 150 },
+      { id: 'ai', delay: 500 },
+      { id: 'report', delay: 100 },
     ];
 
     let totalDelay = 0;
@@ -1072,6 +1082,7 @@ function App() {
                 steps={analysisSteps}
                 isComplete={analysisComplete}
                 currentStep={analysisSteps.find(s => s.status === 'running')?.id || ''}
+                analysisType={currentAnalysisType}
               />
             )}
           </div>
