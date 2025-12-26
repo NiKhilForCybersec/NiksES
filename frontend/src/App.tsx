@@ -492,8 +492,6 @@ function App() {
               ]
             : [],
         },
-        // Store the full text analysis for dedicated view
-        _textAnalysis: textResult,
       };
 
       setResult(pseudoEmailResult);
