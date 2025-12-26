@@ -941,7 +941,6 @@ const SandboxResultsPanel: React.FC<SandboxResultsPanelProps> = ({
                          matchingResults[0];
           
           if (updated && (updated.status === 'completed' || updated.verdict)) {
-            console.log('Updating result:', result.filename, 'with:', updated.status, updated.verdict);
             return { 
               ...result, 
               ...updated,

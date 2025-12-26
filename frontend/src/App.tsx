@@ -156,8 +156,6 @@ function App() {
   }, []);
 
   // Debug logging
-  console.log('App render - result:', result ? 'present' : 'null');
-  console.log('App render - enhancedResult:', enhancedResult ? 'present' : 'null');
 
   
   // Analysis progress state
@@ -276,17 +274,6 @@ function App() {
       const data = response.data;
       
       // Log response for debugging
-      console.log('=== ANALYSIS RESPONSE DEBUG ===');
-      console.log('Full response:', JSON.stringify(data, null, 2).slice(0, 1000));
-      console.log('Response keys:', Object.keys(data));
-      console.log('email:', data.email ? 'present' : 'MISSING');
-      console.log('email keys:', data.email ? Object.keys(data.email) : 'N/A');
-      console.log('detection:', data.detection ? 'present' : 'MISSING');
-      console.log('detection keys:', data.detection ? Object.keys(data.detection) : 'N/A');
-      console.log('iocs:', data.iocs ? 'present' : 'MISSING');
-      console.log('iocs keys:', data.iocs ? Object.keys(data.iocs) : 'N/A');
-      console.log('ai_triage:', data.ai_triage ? 'present' : 'not present');
-      console.log('=== END DEBUG ===');
       
       setTimeout(() => {
         try {
@@ -332,12 +319,6 @@ function App() {
             iocs,
           };
           
-          console.log('=== PROCESSED RESULT DEBUG ===');
-          console.log('Processed result keys:', Object.keys(processedResult));
-          console.log('Processed email:', processedResult.email ? Object.keys(processedResult.email) : 'N/A');
-          console.log('Processed detection:', processedResult.detection);
-          console.log('Processed iocs:', processedResult.iocs);
-          console.log('=== END PROCESSED DEBUG ===');
           
           setResult(processedResult);
           
@@ -412,7 +393,6 @@ function App() {
     });
 
     try {
-      console.log(`=== SENDING ${isUrlMode ? 'URL' : 'TEXT'} ANALYSIS REQUEST ===`);
       const response = await apiClient.post('/analyze/text', {
         text: textMessage,
         sender: '',
@@ -422,8 +402,6 @@ function App() {
         enable_url_sandbox: isUrlMode, // Enable sandbox for URL mode
       });
 
-      console.log('=== ANALYSIS RESPONSE ===');
-      console.log(JSON.stringify(response.data, null, 2));
 
       const textResult = response.data;
       
@@ -630,7 +608,6 @@ function App() {
         },
       };
       
-      console.log('getTransformedResult success:', transformed);
       return transformed;
     } catch (err) {
       console.error('getTransformedResult error:', err);
@@ -1105,7 +1082,6 @@ function App() {
               (() => {
                 try {
                   const transformed = getTransformedResult();
-                  console.log('Rendering ResultsPanel with:', transformed);
                   return (
                     <ResultsPanel
                       result={transformed}

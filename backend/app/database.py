@@ -28,7 +28,6 @@ class AnalysisRecord(Base):
     """Store complete analysis results."""
     __tablename__ = "analyses"
     
-    # TODO: Define columns in Session 3
     id = Column(String, primary_key=True)
     created_at = Column(DateTime)
     subject = Column(Text)
@@ -49,7 +48,6 @@ class IOCRecord(Base):
     """Store extracted IOCs for correlation."""
     __tablename__ = "iocs"
     
-    # TODO: Define columns in Session 3
     id = Column(Integer, primary_key=True, autoincrement=True)
     analysis_id = Column(String)
     ioc_type = Column(String)
@@ -62,7 +60,6 @@ class APIKeyRecord(Base):
     """Store encrypted API keys."""
     __tablename__ = "api_keys"
     
-    # TODO: Define columns in Session 3
     id = Column(Integer, primary_key=True, autoincrement=True)
     service_name = Column(String, unique=True)
     encrypted_key = Column(Text)
@@ -77,7 +74,6 @@ class SettingsRecord(Base):
     """Store user settings."""
     __tablename__ = "settings"
     
-    # TODO: Define columns in Session 3
     key = Column(String, primary_key=True)
     value = Column(Text)
     value_type = Column(String, default="string")
@@ -148,7 +144,6 @@ async def init_db() -> None:
     
     Call this on application startup.
     """
-    # TODO: Implement in Session 3
     logger.info("Initializing database...")
     engine = get_engine()
     async with engine.begin() as conn:

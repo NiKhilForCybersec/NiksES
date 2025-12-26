@@ -749,18 +749,31 @@ def build_mitre_techniques(patterns: List[ScamPattern]) -> List[Dict[str, str]]:
 # ============================================================================
 
 async def enrich_urls(urls: List[str]) -> List[URLEnrichmentResult]:
-    """Enrich URLs with threat intelligence."""
+    """
+    Enrich URLs with threat intelligence from multiple sources.
+    
+    Sources (in order of reliability):
+    1. URLhaus - Free, no rate limits, malware database
+    2. PhishTank - Free, no rate limits, phishing database  
+    3. VirusTotal - Has rate limits (4/min free tier), reputation check
+    
+    The function gracefully handles when any source fails or is unavailable.
+    """
     results = []
     
     # Try to import enrichment services
     try:
-        from app.services.enrichment.virustotal import VirusTotalEnricher
-        from app.services.enrichment.phishtank import PhishTankEnricher
-        from app.services.enrichment.urlhaus import URLhausEnricher
+        from app.services.enrichment.virustotal import VirusTotalProvider
+        from app.services.enrichment.phishtank import PhishTankProvider
+        from app.services.enrichment.urlhaus import URLhausProvider
         
-        vt = VirusTotalEnricher()
-        pt = PhishTankEnricher()
-        uh = URLhausEnricher()
+        vt = VirusTotalProvider()
+        pt = PhishTankProvider()
+        uh = URLhausProvider()
+        
+        # Log which services are available
+        vt_available = vt.is_configured
+        logger.info(f"URL enrichment services: VT={vt_available}, PT=True, UH=True")
         
         for url in urls[:5]:  # Limit to 5 URLs
             try:
@@ -774,31 +787,7 @@ async def enrich_urls(urls: List[str]) -> List[URLEnrichmentResult]:
                 
                 sources = []
                 
-                # VirusTotal check
-                if vt.is_configured():
-                    try:
-                        vt_result = await vt.check_url(url)
-                        if vt_result:
-                            if vt_result.get('malicious', 0) > 0:
-                                enrichment.is_malicious = True
-                                enrichment.threat_score = min(100, vt_result.get('malicious', 0) * 10)
-                            sources.append("VirusTotal")
-                            enrichment.categories.extend(vt_result.get('categories', []))
-                    except Exception as e:
-                        logger.debug(f"VT check failed: {e}")
-                
-                # PhishTank check
-                if pt.is_configured():
-                    try:
-                        pt_result = await pt.check_url(url)
-                        if pt_result and pt_result.get('is_phish'):
-                            enrichment.is_malicious = True
-                            enrichment.threat_score = max(enrichment.threat_score, 80)
-                            sources.append("PhishTank")
-                    except Exception as e:
-                        logger.debug(f"PT check failed: {e}")
-                
-                # URLhaus check
+                # URLhaus check FIRST (free, no limits, most reliable for malware)
                 try:
                     uh_result = await uh.check_url(url)
                     if uh_result and uh_result.get('threat'):
@@ -806,10 +795,45 @@ async def enrich_urls(urls: List[str]) -> List[URLEnrichmentResult]:
                         enrichment.threat_score = max(enrichment.threat_score, 90)
                         sources.append("URLhaus")
                         enrichment.categories.append(uh_result.get('threat_type', 'malware'))
+                        logger.info(f"URLhaus: {url} flagged as {uh_result.get('threat_type', 'malware')}")
                 except Exception as e:
-                    logger.debug(f"URLhaus check failed: {e}")
+                    logger.debug(f"URLhaus check failed for {url}: {e}")
+                
+                # PhishTank check (free, no limits)
+                try:
+                    pt_result = await pt.check_url(url)
+                    if pt_result and pt_result.get('is_phish'):
+                        enrichment.is_malicious = True
+                        enrichment.threat_score = max(enrichment.threat_score, 80)
+                        sources.append("PhishTank")
+                        logger.info(f"PhishTank: {url} flagged as phishing")
+                except Exception as e:
+                    logger.debug(f"PhishTank check failed for {url}: {e}")
+                
+                # VirusTotal check LAST (has rate limits, may fail)
+                if vt_available:
+                    try:
+                        vt_result = await vt.check_url(url)
+                        if vt_result:
+                            malicious_count = vt_result.get('malicious', 0)
+                            if malicious_count > 0:
+                                enrichment.is_malicious = True
+                                enrichment.threat_score = max(enrichment.threat_score, min(100, malicious_count * 10))
+                                logger.info(f"VirusTotal: {url} flagged by {malicious_count} engines")
+                            sources.append("VirusTotal")
+                            enrichment.categories.extend(vt_result.get('categories', []))
+                    except Exception as e:
+                        # Log but continue - VT is optional
+                        logger.warning(f"VirusTotal check skipped for {url}: {e}")
                 
                 enrichment.sources = sources
+                
+                # Log final enrichment result
+                if sources:
+                    logger.info(f"URL {url}: enriched from {sources}, score={enrichment.threat_score}, malicious={enrichment.is_malicious}")
+                else:
+                    logger.debug(f"URL {url}: no threat intel found from any source")
+                
                 results.append(enrichment)
                 
             except Exception as e:
