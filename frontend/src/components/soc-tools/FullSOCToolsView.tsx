@@ -43,10 +43,21 @@ const FullSOCToolsView: React.FC<FullSOCToolsViewProps> = ({
 
   if (!isOpen) return null;
 
+  // Detect analysis type
+  const isUrlAnalysis = analysisResult?.email?.sender?.email?.includes('url@analysis') ||
+                        analysisResult?.email?.subject?.toLowerCase().includes('url analysis');
+  const isSmsAnalysis = analysisResult?.email?.sender?.email?.includes('sms@analysis') ||
+                        analysisResult?.email?.subject?.toLowerCase().includes('sms analysis');
+  const isTextAnalysis = isUrlAnalysis || isSmsAnalysis;
+
   const tabs: { id: SOCTab; label: string; icon: React.ReactNode }[] = [
     { id: 'tools', label: 'SOC Tools', icon: <Clipboard className="w-4 h-4" /> },
     { id: 'executive', label: 'Executive Summary', icon: <Building className="w-4 h-4" /> },
-    { id: 'timeline', label: 'Email Timeline', icon: <Clock className="w-4 h-4" /> },
+    { 
+      id: 'timeline', 
+      label: isTextAnalysis ? 'Analysis Flow' : 'Email Timeline', 
+      icon: <Clock className="w-4 h-4" /> 
+    },
     { id: 'threatintel', label: 'Threat Intel', icon: <Database className="w-4 h-4" /> },
   ];
 

@@ -13,8 +13,10 @@ from datetime import datetime
 from typing import List, Optional, Dict, Any
 from enum import Enum
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
+
+from app.api.dependencies import get_analysis_store
 
 logger = logging.getLogger(__name__)
 
@@ -1060,7 +1062,10 @@ async def run_url_sandbox(urls: List[str]) -> List[URLSandboxResult]:
 # ============================================================================
 
 @router.post("/text", response_model=TextAnalysisResponse)
-async def analyze_text(request: TextAnalysisRequest) -> TextAnalysisResponse:
+async def analyze_text(
+    request: TextAnalysisRequest,
+    analysis_store = Depends(get_analysis_store),
+) -> TextAnalysisResponse:
     """
     Analyze text message, SMS, or URLs for threats.
     
@@ -1152,7 +1157,7 @@ async def analyze_text(request: TextAnalysisRequest) -> TextAnalysisResponse:
     is_threat = classification != ScamCategory.LEGITIMATE and score >= 30
     confidence = min(0.95, score / 100 + 0.15) if is_threat else max(0.7, 1 - score / 100)
     
-    return TextAnalysisResponse(
+    response = TextAnalysisResponse(
         analysis_id=analysis_id,
         analyzed_at=datetime.utcnow().isoformat(),
         analysis_type=analysis_type,
@@ -1176,3 +1181,63 @@ async def analyze_text(request: TextAnalysisRequest) -> TextAnalysisResponse:
         recommendations=recommendations,
         mitre_techniques=mitre,
     )
+    
+    # Save to history as a pseudo-email analysis
+    if analysis_store:
+        try:
+            from app.models.analysis import AnalysisResult
+            from app.models.email import ParsedEmail, EmailAddress
+            
+            # Convert to AnalysisResult for storage compatibility
+            pseudo_result = AnalysisResult(
+                analysis_id=analysis_id,
+                analyzed_at=datetime.utcnow().isoformat(),
+                analysis_duration_ms=500,
+                email=ParsedEmail(
+                    message_id=f"text-{analysis_id}",
+                    subject=f"{'URL' if is_url_mode else 'SMS'} Analysis: {classification.value}",
+                    sender=EmailAddress(
+                        email=f"{'url' if is_url_mode else 'sms'}@analysis.local",
+                        display_name=f"{'URL Scanner' if is_url_mode else 'SMS Scanner'}",
+                        domain="analysis.local",
+                    ),
+                    recipients={"to": ["security@analysis.local"]},
+                    body_text=text[:500],
+                    urls=[{"url": u, "display_text": u} for u in urls],
+                    attachments=[],
+                ),
+                detection={
+                    "risk_score": score,
+                    "risk_level": level,
+                    "primary_classification": classification.value,
+                    "rules_triggered": [
+                        {
+                            "rule_id": p.pattern_id,
+                            "name": p.name,
+                            "description": p.description,
+                            "severity": p.severity,
+                            "category": "url_threat" if is_url_mode else "smishing",
+                        }
+                        for p in patterns
+                    ],
+                },
+                iocs={
+                    "domains": domains,
+                    "urls": urls,
+                    "ips": ips,
+                    "email_addresses": [],
+                },
+                ai_triage={
+                    "enabled": ai_result.enabled,
+                    "provider": ai_result.provider or "pattern-matching",
+                    "summary": ai_result.summary or "",
+                    "key_findings": ai_result.key_findings,
+                    "recommendations": recommendations,
+                },
+            )
+            await analysis_store.save(pseudo_result)
+            logger.info(f"Saved {analysis_type} analysis to history: {analysis_id}")
+        except Exception as e:
+            logger.warning(f"Failed to save to history: {e}")
+    
+    return response

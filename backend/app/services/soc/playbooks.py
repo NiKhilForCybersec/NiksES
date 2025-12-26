@@ -21,6 +21,9 @@ class PlaybookType(str, Enum):
     RANSOMWARE = "ransomware"
     INVOICE_FRAUD = "invoice_fraud"
     BRAND_IMPERSONATION = "brand_impersonation"
+    URL_THREAT = "url_threat"
+    SMS_SMISHING = "sms_smishing"
+    CLEAN = "clean"
     GENERIC = "generic"
 
 
@@ -134,6 +137,34 @@ class PlaybookGenerator:
             ResponsePlaybook with steps
         """
         classification_lower = classification.lower().replace(' ', '_')
+        risk_lower = risk_level.lower() if risk_level else 'medium'
+        
+        # Check for clean/legitimate results - return minimal playbook
+        clean_classifications = ['legitimate', 'clean', 'safe', 'benign', 'none', 'unknown']
+        if classification_lower in clean_classifications or risk_lower in ['low', 'minimal', 'none']:
+            # Check score if available
+            score = 0
+            if analysis_result:
+                detection = analysis_result.get('detection', {})
+                score = detection.get('risk_score', 0)
+                if isinstance(score, dict):
+                    score = score.get('overall_score', 0)
+            
+            # If clean or low score, return minimal playbook
+            if classification_lower in clean_classifications or score < 30:
+                return cls._clean_playbook(risk_lower, analysis_result)
+        
+        # URL/SMS specific classifications
+        url_sms_classifications = [
+            'phishing_url', 'malicious_url', 'suspicious_url', 'url_threat',
+            'smishing_financial', 'smishing_delivery', 'smishing_prize',
+            'smishing_government', 'smishing_tech_support', 'sms_smishing'
+        ]
+        if classification_lower in url_sms_classifications:
+            if 'smishing' in classification_lower or 'sms' in classification_lower:
+                return cls._sms_smishing_playbook(risk_lower, analysis_result)
+            else:
+                return cls._url_threat_playbook(risk_lower, analysis_result)
         
         playbook_map = {
             'phishing': cls._phishing_playbook,
@@ -148,7 +179,7 @@ class PlaybookGenerator:
         }
         
         generator = playbook_map.get(classification_lower, cls._generic_playbook)
-        playbook = generator(risk_level, analysis_result)
+        playbook = generator(risk_lower, analysis_result)
         
         return playbook
     
@@ -870,3 +901,228 @@ class PlaybookGenerator:
     ) -> ResponsePlaybook:
         """Generic response for unknown classifications."""
         return cls._phishing_playbook(risk_level, analysis_result)
+    
+    @classmethod
+    def _clean_playbook(
+        cls,
+        risk_level: str,
+        analysis_result: Optional[Dict[str, Any]],
+    ) -> ResponsePlaybook:
+        """Minimal playbook for clean/legitimate results."""
+        
+        steps = [
+            PlaybookStep(
+                id="clean-1",
+                title="Verify analysis results",
+                description="Review the analysis to confirm no threats were detected. Check for any edge cases or false negatives.",
+                category="verification",
+                priority=3,
+                responsible_team="SOC",
+                estimated_time_minutes=5,
+            ),
+            PlaybookStep(
+                id="clean-2",
+                title="Document and close",
+                description="Mark the analysis as reviewed. No further action required for clean results.",
+                category="documentation",
+                priority=3,
+                responsible_team="SOC",
+                estimated_time_minutes=2,
+            ),
+        ]
+        
+        return ResponsePlaybook(
+            playbook_type=PlaybookType.CLEAN,
+            title="Clean Result - No Action Required",
+            description="This analysis found no significant threats. Minimal verification steps only.",
+            severity="low",
+            steps=steps,
+            escalation_criteria=[],
+        )
+    
+    @classmethod
+    def _url_threat_playbook(
+        cls,
+        risk_level: str,
+        analysis_result: Optional[Dict[str, Any]],
+    ) -> ResponsePlaybook:
+        """Playbook for URL-based threats (phishing URLs, malicious links)."""
+        
+        # Determine step count based on risk level
+        is_high_risk = risk_level.lower() in ['high', 'critical']
+        
+        steps = [
+            # IMMEDIATE CONTAINMENT
+            PlaybookStep(
+                id="url-1",
+                title="Block malicious URL(s)",
+                description="Add URL(s) to proxy/firewall blocklist immediately. Include domain-level blocks if needed.",
+                category="containment",
+                priority=1,
+                automated=True,
+                automation_command="Add-URLBlocklist -URLs @('<url_list>')",
+                responsible_team="SOC",
+                estimated_time_minutes=5,
+            ),
+            PlaybookStep(
+                id="url-2",
+                title="Check for user access",
+                description="Search proxy/firewall logs for any users who accessed the malicious URL(s).",
+                category="containment",
+                priority=1,
+                responsible_team="SOC",
+                estimated_time_minutes=10,
+            ),
+        ]
+        
+        if is_high_risk:
+            steps.extend([
+                PlaybookStep(
+                    id="url-3",
+                    title="Notify affected users",
+                    description="If users clicked the link, notify them and security awareness team.",
+                    category="containment",
+                    priority=1,
+                    responsible_team="SOC",
+                    estimated_time_minutes=15,
+                ),
+                PlaybookStep(
+                    id="url-4",
+                    title="Check for credential submission",
+                    description="If phishing page, check if users submitted credentials. Reset passwords if necessary.",
+                    category="eradication",
+                    priority=1,
+                    responsible_team="SOC + Identity Team",
+                    estimated_time_minutes=20,
+                ),
+                PlaybookStep(
+                    id="url-5",
+                    title="Report to threat intel",
+                    description="Submit URL(s) to PhishTank, VirusTotal, and relevant threat feeds.",
+                    category="recovery",
+                    priority=2,
+                    responsible_team="SOC",
+                    estimated_time_minutes=10,
+                ),
+            ])
+        
+        # Final documentation step
+        steps.append(
+            PlaybookStep(
+                id="url-final",
+                title="Document and close",
+                description="Document all actions taken and close the incident.",
+                category="documentation",
+                priority=3,
+                responsible_team="SOC",
+                estimated_time_minutes=5,
+            )
+        )
+        
+        escalation = []
+        if is_high_risk:
+            escalation = [
+                EscalationCriteria(
+                    condition="More than 10 users accessed the URL",
+                    escalate_to="SOC Manager",
+                    timeframe_minutes=30,
+                ),
+                EscalationCriteria(
+                    condition="Credentials were submitted",
+                    escalate_to="Identity Team Lead + SOC Manager",
+                    timeframe_minutes=15,
+                ),
+            ]
+        
+        return ResponsePlaybook(
+            playbook_type=PlaybookType.URL_THREAT,
+            title="URL Threat Response",
+            description="Response for malicious/phishing URL detection",
+            severity=risk_level,
+            steps=steps,
+            escalation_criteria=escalation,
+        )
+    
+    @classmethod
+    def _sms_smishing_playbook(
+        cls,
+        risk_level: str,
+        analysis_result: Optional[Dict[str, Any]],
+    ) -> ResponsePlaybook:
+        """Playbook for SMS smishing attacks."""
+        
+        is_high_risk = risk_level.lower() in ['high', 'critical']
+        
+        steps = [
+            PlaybookStep(
+                id="sms-1",
+                title="Block sender number",
+                description="Block the sender phone number in mobile device management (MDM) if applicable.",
+                category="containment",
+                priority=1,
+                responsible_team="SOC",
+                estimated_time_minutes=5,
+            ),
+            PlaybookStep(
+                id="sms-2",
+                title="Block embedded URLs",
+                description="Add any URLs from the SMS to proxy/firewall blocklist.",
+                category="containment",
+                priority=1,
+                automated=True,
+                responsible_team="SOC",
+                estimated_time_minutes=5,
+            ),
+        ]
+        
+        if is_high_risk:
+            steps.extend([
+                PlaybookStep(
+                    id="sms-3",
+                    title="Alert affected users",
+                    description="Send security alert to users who may have received similar messages.",
+                    category="containment",
+                    priority=1,
+                    responsible_team="Security Awareness",
+                    estimated_time_minutes=15,
+                ),
+                PlaybookStep(
+                    id="sms-4",
+                    title="Check for corporate impact",
+                    description="Determine if corporate phones or accounts were targeted.",
+                    category="eradication",
+                    priority=2,
+                    responsible_team="SOC",
+                    estimated_time_minutes=20,
+                ),
+                PlaybookStep(
+                    id="sms-5",
+                    title="Report to carrier",
+                    description="Report the smishing number to mobile carrier abuse teams.",
+                    category="recovery",
+                    priority=3,
+                    responsible_team="SOC",
+                    estimated_time_minutes=10,
+                ),
+            ])
+        
+        steps.append(
+            PlaybookStep(
+                id="sms-final",
+                title="Document and close",
+                description="Document findings and close the case.",
+                category="documentation",
+                priority=3,
+                responsible_team="SOC",
+                estimated_time_minutes=5,
+            )
+        )
+        
+        return ResponsePlaybook(
+            playbook_type=PlaybookType.SMS_SMISHING,
+            title="SMS Smishing Response",
+            description="Response for SMS/text message phishing (smishing) attacks",
+            severity=risk_level,
+            steps=steps,
+            escalation_criteria=[],
+        )

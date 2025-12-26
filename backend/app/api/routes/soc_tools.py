@@ -272,6 +272,9 @@ async def get_playbook_types():
             {'id': 'ransomware', 'name': 'Ransomware', 'description': 'Ransomware response'},
             {'id': 'invoice_fraud', 'name': 'Invoice Fraud', 'description': 'Invoice/payment fraud'},
             {'id': 'brand_impersonation', 'name': 'Brand Impersonation', 'description': 'Brand spoofing'},
+            {'id': 'url_threat', 'name': 'URL Threat', 'description': 'Malicious URL response'},
+            {'id': 'sms_smishing', 'name': 'SMS Smishing', 'description': 'SMS phishing response'},
+            {'id': 'clean', 'name': 'Clean', 'description': 'No action required - clean result'},
         ]
     }
 

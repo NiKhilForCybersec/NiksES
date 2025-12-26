@@ -24,6 +24,9 @@ import {
   ChevronRight,
   BarChart3,
   PieChart,
+  Link,
+  MessageSquare,
+  Globe,
 } from 'lucide-react';
 import { apiClient } from '../../services/api';
 
@@ -92,6 +95,47 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewAnalysis, onClose }) => {
       return 'suspicious';
     }
     return 'clean';
+  };
+
+  // Helper to detect analysis type from subject/sender
+  const getAnalysisType = (analysis: AnalysisSummary): 'email' | 'url' | 'sms' => {
+    const subject = (analysis.subject || '').toLowerCase();
+    const sender = (analysis.sender_email || '').toLowerCase();
+    
+    if (subject.startsWith('url analysis') || sender.includes('url@analysis')) {
+      return 'url';
+    }
+    if (subject.startsWith('sms analysis') || sender.includes('sms@analysis')) {
+      return 'sms';
+    }
+    return 'email';
+  };
+
+  // Get icon for analysis type
+  const getAnalysisTypeIcon = (type: 'email' | 'url' | 'sms') => {
+    switch (type) {
+      case 'url': return <Link className="w-4 h-4" />;
+      case 'sms': return <MessageSquare className="w-4 h-4" />;
+      default: return <Mail className="w-4 h-4" />;
+    }
+  };
+
+  // Get label for analysis type
+  const getAnalysisTypeLabel = (type: 'email' | 'url' | 'sms') => {
+    switch (type) {
+      case 'url': return 'URL';
+      case 'sms': return 'SMS';
+      default: return 'Email';
+    }
+  };
+
+  // Get badge color for analysis type
+  const getAnalysisTypeBadge = (type: 'email' | 'url' | 'sms') => {
+    switch (type) {
+      case 'url': return 'bg-blue-100 text-blue-700 border-blue-200';
+      case 'sms': return 'bg-green-100 text-green-700 border-green-200';
+      default: return 'bg-gray-100 text-gray-700 border-gray-200';
+    }
   };
 
   useEffect(() => {
@@ -488,7 +532,17 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewAnalysis, onClose }) => {
 
                     {/* Main Content */}
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
+                        {/* Analysis Type Badge */}
+                        {(() => {
+                          const analysisType = getAnalysisType(analysis);
+                          return (
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium border ${getAnalysisTypeBadge(analysisType)}`}>
+                              {getAnalysisTypeIcon(analysisType)}
+                              {getAnalysisTypeLabel(analysisType)}
+                            </span>
+                          );
+                        })()}
                         <span
                           className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${getVerdictColor(
                             analysis.verdict || 'unknown'
@@ -509,15 +563,35 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewAnalysis, onClose }) => {
                       </div>
 
                       <h3 className="font-semibold text-gray-900 truncate mb-1">
-                        {analysis.subject || '(No Subject)'}
+                        {/* Clean up subject for URL/SMS analysis */}
+                        {(() => {
+                          const subject = analysis.subject || '(No Subject)';
+                          // Remove "URL Analysis: " or "SMS Analysis: " prefix for cleaner display
+                          if (subject.toLowerCase().startsWith('url analysis:')) {
+                            return subject.replace(/^url analysis:\s*/i, '🔗 ');
+                          }
+                          if (subject.toLowerCase().startsWith('sms analysis:')) {
+                            return subject.replace(/^sms analysis:\s*/i, '📱 ');
+                          }
+                          return subject;
+                        })()}
                       </h3>
 
                       <div className="flex items-center gap-4 text-sm text-gray-600">
                         <span className="flex items-center gap-1">
-                          <Mail className="w-4 h-4" />
-                          {analysis.sender || analysis.sender_email || 'Unknown'}
+                          {getAnalysisTypeIcon(getAnalysisType(analysis))}
+                          {(() => {
+                            const analysisType = getAnalysisType(analysis);
+                            if (analysisType === 'url') {
+                              return analysis.url_count ? `${analysis.url_count} URL(s) analyzed` : 'URL Analysis';
+                            }
+                            if (analysisType === 'sms') {
+                              return 'SMS/Message Analysis';
+                            }
+                            return analysis.sender || analysis.sender_email || 'Unknown';
+                          })()}
                         </span>
-                        {analysis.sender_domain && (
+                        {getAnalysisType(analysis) === 'email' && analysis.sender_domain && (
                           <>
                             <span className="text-gray-400">@</span>
                             <span className="text-gray-500">{analysis.sender_domain}</span>

@@ -1242,15 +1242,24 @@ function App() {
                   <h1 className="text-2xl font-bold text-white">
                     {textAnalysisResult.analysis_type === 'url' ? '🔗 URL Analysis' : '📱 SMS/Message Analysis'}
                   </h1>
-                  <button
-                    onClick={() => {
-                      setFullAnalysisOpen(false);
-                      setTextAnalysisResult(null);
-                    }}
-                    className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition"
-                  >
-                    ← Back to Dashboard
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => setSocToolsOpen(true)}
+                      className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition flex items-center gap-2"
+                    >
+                      <Shield className="w-4 h-4" />
+                      SOC Tools
+                    </button>
+                    <button
+                      onClick={() => {
+                        setFullAnalysisOpen(false);
+                        setTextAnalysisResult(null);
+                      }}
+                      className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition"
+                    >
+                      ← Back
+                    </button>
+                  </div>
                 </div>
                 <TextAnalysisResults 
                   result={textAnalysisResult}

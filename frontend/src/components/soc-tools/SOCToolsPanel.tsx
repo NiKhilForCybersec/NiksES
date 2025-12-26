@@ -29,6 +29,7 @@ import {
   Zap,
   Globe,
   Link2,
+  Eye,
 } from 'lucide-react';
 import { apiClient } from '../../services/api';
 
@@ -138,7 +139,7 @@ const SOCToolsPanel: React.FC<SOCToolsProps> = ({ analysisResult }) => {
       <div className="bg-gray-900 rounded-xl border border-gray-700 p-8 text-center">
         <Shield className="w-12 h-12 mx-auto mb-3 text-gray-600" />
         <h3 className="text-lg font-semibold text-gray-400">No Analysis Data</h3>
-        <p className="text-gray-500 text-sm mt-1">Run an email analysis to access SOC tools</p>
+        <p className="text-gray-500 text-sm mt-1">Run an email, URL, or SMS analysis to access SOC tools</p>
       </div>
     );
   }
@@ -741,6 +742,53 @@ const SOCToolsPanel: React.FC<SOCToolsProps> = ({ analysisResult }) => {
       );
     }
 
+    // Check if this is a clean/minimal result
+    const isCleanResult = playbook.playbook_type === 'clean' || playbook.severity === 'low';
+    
+    if (isCleanResult && playbook.steps.length <= 2) {
+      return (
+        <div className="space-y-4">
+          {/* Clean Result Banner */}
+          <div className="bg-green-900/30 border border-green-700 rounded-lg p-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-green-600 rounded-full flex items-center justify-center">
+                <Check className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-green-400">{playbook.title || 'No Action Required'}</h3>
+                <p className="text-sm text-gray-400">{playbook.description || 'This analysis found no significant threats.'}</p>
+              </div>
+            </div>
+          </div>
+          
+          {/* Minimal Steps */}
+          <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-700">
+            <h4 className="text-sm font-medium text-gray-400 mb-3">Optional Verification Steps</h4>
+            {playbook.steps.map((step: any) => (
+              <div key={step.id} className="flex items-start gap-3 py-2">
+                <button
+                  onClick={() => toggleStepComplete(step.id)}
+                  className={`mt-0.5 w-5 h-5 rounded border flex items-center justify-center flex-shrink-0 ${
+                    completedSteps.has(step.id) 
+                      ? 'bg-green-600 border-green-600 text-white' 
+                      : 'border-gray-600 hover:border-green-500'
+                  }`}
+                >
+                  {completedSteps.has(step.id) && <Check className="w-3 h-3" />}
+                </button>
+                <div>
+                  <span className={`text-gray-300 ${completedSteps.has(step.id) ? 'line-through text-gray-500' : ''}`}>
+                    {step.title}
+                  </span>
+                  <p className="text-xs text-gray-500">{step.description}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
     // Group steps by category
     const stepsByCategory: Record<string, any[]> = {};
     playbook.steps.forEach((step: any) => {
@@ -759,6 +807,8 @@ const SOCToolsPanel: React.FC<SOCToolsProps> = ({ analysisResult }) => {
       eradication: { bg: 'bg-orange-900/30', text: 'text-orange-400', icon: <Zap className="w-4 h-4" /> },
       recovery: { bg: 'bg-green-900/30', text: 'text-green-400', icon: <Check className="w-4 h-4" /> },
       lessons_learned: { bg: 'bg-purple-900/30', text: 'text-purple-400', icon: <FileText className="w-4 h-4" /> },
+      verification: { bg: 'bg-gray-800/50', text: 'text-gray-400', icon: <Eye className="w-4 h-4" /> },
+      documentation: { bg: 'bg-gray-800/50', text: 'text-gray-400', icon: <FileText className="w-4 h-4" /> },
     };
 
     return (
