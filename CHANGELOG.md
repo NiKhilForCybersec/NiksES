@@ -1,61 +1,105 @@
-# NiksES v3.3.6 - History View Fix v2
+# NiksES v3.4.1 - Null Safety Fix + Comprehensive Scoring
 
-## 🐛 Fixed: History View Now Correctly Shows URL/SMS Analysis
+## 🐛 Fixed: TypeError on History View
 
-### The Problem
-Clicking "View Analysis" on URL or SMS analysis from history was still 
-showing the Email Analysis view instead of URL/SMS view.
+**Error:** `Cannot read properties of undefined (reading 'toLowerCase')`
 
-### Root Cause
-The detection logic only checked `email.sender.email` field, but this 
-wasn't being matched correctly in all cases.
+This crashed the app when clicking "View Analysis" on URL/SMS analyses from history.
 
-### The Fix
-Added multiple detection methods:
+### Files Fixed (Null Safety)
 
-1. **Sender Email Check**: `url@analysis.local` or `sms@analysis.local`
-2. **Subject Prefix Check**: `URL Analysis:` or `SMS Analysis:`
-3. **Subject Contains Check**: Fallback check for "URL Analysis" or "SMS Analysis"
+1. **TextAnalysisResults.tsx**
+   - `getRiskColor()` - handles undefined level
+   - `getSeverityColor()` - handles undefined severity  
+   - `getSourceIcon()` - handles undefined source
 
-### Detection Logic
-```javascript
-const isUrlAnalysis = senderEmail === 'url@analysis.local' || 
-                      subject.startsWith('URL Analysis:') ||
-                      subject.includes('URL Analysis');
+2. **AnalysisView.tsx**
+   - `getVerdictColor()` - handles undefined verdict
+   - `getVerdictBgColor()` - handles undefined verdict
+   - `getSeverityColor()` - handles undefined severity
+   - `getAuthStatusIcon()` - handles undefined result
 
-const isSmsAnalysis = senderEmail === 'sms@analysis.local' || 
-                      subject.startsWith('SMS Analysis:') ||
-                      subject.includes('SMS Analysis');
+3. **ScoringBreakdown.tsx**
+   - `getLevelConfig()` - handles undefined level
+   - `getCategoryIcon()` - handles undefined category
+
+4. **AdvancedAnalysisView.tsx**
+   - API status display - handles undefined status
+
+### Pattern Applied
+```typescript
+// BEFORE (crashes on undefined):
+switch (level.toLowerCase()) { ... }
+
+// AFTER (safe):
+switch ((level || '').toLowerCase()) { ... }
 ```
 
-### Console Logging
-Added debug logging to help troubleshoot:
+---
+
+## 🎯 v3.4.0 Features (Included)
+
+### Comprehensive Scoring System
+
+**10 Combination Bonuses:**
+- Auth FAIL + content indicator → +15
+- Brand ≥70 + credential request → +20
+- URL shortener + brand mention → +15
+- 3+ SE techniques → +15
+- TI flagged + content indicator → +20
+- BEC pattern (full) → +25
+- And more...
+
+**12 Minimum Floors:**
+- TI confirmed malicious → Floor 80
+- Brand ≥85 + Content ≥80 → Floor 75
+- Auth FAIL + high indicator → Floor 75
+- BEC pattern detected → Floor 70
+- And more...
+
+**Enhanced Header Analysis:**
+- Free email provider detection
+- Display name spoofing detection
+- Executive impersonation detection
+- Reply-to mismatch detection
+
+**New Attack Chains:**
+- brand_credential_phishing
+- social_engineering_attack
+
+---
+
+## 📊 Expected Results
+
+### Test Phishing Email (Microsoft impersonation)
 ```
-[History View] Analysis type detection: {
-  analysisId: "abc123",
-  senderEmail: "url@analysis.local",
-  subject: "URL Analysis: malicious_url",
-  isUrlAnalysis: true,
-  isSmsAnalysis: false
-}
+BEFORE v3.4.x:
+  Overall: 23 (MEDIUM) ❌
+
+AFTER v3.4.x:
+  Overall: 75-90 (CRITICAL) ✅
 ```
 
-### Behavior
-- **URL/SMS Analysis** → Opens `TextAnalysisResults` component
-- **Email Analysis** → Opens `AdvancedAnalysisView` component
+---
 
 ## 📁 Files Changed
-- `frontend/src/App.tsx` - Improved detection with fallbacks + logging
-- `frontend/src/components/history/HistoryPanel.tsx` - Consistent type detection
 
-## 📦 v3.3.x Release Summary
+### Frontend (Null Safety)
+- `src/components/analysis/TextAnalysisResults.tsx`
+- `src/components/analysis/AnalysisView.tsx`
+- `src/components/analysis/AdvancedAnalysisView.tsx`
+- `src/components/detection-viz/ScoringBreakdown.tsx`
+
+### Backend (Scoring Engine)
+- `app/services/detection/dynamic_scorer.py`
+- `app/services/detection/evidence.py`
+
+---
+
+## 📦 Version History
 
 | Version | Feature |
 |---------|---------|
-| v3.3.0 | Dynamic TI thresholds |
-| v3.3.1 | URL parsing fix |
-| v3.3.2 | Smart URL filtering |
-| v3.3.3 | 700+ detection rules |
-| v3.3.4 | Quota warning modal |
-| v3.3.5 | History view type fix v1 |
-| **v3.3.6** | **History view type fix v2** |
+| v3.3.x | URL filtering, history fix, quota modal |
+| v3.4.0 | Comprehensive scoring engine |
+| **v3.4.1** | **Null safety fix for history view** |

@@ -653,31 +653,63 @@ class EvidenceCollector:
     
     def add_from_lookalike_analysis(self, lookalike_results: Dict[str, Any]):
         """Convert lookalike domain analysis to evidence."""
-        if not lookalike_results.get("is_lookalike"):
-            return
         
-        for match in lookalike_results.get("matches", []):
-            domain = match.get("domain", "")
-            target = match.get("target_brand", match.get("brand", ""))
-            confidence = match.get("confidence", 0.5)
-            methods = match.get("detection_methods", [])
+        # Check for direct matches
+        if lookalike_results.get("is_lookalike"):
+            for match in lookalike_results.get("matches", []):
+                domain = match.get("domain", "")
+                target = match.get("target_brand", match.get("brand", ""))
+                confidence = match.get("confidence", 0.5)
+                methods = match.get("detection_methods", [])
+                
+                # Determine specific evidence type
+                if "homoglyph" in str(methods).lower():
+                    evidence_type = EvidenceType.HOMOGLYPH_DETECTED
+                else:
+                    evidence_type = EvidenceType.LOOKALIKE_DOMAIN
+                
+                self.add_evidence(
+                    evidence_type=evidence_type,
+                    category=EvidenceCategory.BRAND_IMPERSONATION,
+                    source=EvidenceSource.LOOKALIKE_DETECTOR,
+                    description=f"Lookalike domain '{domain}' impersonating {target}",
+                    raw_value=domain,
+                    matched_text=domain,
+                    external_validation=confidence,
+                    metadata=match,
+                )
+        
+        # Also check for high brand impersonation score without is_lookalike
+        # This handles cases where the analysis detects brand abuse in URLs
+        brand_score = lookalike_results.get("score", 0)
+        if brand_score >= 70:
+            brand_name = lookalike_results.get("brand", lookalike_results.get("impersonating", ""))
+            domain = lookalike_results.get("real_domain", lookalike_results.get("domain", ""))
             
-            # Determine specific evidence type
-            if "homoglyph" in str(methods).lower():
-                evidence_type = EvidenceType.HOMOGLYPH_DETECTED
-            else:
-                evidence_type = EvidenceType.LOOKALIKE_DOMAIN
+            # Add brand impersonation evidence if we have a brand
+            if brand_name and not lookalike_results.get("is_lookalike"):
+                self.add_evidence(
+                    evidence_type=EvidenceType.BRAND_IN_URL,
+                    category=EvidenceCategory.BRAND_IMPERSONATION,
+                    source=EvidenceSource.LOOKALIKE_DETECTOR,
+                    description=f"Brand impersonation detected: {brand_name} (score: {brand_score})",
+                    raw_value=brand_name,
+                    matched_text=domain,
+                    external_validation=brand_score / 100,
+                    metadata=lookalike_results,
+                )
             
-            self.add_evidence(
-                evidence_type=evidence_type,
-                category=EvidenceCategory.BRAND_IMPERSONATION,
-                source=EvidenceSource.LOOKALIKE_DETECTOR,
-                description=f"Lookalike domain '{domain}' impersonating {target}",
-                raw_value=domain,
-                matched_text=domain,
-                external_validation=confidence,
-                metadata=match,
-            )
+            # If very high score, also add as lookalike domain
+            if brand_score >= 85:
+                self.add_evidence(
+                    evidence_type=EvidenceType.LOOKALIKE_DOMAIN,
+                    category=EvidenceCategory.BRAND_IMPERSONATION,
+                    source=EvidenceSource.LOOKALIKE_DETECTOR,
+                    description=f"High-confidence brand impersonation: {brand_name}",
+                    raw_value=domain,
+                    external_validation=brand_score / 100,
+                    metadata=lookalike_results,
+                )
     
     def add_from_content_analysis(self, content_analysis: Dict[str, Any]):
         """Convert content analysis to evidence."""
@@ -686,10 +718,13 @@ class EvidenceCollector:
         # Map intent to evidence type
         intent_mapping = {
             "credential_harvest": EvidenceType.CREDENTIAL_REQUEST,
+            "credential_theft": EvidenceType.CREDENTIAL_REQUEST,  # Same as harvest
             "payment_fraud": EvidenceType.PAYMENT_REQUEST,
             "wire_fraud": EvidenceType.WIRE_TRANSFER_REQUEST,
             "malware_delivery": EvidenceType.SUSPICIOUS_ATTACHMENT,
             "account_takeover": EvidenceType.CREDENTIAL_REQUEST,
+            "data_theft": EvidenceType.SENSITIVE_DATA_REQUEST,
+            "phishing": EvidenceType.CREDENTIAL_REQUEST,
         }
         
         if intent in intent_mapping:
@@ -714,10 +749,12 @@ class EvidenceCollector:
     
     def add_from_header_analysis(self, header_analysis: Dict[str, Any]):
         """Convert header analysis to evidence."""
+        auth_failures = []
+        
         # Authentication results
         for auth_type in ["spf_result", "dkim_result", "dmarc_result"]:
             result = header_analysis.get(auth_type)
-            if result and result.lower() not in ["pass", "none"]:
+            if result and result.lower() not in ["pass", "none", ""]:
                 evidence_type = {
                     "spf_result": EvidenceType.SPF_FAIL,
                     "dkim_result": EvidenceType.DKIM_FAIL,
@@ -730,6 +767,79 @@ class EvidenceCollector:
                     source=getattr(EvidenceSource, auth_type.upper().replace("_RESULT", "_CHECK"), EvidenceSource.HEADER_ANALYSIS),
                     description=f"{auth_type.replace('_result', '').upper()} failed: {result}",
                     raw_value=result,
+                )
+                auth_failures.append(auth_type.replace('_result', '').upper())
+        
+        # Add general AUTH_FAILURE if any auth failed (for easier detection)
+        if auth_failures:
+            self.add_evidence(
+                evidence_type=EvidenceType.AUTH_FAILURE,
+                category=EvidenceCategory.TECHNICAL,
+                source=EvidenceSource.HEADER_ANALYSIS,
+                description=f"Email authentication failed: {', '.join(auth_failures)}",
+                raw_value=auth_failures,
+                metadata={"failed_checks": auth_failures},
+            )
+        
+        # Check for free email provider in sender
+        sender_domain = header_analysis.get("sender_domain", "").lower()
+        free_email_providers = {
+            "gmail.com", "yahoo.com", "hotmail.com", "outlook.com", "live.com",
+            "aol.com", "mail.com", "protonmail.com", "proton.me", "ymail.com",
+            "icloud.com", "me.com", "gmx.com", "zoho.com", "yandex.com",
+            "mail.ru", "inbox.com", "fastmail.com"
+        }
+        if sender_domain in free_email_providers:
+            self.add_evidence(
+                evidence_type=EvidenceType.FREE_EMAIL_PROVIDER,
+                category=EvidenceCategory.BEHAVIORAL,
+                source=EvidenceSource.HEADER_ANALYSIS,
+                description=f"Sender using free email provider: {sender_domain}",
+                raw_value=sender_domain,
+            )
+        
+        # Check for display name / email mismatch (potential spoofing)
+        display_name = header_analysis.get("display_name", "").lower()
+        sender_email = header_analysis.get("sender_email", "").lower()
+        if display_name and sender_email:
+            # Check if display name looks like an email but doesn't match sender
+            if "@" in display_name and display_name != sender_email:
+                self.add_evidence(
+                    evidence_type=EvidenceType.DISPLAY_NAME_SPOOF,
+                    category=EvidenceCategory.SOCIAL_ENGINEERING,
+                    source=EvidenceSource.HEADER_ANALYSIS,
+                    description=f"Display name contains different email: {display_name}",
+                    raw_value=display_name,
+                    matched_text=display_name,
+                )
+            
+            # Check if display name contains executive titles
+            executive_keywords = ["ceo", "cfo", "cto", "coo", "president", "director", 
+                                 "executive", "chief", "vp ", "vice president", "manager"]
+            if any(kw in display_name for kw in executive_keywords):
+                self.add_evidence(
+                    evidence_type=EvidenceType.EXECUTIVE_IMPERSONATION,
+                    category=EvidenceCategory.BEHAVIORAL,
+                    source=EvidenceSource.HEADER_ANALYSIS,
+                    description=f"Display name contains executive title: {display_name}",
+                    raw_value=display_name,
+                    matched_text=display_name,
+                )
+        
+        # Check reply-to mismatch
+        reply_to = header_analysis.get("reply_to", "").lower()
+        if reply_to and sender_email and reply_to != sender_email:
+            # Different reply-to is suspicious
+            reply_to_domain = reply_to.split("@")[-1] if "@" in reply_to else ""
+            sender_domain_from_email = sender_email.split("@")[-1] if "@" in sender_email else ""
+            
+            if reply_to_domain != sender_domain_from_email:
+                self.add_evidence(
+                    evidence_type=EvidenceType.REPLY_TO_MISMATCH,
+                    category=EvidenceCategory.BEHAVIORAL,
+                    source=EvidenceSource.HEADER_ANALYSIS,
+                    description=f"Reply-to domain differs from sender: {reply_to} vs {sender_email}",
+                    raw_value=reply_to,
                 )
         
         # Header anomalies

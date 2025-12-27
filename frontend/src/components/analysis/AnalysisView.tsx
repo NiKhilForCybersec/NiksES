@@ -171,8 +171,8 @@ const AnalysisView: React.FC<AnalysisViewProps> = ({ analysis, onClose, onExport
     setTimeout(() => setCopiedText(null), 2000);
   };
 
-  const getVerdictColor = (verdict: string) => {
-    switch (verdict.toLowerCase()) {
+  const getVerdictColor = (verdict: string | undefined | null) => {
+    switch ((verdict || '').toLowerCase()) {
       case 'malicious':
         return 'bg-red-500';
       case 'suspicious':
@@ -184,8 +184,8 @@ const AnalysisView: React.FC<AnalysisViewProps> = ({ analysis, onClose, onExport
     }
   };
 
-  const getVerdictBgColor = (verdict: string) => {
-    switch (verdict.toLowerCase()) {
+  const getVerdictBgColor = (verdict: string | undefined | null) => {
+    switch ((verdict || '').toLowerCase()) {
       case 'malicious':
         return 'bg-red-50 border-red-200';
       case 'suspicious':
@@ -197,8 +197,8 @@ const AnalysisView: React.FC<AnalysisViewProps> = ({ analysis, onClose, onExport
     }
   };
 
-  const getSeverityColor = (severity: string) => {
-    switch (severity.toLowerCase()) {
+  const getSeverityColor = (severity: string | undefined | null) => {
+    switch ((severity || '').toLowerCase()) {
       case 'critical':
         return 'bg-red-100 text-red-800 border-red-200';
       case 'high':
@@ -212,8 +212,8 @@ const AnalysisView: React.FC<AnalysisViewProps> = ({ analysis, onClose, onExport
     }
   };
 
-  const getAuthStatusIcon = (result: string) => {
-    switch (result.toLowerCase()) {
+  const getAuthStatusIcon = (result: string | undefined | null) => {
+    switch ((result || '').toLowerCase()) {
       case 'pass':
         return <CheckCircle className="w-5 h-5 text-green-500" />;
       case 'fail':

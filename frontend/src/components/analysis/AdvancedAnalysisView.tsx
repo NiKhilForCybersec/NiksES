@@ -2644,8 +2644,8 @@ const AdvancedAnalysisView: React.FC<AdvancedAnalysisViewProps> = ({ result, onE
                       <div key={source} className="bg-gray-900 rounded p-2 flex items-center justify-between">
                         <span className="text-sm text-gray-400">{source}</span>
                         <span className={`text-xs px-2 py-0.5 rounded ${
-                          status.toLowerCase().includes('ok') ? 'bg-green-900/50 text-green-400' :
-                          status.toLowerCase().includes('limit') ? 'bg-yellow-900/50 text-yellow-400' :
+                          String(status || '').toLowerCase().includes('ok') ? 'bg-green-900/50 text-green-400' :
+                          String(status || '').toLowerCase().includes('limit') ? 'bg-yellow-900/50 text-yellow-400' :
                           'bg-red-900/50 text-red-400'
                         }`}>
                           {status}

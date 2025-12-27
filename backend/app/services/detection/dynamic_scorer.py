@@ -180,6 +180,23 @@ class AttackChainDetector:
             "ti_boost": {EvidenceType.URL_FLAGGED_PHISHING, EvidenceType.DOMAIN_FLAGGED},
             "mitre": ["T1566.002", "T1598.003"],
         },
+        "brand_credential_phishing": {
+            "description": "Brand impersonation with credential theft attempt",
+            "required": {EvidenceType.CREDENTIAL_REQUEST},  # Just need credential request
+            "strong_required": {EvidenceType.LOOKALIKE_DOMAIN, EvidenceType.BRAND_IN_URL},
+            "supporting": {
+                EvidenceType.URGENCY_LANGUAGE,
+                EvidenceType.FEAR_LANGUAGE,
+                EvidenceType.AUTHORITY_CLAIM,
+                EvidenceType.EXTERNAL_LINK,
+                EvidenceType.SHORTENED_URL,
+                EvidenceType.BRAND_KEYWORD_MISMATCH,
+                EvidenceType.SENSITIVE_DATA_REQUEST,
+                EvidenceType.EMOTIONAL_MANIPULATION,
+            },
+            "ti_boost": {EvidenceType.URL_FLAGGED_PHISHING, EvidenceType.DOMAIN_FLAGGED, EvidenceType.URL_FLAGGED_MALICIOUS},
+            "mitre": ["T1566.002", "T1656", "T1598.003"],
+        },
         "bec_wire_fraud": {
             "description": "Business Email Compromise wire transfer fraud",
             "required": {EvidenceType.WIRE_TRANSFER_REQUEST},
@@ -211,16 +228,33 @@ class AttackChainDetector:
         "brand_impersonation": {
             "description": "Brand impersonation phishing attack",
             "required": {EvidenceType.BRAND_KEYWORD_MISMATCH},
-            "strong_required": {EvidenceType.LOOKALIKE_DOMAIN, EvidenceType.DISPLAY_NAME_SPOOF},
+            "strong_required": {EvidenceType.LOOKALIKE_DOMAIN, EvidenceType.DISPLAY_NAME_SPOOF, EvidenceType.BRAND_IN_URL},
             "supporting": {
                 EvidenceType.HOMOGLYPH_DETECTED,
                 EvidenceType.EXTERNAL_LINK,
                 EvidenceType.AUTH_FAILURE,
                 EvidenceType.CREDENTIAL_REQUEST,
                 EvidenceType.LOGO_PRESENT,
+                EvidenceType.URGENCY_LANGUAGE,
+                EvidenceType.FEAR_LANGUAGE,
             },
             "ti_boost": {EvidenceType.URL_FLAGGED_PHISHING, EvidenceType.DOMAIN_FLAGGED},
             "mitre": ["T1656", "T1583.001"],
+        },
+        "social_engineering_attack": {
+            "description": "Social engineering attack with urgency/fear tactics",
+            "required": {EvidenceType.URGENCY_LANGUAGE},
+            "strong_required": {EvidenceType.FEAR_LANGUAGE, EvidenceType.AUTHORITY_CLAIM},
+            "supporting": {
+                EvidenceType.CREDENTIAL_REQUEST,
+                EvidenceType.EXTERNAL_LINK,
+                EvidenceType.SENSITIVE_DATA_REQUEST,
+                EvidenceType.EMOTIONAL_MANIPULATION,
+                EvidenceType.BRAND_IN_URL,
+                EvidenceType.LOOKALIKE_DOMAIN,
+            },
+            "ti_boost": {EvidenceType.URL_FLAGGED_PHISHING, EvidenceType.DOMAIN_FLAGGED},
+            "mitre": ["T1566.002", "T1598"],
         },
         "callback_phishing": {
             "description": "Callback phishing / vishing setup",
@@ -756,30 +790,40 @@ class DynamicScoreCalculator:
             correlation_bonus
         )
         
-        # 9. CALCULATE CONFIDENCE
+        # 9. APPLY COMPREHENSIVE SCORING ADJUSTMENTS
+        # This handles floors, combination bonuses, auth failure boosts, etc.
+        final_value = self._apply_comprehensive_scoring(
+            calculated_score=final_value,
+            dimension_scores=dimension_scores,
+            ti_score=ti_score,
+            evidence_list=evidence_list,
+            attack_chains=attack_chains,
+        )
+        
+        # 10. CALCULATE CONFIDENCE
         confidence = self._calculate_confidence(
             evidence_list, ti_score, attack_chains, ai_analysis
         )
         
-        # 10. DETERMINE LEVEL DYNAMICALLY
+        # 11. DETERMINE LEVEL DYNAMICALLY
         level = self._calculate_level(final_value, confidence)
         
-        # 11. DETERMINE CLASSIFICATION
+        # 12. DETERMINE CLASSIFICATION
         classification = self._determine_classification(attack_chains, evidence_list)
         
-        # 12. GENERATE VERDICT AND EXPLANATION
+        # 13. GENERATE VERDICT AND EXPLANATION
         verdict = self._generate_verdict(final_value, level, confidence)
         explanation = self._generate_explanation(
             evidence_list, ti_score, attack_chains, breakdown
         )
         
-        # 13. RECOMMENDED ACTION
+        # 14. RECOMMENDED ACTION
         recommended_action = self._generate_action(level, attack_chains, confidence)
         
-        # 14. EXTRACT MITRE
+        # 15. EXTRACT MITRE
         mitre = self._extract_mitre(attack_chains, evidence_list)
         
-        # 15. TOP EVIDENCE
+        # 16. TOP EVIDENCE
         sorted_evidence = sorted(evidence_list, key=lambda e: e.quality_score, reverse=True)
         result.top_evidence = sorted_evidence[:10]
         
@@ -795,6 +839,303 @@ class DynamicScoreCalculator:
         result.mitre_techniques = mitre
         
         return result
+    
+    def _apply_comprehensive_scoring(
+        self,
+        calculated_score: float,
+        dimension_scores: Dict[str, "DimensionScore"],
+        ti_score: "TIScore",
+        evidence_list: List[Evidence],
+        attack_chains: List[AttackChain],
+    ) -> float:
+        """
+        Apply comprehensive scoring adjustments based on all available signals.
+        
+        This method handles:
+        1. Minimum floors based on high-severity indicators
+        2. Auth failure boosts when combined with other indicators
+        3. Combination bonuses for high-risk patterns
+        4. BEC pattern detection
+        5. SE technique escalation
+        6. TI-Content correlation bonuses
+        7. Critical indicator detection
+        
+        The goal is to catch TRUE POSITIVES while minimizing FALSE POSITIVES.
+        """
+        score = calculated_score
+        bonuses_applied = []
+        floor_applied = None
+        
+        # =====================================================================
+        # STEP 1: Extract all relevant signals
+        # =====================================================================
+        
+        # Get dimension scores
+        dim_values = {}
+        for dim_name, dim_data in dimension_scores.items():
+            dim_values[dim_name] = dim_data.score
+        
+        brand_score = dim_values.get("brand_impersonation", 0)
+        se_score = dim_values.get("social_engineering", 0)
+        content_score = dim_values.get("content", 0)
+        ti_dim_score = dim_values.get("threat_intel", ti_score.value if ti_score else 0)
+        technical_score = dim_values.get("technical", 0)
+        
+        all_dim_scores = list(dim_values.values())
+        
+        # Extract evidence types present
+        evidence_types = {e.evidence_type for e in evidence_list}
+        
+        # Check for authentication failures
+        auth_failed = any(et in evidence_types for et in [
+            EvidenceType.SPF_FAIL,
+            EvidenceType.DKIM_FAIL,
+            EvidenceType.DMARC_FAIL,
+            EvidenceType.AUTH_FAILURE,
+        ])
+        
+        # Check for specific high-risk evidence
+        has_credential_request = EvidenceType.CREDENTIAL_REQUEST in evidence_types
+        has_credential_form = EvidenceType.CREDENTIAL_FORM in evidence_types
+        has_external_link = EvidenceType.EXTERNAL_LINK in evidence_types
+        has_shortened_url = EvidenceType.SHORTENED_URL in evidence_types
+        has_lookalike_domain = EvidenceType.LOOKALIKE_DOMAIN in evidence_types
+        has_brand_in_url = EvidenceType.BRAND_IN_URL in evidence_types
+        has_urgency = EvidenceType.URGENCY_LANGUAGE in evidence_types
+        has_fear = EvidenceType.FEAR_LANGUAGE in evidence_types
+        has_authority = EvidenceType.AUTHORITY_CLAIM in evidence_types
+        has_executive_impersonation = EvidenceType.EXECUTIVE_IMPERSONATION in evidence_types
+        has_wire_transfer = EvidenceType.WIRE_TRANSFER_REQUEST in evidence_types
+        has_payment_request = EvidenceType.PAYMENT_REQUEST in evidence_types
+        has_free_email = EvidenceType.FREE_EMAIL_PROVIDER in evidence_types
+        has_suspicious_attachment = EvidenceType.SUSPICIOUS_ATTACHMENT in evidence_types
+        has_executable = EvidenceType.EXECUTABLE_ATTACHMENT in evidence_types
+        has_macro = EvidenceType.MACRO_ENABLED in evidence_types
+        
+        # Check for TI flags
+        has_url_flagged_phishing = EvidenceType.URL_FLAGGED_PHISHING in evidence_types
+        has_url_flagged_malicious = EvidenceType.URL_FLAGGED_MALICIOUS in evidence_types
+        has_domain_flagged = EvidenceType.DOMAIN_FLAGGED in evidence_types
+        has_hash_flagged = EvidenceType.HASH_FLAGGED in evidence_types
+        has_ip_flagged = EvidenceType.IP_FLAGGED in evidence_types
+        
+        ti_flagged = has_url_flagged_phishing or has_url_flagged_malicious or has_domain_flagged or has_hash_flagged
+        
+        # Count SE techniques
+        se_techniques = sum([has_urgency, has_fear, has_authority])
+        
+        # Check attack chains detected
+        has_attack_chain = len(attack_chains) > 0
+        best_chain_confidence = max((c.confidence for c in attack_chains), default=0)
+        
+        # =====================================================================
+        # STEP 2: Apply combination bonuses (additive to score)
+        # =====================================================================
+        
+        # Bonus 1: Auth failure + any content indicator
+        if auth_failed and (has_credential_request or has_external_link or brand_score >= 50):
+            bonus = 15
+            score += bonus
+            bonuses_applied.append(f"auth_fail_combo:+{bonus}")
+        
+        # Bonus 2: Brand impersonation + credential request (classic phishing)
+        if brand_score >= 70 and has_credential_request:
+            bonus = 20
+            score += bonus
+            bonuses_applied.append(f"brand_credential:+{bonus}")
+        
+        # Bonus 3: URL shortener + brand mention (hiding malicious URL)
+        if has_shortened_url and (brand_score >= 50 or has_brand_in_url):
+            bonus = 15
+            score += bonus
+            bonuses_applied.append(f"shortener_brand:+{bonus}")
+        
+        # Bonus 4: Multiple SE techniques (escalation)
+        if se_techniques >= 3:
+            bonus = 15
+            score += bonus
+            bonuses_applied.append(f"se_escalation_3:+{bonus}")
+        elif se_techniques >= 2:
+            bonus = 8
+            score += bonus
+            bonuses_applied.append(f"se_escalation_2:+{bonus}")
+        
+        # Bonus 5: TI confirms content analysis (strong agreement)
+        if ti_flagged and (content_score >= 60 or has_credential_request):
+            bonus = 20
+            score += bonus
+            bonuses_applied.append(f"ti_content_agree:+{bonus}")
+        
+        # Bonus 6: TI confirms brand impersonation
+        if ti_flagged and brand_score >= 70:
+            bonus = 15
+            score += bonus
+            bonuses_applied.append(f"ti_brand_agree:+{bonus}")
+        
+        # Bonus 7: BEC pattern (executive + wire/payment + free email or auth issue)
+        if has_executive_impersonation and (has_wire_transfer or has_payment_request):
+            if has_free_email or auth_failed:
+                bonus = 25
+                score += bonus
+                bonuses_applied.append(f"bec_pattern:+{bonus}")
+            else:
+                bonus = 15
+                score += bonus
+                bonuses_applied.append(f"bec_pattern_partial:+{bonus}")
+        
+        # Bonus 8: Malware delivery pattern
+        if has_suspicious_attachment or has_executable or has_macro:
+            if has_hash_flagged:
+                bonus = 30
+                score += bonus
+                bonuses_applied.append(f"malware_ti_confirm:+{bonus}")
+            elif has_urgency or has_fear:
+                bonus = 15
+                score += bonus
+                bonuses_applied.append(f"malware_se:+{bonus}")
+        
+        # Bonus 9: Lookalike domain + credential request
+        if has_lookalike_domain and has_credential_request:
+            bonus = 20
+            score += bonus
+            bonuses_applied.append(f"lookalike_cred:+{bonus}")
+        
+        # Bonus 10: High-confidence attack chain detected
+        if best_chain_confidence >= 0.7:
+            bonus = 15
+            score += bonus
+            bonuses_applied.append(f"strong_chain:+{bonus}")
+        elif best_chain_confidence >= 0.5:
+            bonus = 8
+            score += bonus
+            bonuses_applied.append(f"medium_chain:+{bonus}")
+        
+        # =====================================================================
+        # STEP 3: Apply minimum floors (ensures score doesn't go below threshold)
+        # =====================================================================
+        
+        floor = 0
+        floor_reason = ""
+        
+        # Critical indicators (alone warrant high score)
+        # Floor 80: Confirmed malware or phishing by TI
+        if has_hash_flagged or (has_url_flagged_malicious and ti_score and ti_score.value >= 80):
+            floor = max(floor, 80)
+            floor_reason = "ti_confirmed_malicious"
+        
+        # Floor 75: Brand phishing with credential theft
+        if brand_score >= 85 and content_score >= 80:
+            floor = max(floor, 75)
+            floor_reason = "brand_credential_critical"
+        
+        # Floor 75: Auth fail + high content/brand
+        if auth_failed and (brand_score >= 75 or content_score >= 75):
+            floor = max(floor, 75)
+            floor_reason = "auth_fail_high_indicator"
+        
+        # Floor 70: BEC pattern detected
+        if has_executive_impersonation and (has_wire_transfer or has_payment_request):
+            floor = max(floor, 70)
+            floor_reason = "bec_detected"
+        
+        # Floor 70: Multiple high indicators
+        if se_score >= 60 and brand_score >= 80 and (content_score >= 70 or ti_dim_score >= 70):
+            floor = max(floor, 70)
+            floor_reason = "multi_high_indicators"
+        
+        # Floor 65: Brand + any high indicator
+        if brand_score >= 80:
+            other_high = any(s >= 70 for name, s in dim_values.items() 
+                           if name != "brand_impersonation")
+            if other_high:
+                floor = max(floor, 65)
+                floor_reason = "brand_plus_high"
+        
+        # Floor 65: TI flagged + credential request
+        if ti_flagged and has_credential_request:
+            floor = max(floor, 65)
+            floor_reason = "ti_credential"
+        
+        # Floor 60: Three dimensions >= 60
+        medium_dims = sum(1 for s in all_dim_scores if s >= 60)
+        if medium_dims >= 3:
+            floor = max(floor, 60)
+            floor_reason = "three_medium_dims"
+        
+        # Floor 55: Two dimensions >= 70
+        high_dims = sum(1 for s in all_dim_scores if s >= 70)
+        if high_dims >= 2:
+            floor = max(floor, 55)
+            floor_reason = "two_high_dims"
+        
+        # Floor 55: Any dimension >= 85
+        if any(s >= 85 for s in all_dim_scores):
+            floor = max(floor, 55)
+            floor_reason = "one_critical_dim"
+        
+        # Floor 50: TI score >= 70
+        if ti_score and ti_score.value >= 70:
+            floor = max(floor, 50)
+            floor_reason = "ti_high"
+        
+        # Floor 50: Auth fail + any suspicion
+        if auth_failed and (se_score >= 40 or brand_score >= 40 or content_score >= 40):
+            floor = max(floor, 50)
+            floor_reason = "auth_fail_suspicious"
+        
+        # Floor 45: Any dimension >= 75
+        if any(s >= 75 for s in all_dim_scores):
+            floor = max(floor, 45)
+            floor_reason = "one_high_dim"
+        
+        # Floor 40: Auth failure alone (suspicious but not critical)
+        if auth_failed and floor == 0:
+            floor = max(floor, 40)
+            floor_reason = "auth_fail_alone"
+        
+        # Apply floor if score is below it
+        if floor > 0 and score < floor:
+            floor_applied = f"{score:.1f} → {floor} ({floor_reason})"
+            score = float(floor)
+        
+        # =====================================================================
+        # STEP 4: Apply caps (prevent over-scoring)
+        # =====================================================================
+        
+        # Cap at 100
+        score = min(score, 100)
+        
+        # =====================================================================
+        # STEP 5: Log adjustments for debugging
+        # =====================================================================
+        
+        if bonuses_applied or floor_applied:
+            logger.info(
+                f"Comprehensive scoring: base={calculated_score:.1f}, "
+                f"bonuses=[{', '.join(bonuses_applied)}], "
+                f"floor={floor_applied or 'none'}, "
+                f"final={score:.1f}"
+            )
+        
+        return score
+    
+    def _apply_minimum_floor(
+        self,
+        calculated_score: float,
+        dimension_scores: Dict[str, "DimensionScore"],
+        ti_score: "TIScore",
+    ) -> float:
+        """
+        DEPRECATED: Use _apply_comprehensive_scoring instead.
+        Kept for backward compatibility.
+        """
+        return self._apply_comprehensive_scoring(
+            calculated_score=calculated_score,
+            dimension_scores=dimension_scores,
+            ti_score=ti_score,
+            evidence_list=[],
+            attack_chains=[],
+        )
     
     def _calculate_evidence_score(
         self,

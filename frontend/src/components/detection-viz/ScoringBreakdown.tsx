@@ -78,8 +78,8 @@ const ScoringBreakdown: React.FC<ScoringBreakdownProps> = ({
     }
   }, [isExpanded, score]);
 
-  const getLevelConfig = (level: string) => {
-    switch (level.toLowerCase()) {
+  const getLevelConfig = (level: string | undefined | null) => {
+    switch ((level || '').toLowerCase()) {
       case 'critical':
         return { color: 'text-red-400', bg: 'bg-red-500/20', border: 'border-red-500/30', gradient: 'from-red-500 to-orange-500' };
       case 'high':
@@ -95,8 +95,8 @@ const ScoringBreakdown: React.FC<ScoringBreakdownProps> = ({
 
   const levelConfig = getLevelConfig(level);
 
-  const getCategoryIcon = (category: string) => {
-    switch (category.toLowerCase()) {
+  const getCategoryIcon = (category: string | undefined | null) => {
+    switch ((category || '').toLowerCase()) {
       case 'technical': return '⚙️';
       case 'social_engineering': return '🎭';
       case 'brand_impersonation': return '🏷️';

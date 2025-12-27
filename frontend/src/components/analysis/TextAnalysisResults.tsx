@@ -97,8 +97,8 @@ interface Props {
   onClose?: () => void;
 }
 
-const getRiskColor = (level: string) => {
-  switch (level.toLowerCase()) {
+const getRiskColor = (level: string | undefined | null) => {
+  switch ((level || '').toLowerCase()) {
     case 'critical': return 'text-red-400 bg-red-500/20 border-red-500';
     case 'high': return 'text-orange-400 bg-orange-500/20 border-orange-500';
     case 'medium': return 'text-yellow-400 bg-yellow-500/20 border-yellow-500';
@@ -107,8 +107,8 @@ const getRiskColor = (level: string) => {
   }
 };
 
-const getSeverityColor = (severity: string) => {
-  switch (severity.toLowerCase()) {
+const getSeverityColor = (severity: string | undefined | null) => {
+  switch ((severity || '').toLowerCase()) {
     case 'critical': return 'bg-red-500';
     case 'high': return 'bg-orange-500';
     case 'medium': return 'bg-yellow-500';
@@ -116,8 +116,8 @@ const getSeverityColor = (severity: string) => {
   }
 };
 
-const getSourceIcon = (source: string) => {
-  switch (source.toLowerCase()) {
+const getSourceIcon = (source: string | undefined | null) => {
+  switch ((source || '').toLowerCase()) {
     case 'sms': return <Smartphone className="w-5 h-5" />;
     case 'url': return <Link className="w-5 h-5" />;
     case 'whatsapp': return <MessageSquare className="w-5 h-5" />;
