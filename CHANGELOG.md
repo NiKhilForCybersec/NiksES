@@ -1,55 +1,70 @@
-# NiksES v3.4.6 - Increased API Timeouts
+# NiksES v3.4.7 - Fixed Frontend Timeout (30000ms Error)
 
-## 🔧 Fixed: VirusTotal Timeout Issues
+## 🐛 The Problem
 
-**Problem:** VirusTotal API calls timing out after 15 seconds, causing:
+User saw popup error: "30000ms timeout"
+- Backend analysis completes and saves to history ✅
+- But frontend gives up after 30 seconds ❌
+- UI doesn't display the result
+
+## 🔧 The Fix
+
+**Frontend timeout increased from 30s to 120s (2 minutes)**
+
+```typescript
+// BEFORE
+export const API_TIMEOUT = 30000; // 30 seconds
+
+// AFTER
+export const API_TIMEOUT = 120000; // 2 minutes
 ```
-TI source virustotal: timeout - using other sources
+
+## ⏱️ All Timeout Settings Now
+
+| Component | Setting | Value |
+|-----------|---------|-------|
+| **Frontend** | API_TIMEOUT | **120s** (was 30s) |
+| **Backend** | API_TIMEOUT_ENRICHMENT | 45s |
+| **Backend** | TI Fusion per-source | 45s |
+| **Backend** | Google Safe Browsing | 45s |
+| **Backend** | IPQualityScore | 45s |
+
+## 📊 How It Works Now
+
+```
+User uploads email
+     │
+     ▼
+Frontend sends to backend (waits up to 120s)
+     │
+     ▼
+Backend runs analysis:
+  ├── Detection rules: ~1s
+  ├── AI content analysis: ~5s
+  ├── TI checks (parallel): ~45s max per source
+  │   ├── VirusTotal: responds or timeout
+  │   ├── AbuseIPDB: responds or timeout
+  │   └── Others: responds or timeout
+  └── AI synthesis: ~5s
+     │
+     ▼
+Backend returns result (typically 30-60s)
+     │
+     ▼
+Frontend displays result ✅
 ```
 
-**Solution:** Increased all API timeouts from 10-15s to 45s
+## 📁 Files Changed
 
-### Timeout Changes
-
-| Setting | Before | After |
-|---------|--------|-------|
-| API_TIMEOUT_ENRICHMENT | 10s | 45s |
-| TI Fusion per-source | 15s | 45s |
-| Google Safe Browsing | 15s | 45s |
-| IPQualityScore | 15s | 45s |
-| WHOIS | 10s | 15s |
-| DNS | 5s | 10s |
-
-### Files Changed
-
-1. **app/utils/constants.py**
-   - `API_TIMEOUT_ENRICHMENT: 10 → 45`
-   - `WHOIS_TIMEOUT: 10 → 15`
-   - `DNS_TIMEOUT: 5 → 10`
-
-2. **app/services/enrichment/ti_fusion.py**
-   - `DEFAULT_TIMEOUT: 15.0 → 45.0`
-
-3. **app/services/enrichment/google_safebrowsing.py**
-   - `ClientTimeout(total=15) → ClientTimeout(total=45)`
-
-4. **app/services/enrichment/ipqualityscore.py**
-   - `ClientTimeout(total=15) → ClientTimeout(total=45)`
+1. **frontend/src/utils/constants.ts**
+   - `API_TIMEOUT: 30000 → 120000`
 
 ---
 
-## 📊 Expected Behavior
+## ✅ All v3.4.x Features Included
 
-- Analysis may take 45-60 seconds for complex emails
-- VirusTotal checks will complete instead of timing out
-- More complete threat intelligence results
-- No more "timeout - using other sources" warnings
-
----
-
-## ✅ All Previous v3.4.x Features
-
-- Type-specific history buttons (Email/URL/SMS)
-- Complete null safety in TextAnalysisResults
-- Gmail phishing content fix
-- Comprehensive scoring engine
+- Type-specific history buttons
+- Complete null safety
+- Gmail phishing fix
+- Comprehensive scoring
+- Backend timeout increases

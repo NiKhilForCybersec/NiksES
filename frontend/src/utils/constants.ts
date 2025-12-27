@@ -18,7 +18,7 @@ export const APP_TAGLINE = "AI-Powered Email Investigation Copilot";
 // =============================================================================
 // API Base URL - direct connection to backend
 export const API_BASE_URL = "https://nikses-production.up.railway.app/api/v1";
-export const API_TIMEOUT = 30000; // 30 seconds
+export const API_TIMEOUT = 120000; // 2 minutes - backend needs time for TI checks
 
 // =============================================================================
 // FILE LIMITS
