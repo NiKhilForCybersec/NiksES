@@ -164,11 +164,11 @@ const TextAnalysisResults: React.FC<Props> = ({ result, onClose }) => {
               <div className="flex items-center gap-2">
                 {getSourceIcon(result.source)}
                 <h2 className="text-lg md:text-xl font-bold">
-                  {isUrlMode ? 'URL Analysis' : `${result.source.toUpperCase()} Analysis`}
+                  {isUrlMode ? 'URL Analysis' : `${(result.source || 'TEXT').toUpperCase()} Analysis`}
                 </h2>
               </div>
               <p className="text-xs md:text-sm text-slate-400 mt-1">
-                {result.classification.replace(/_/g, ' ').toUpperCase()}
+                {(result.classification || 'unknown').replace(/_/g, ' ').toUpperCase()}
               </p>
             </div>
           </div>
@@ -507,7 +507,7 @@ const TextAnalysisResults: React.FC<Props> = ({ result, onClose }) => {
                       sandbox.threat_level === 'low' ? 'bg-yellow-500/20 text-yellow-300' :
                       'bg-green-500/20 text-green-300'
                     }`}>
-                      {sandbox.threat_level.toUpperCase()}
+                      {(sandbox.threat_level || 'unknown').toUpperCase()}
                     </span>
                     <span className="text-xs bg-slate-700 px-2 py-0.5 rounded">
                       Score: {sandbox.threat_score}

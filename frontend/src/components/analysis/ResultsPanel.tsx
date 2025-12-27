@@ -226,7 +226,7 @@ const ResultsPanel: React.FC<ResultsPanelProps> = ({ result, onExport, onViewFul
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
                   <span className={`px-2.5 py-1 rounded text-xs font-bold text-white ${verdictStyles.bg}`}>
-                    {verdict.toUpperCase()}
+                    {(verdict || 'unknown').toUpperCase()}
                   </span>
                   <span className="text-xs text-gray-400 bg-gray-800 px-2 py-1 rounded border border-gray-700">
                     {riskLevel}

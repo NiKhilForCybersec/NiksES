@@ -284,15 +284,15 @@ const AnalysisView: React.FC<AnalysisViewProps> = ({ analysis, onClose, onExport
 
                 <div>
                   <div className="flex items-center gap-3 mb-2">
-                    <span className={`px-3 py-1 rounded-full text-sm font-bold text-white ${getVerdictColor(analysis.detection.verdict)}`}>
-                      {analysis.detection.verdict.toUpperCase()}
+                    <span className={`px-3 py-1 rounded-full text-sm font-bold text-white ${getVerdictColor(analysis.detection?.verdict)}`}>
+                      {(analysis.detection?.verdict || 'unknown').toUpperCase()}
                     </span>
                     <span className="text-sm text-gray-600 bg-white/50 px-2 py-1 rounded">
-                      {analysis.detection.risk_level}
+                      {analysis.detection?.risk_level || 'unknown'}
                     </span>
                   </div>
                   <h2 className="text-xl font-bold text-gray-900 mb-1">
-                    {analysis.email.subject || '(No Subject)'}
+                    {analysis.email?.subject || '(No Subject)'}
                   </h2>
                   <div className="flex items-center gap-4 text-sm text-gray-600">
                     <span className="flex items-center gap-1">
@@ -510,7 +510,7 @@ const AnalysisView: React.FC<AnalysisViewProps> = ({ analysis, onClose, onExport
                             rule.severity
                           )}`}
                         >
-                          {rule.severity.toUpperCase()}
+                          {(rule.severity || 'unknown').toUpperCase()}
                         </span>
                         <div className="flex-1">
                           <div className="flex items-center gap-2">

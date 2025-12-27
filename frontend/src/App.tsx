@@ -431,7 +431,7 @@ function App() {
       setTextAnalysisResult(textResult);
       
       // Also create email-like structure for compatibility with existing views
-      const analysisType = isUrlMode ? 'URL' : textSource.toUpperCase();
+      const analysisType = isUrlMode ? 'URL' : (textSource || 'text').toUpperCase();
       const urlCount = textResult.urls_found?.length || 0;
       
       // Build pseudoEmailResult with defensive checks
@@ -1493,6 +1493,7 @@ function App() {
                 analysis_id: data.analysis_id,
                 analyzed_at: data.analyzed_at,
                 analysis_type: isUrlAnalysis ? 'url' : 'sms',
+                source: isUrlAnalysis ? 'url' : 'sms',  // Add source field
                 original_text: data.email?.body_text || '',
                 urls_found: (data.email?.urls || []).map((u: any) => u.url || u),
                 domains_found: data.iocs?.domains || [],
@@ -1506,23 +1507,26 @@ function App() {
                 confidence: data.detection?.confidence || 0,
                 is_threat: (data.overall_score || 0) >= 50,
                 patterns_matched: (data.detection?.rules_triggered || []).map((r: any) => ({
-                  pattern_id: r.rule_id,
-                  name: r.rule_name,
-                  description: r.description,
-                  severity: r.severity,
+                  pattern_id: r.rule_id || '',
+                  name: r.rule_name || '',
+                  description: r.description || '',
+                  severity: r.severity || 'medium',
                   matched_text: r.evidence?.[0] || '',
-                  mitre_technique: r.mitre_technique,
+                  mitre_technique: r.mitre_technique || '',
                 })),
-                threat_indicators: (data.detection?.rules_triggered || []).map((r: any) => r.rule_name),
+                threat_indicators: (data.detection?.rules_triggered || []).map((r: any) => r.rule_name || ''),
                 recommendations: data.ai_triage?.recommendations || [],
                 ai_analysis: data.ai_triage ? {
                   enabled: true,
                   provider: data.ai_triage.provider || 'ai',
-                  summary: data.ai_triage.summary,
+                  summary: data.ai_triage.summary || '',
                   key_findings: data.ai_triage.key_findings || [],
                   recommendations: data.ai_triage.recommendations || [],
                 } : undefined,
                 url_enrichment: data.enrichment?.urls || [],
+                url_sandbox: data.sandbox_results || [],
+                message_length: (data.email?.body_text || '').length,
+                mitre_techniques: data.detection?.mitre_techniques || [],
               };
               
               // Set the text analysis result - this will show TextAnalysisResults inline

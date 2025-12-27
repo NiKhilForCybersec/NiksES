@@ -334,7 +334,7 @@ const ScoringBreakdown: React.FC<ScoringBreakdownProps> = ({
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
                         <span className="text-xl">⛓️</span>
-                        <span className="font-medium text-slate-200">{chain.name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</span>
+                        <span className="font-medium text-slate-200">{(chain.name || 'unknown').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</span>
                       </div>
                       <div className="flex items-center gap-2">
                         {chain.tiConfirmed && (

@@ -581,7 +581,7 @@ const AdvancedAnalysisView: React.FC<AdvancedAnalysisViewProps> = ({ result, onE
                       (unifiedLevel) === 'medium' ? 'text-yellow-400' :
                       'text-green-400'
                     }`}>
-                      {unifiedLevel.toUpperCase()}
+                      {(unifiedLevel || 'unknown').toUpperCase()}
                     </p>
                   </div>
                 </div>
@@ -1270,7 +1270,7 @@ const AdvancedAnalysisView: React.FC<AdvancedAnalysisViewProps> = ({ result, onE
                     tiResults.fused_verdict === 'suspicious' ? 'bg-orange-600 text-white' :
                     'bg-green-600 text-white'
                   }`}>
-                    {tiResults.fused_verdict.toUpperCase()}
+                    {(tiResults.fused_verdict || 'clean').toUpperCase()}
                   </span>
                 )}
               </div>

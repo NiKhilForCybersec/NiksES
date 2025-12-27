@@ -494,7 +494,7 @@ export default function RulesManager({ isOpen, onClose }: RulesManagerProps) {
                         </div>
                         <div className="flex items-center gap-3">
                           <span className={`px-2 py-0.5 rounded text-xs ${getSeverityColor(rule.severity)}`}>
-                            {rule.severity.toUpperCase()}
+                            {(rule.severity || 'medium').toUpperCase()}
                           </span>
                           <span className="text-xs text-slate-400">{rule.category}</span>
                           {expandedRule === rule.rule_id ? (

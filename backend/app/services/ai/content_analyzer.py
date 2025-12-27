@@ -245,20 +245,56 @@ class ContentAnalyzer:
         
         if result.intent in suspicious_intents and email.sender:
             # Check if sender is from a known legitimate brand domain
+            # BUT only if the brand matches what's being mentioned in the content
             from app.utils.constants import BRAND_TARGETS
             sender_domain = email.sender.domain.lower() if email.sender.domain else ""
             
+            # Get brands mentioned in content
+            mentioned_brands = result.detected_brands if hasattr(result, 'detected_brands') else []
+            
             for brand_id, brand_info in BRAND_TARGETS.items():
                 legitimate_domains = [d.lower() for d in brand_info.get("legitimate_domains", [])]
+                brand_name = brand_info.get("name", "").lower()
+                
+                # Check if sender domain matches this brand's legitimate domains
+                sender_matches_brand = False
                 for legit in legitimate_domains:
                     if sender_domain == legit or sender_domain.endswith(f".{legit}"):
-                        # Sender is from legitimate brand - suspicious content is actually expected
+                        sender_matches_brand = True
+                        break
+                
+                if sender_matches_brand:
+                    # Sender is from a legitimate brand domain
+                    # Only mark as legitimate if:
+                    # 1. No suspicious brands are mentioned in content, OR
+                    # 2. The mentioned brand matches the sender's brand
+                    
+                    # Free email providers (gmail, yahoo, etc.) should NOT auto-mark as legitimate
+                    # because users can send phishing content through them
+                    free_email_providers = ["gmail.com", "yahoo.com", "hotmail.com", "outlook.com", 
+                                           "live.com", "aol.com", "mail.com", "protonmail.com"]
+                    
+                    if sender_domain in free_email_providers:
+                        # Don't auto-mark content from free email providers as legitimate
+                        # The content could be forwarded phishing content
+                        self.logger.info(f"Sender {sender_domain} is free email provider - NOT auto-marking as legitimate")
+                        continue
+                    
+                    # For business domains, check if content mentions match sender brand
+                    content_mentions_different_brand = False
+                    for mentioned in mentioned_brands:
+                        mentioned_lower = mentioned.lower()
+                        if mentioned_lower != brand_name and mentioned_lower not in brand_name:
+                            # Content mentions a different brand than sender
+                            content_mentions_different_brand = True
+                            break
+                    
+                    if not content_mentions_different_brand:
+                        # Sender is legitimate brand and content matches
                         self.logger.info(f"Sender {sender_domain} is legitimate {brand_info['name']} - marking content as legitimate")
                         result.intent = AttackIntent.LEGITIMATE
                         result.confidence = 0.85
                         break
-                if result.intent == AttackIntent.LEGITIMATE:
-                    break
         
         # Step 4: Infer potential impact
         result.potential_impact = self._infer_impact(result)

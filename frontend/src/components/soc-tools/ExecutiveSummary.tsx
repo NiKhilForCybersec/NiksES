@@ -119,13 +119,13 @@ const ExecutiveSummary: React.FC<ExecutiveSummaryProps> = ({ analysisResult }) =
     let summary = `EXECUTIVE SECURITY BRIEFING
 Generated: ${timestamp}
 Classification: ${attackType}
-Severity: ${riskLevel.toUpperCase()} (Score: ${riskScore}/100)
+Severity: ${(riskLevel || 'unknown').toUpperCase()} (Score: ${riskScore}/100)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 INCIDENT SUMMARY
 
-A ${attackType.toLowerCase()} was detected targeting ${recipientCount} employee${recipientCount !== 1 ? 's' : ''}. `;
+A ${(attackType || 'threat').toLowerCase()} was detected targeting ${recipientCount} employee${recipientCount !== 1 ? 's' : ''}. `;
 
     if (classification === 'bec' || classification === 'invoice_fraud') {
       summary += `This attack attempted to manipulate employees into making unauthorized payments or changing banking details. `;
@@ -326,7 +326,7 @@ Analysis ID: ${analysisResult.analysis_id || 'N/A'}
                           threatLevel === 'medium' ? 'bg-orange-900/50 text-orange-400 border border-orange-700' :
                           'bg-yellow-900/50 text-yellow-400 border border-yellow-700'
                         }`}>
-                          Threat Score: {att.threat_score}/100 ({threatLevel.toUpperCase()})
+                          Threat Score: {att.threat_score}/100 ({(threatLevel || 'unknown').toUpperCase()})
                         </span>
                       )}
                     </div>

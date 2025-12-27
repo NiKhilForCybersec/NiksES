@@ -1,98 +1,107 @@
-# NiksES v3.4.1 - Null Safety Fix + Comprehensive Scoring
+# NiksES v3.4.2 - Complete Null Safety + Gmail Content Fix
 
-## 🐛 Fixed: TypeError on History View
+## 🐛 Fixed: All toUpperCase Crashes
 
-**Error:** `Cannot read properties of undefined (reading 'toLowerCase')`
+**Error:** `Cannot read properties of undefined (reading 'toUpperCase')`
 
-This crashed the app when clicking "View Analysis" on URL/SMS analyses from history.
+This happened when viewing URL/SMS analyses from history due to missing fields.
 
-### Files Fixed (Null Safety)
+### Root Cause
+The `source` field was missing from the history view transformation, and many
+other toUpperCase calls lacked null safety.
 
-1. **TextAnalysisResults.tsx**
-   - `getRiskColor()` - handles undefined level
-   - `getSeverityColor()` - handles undefined severity  
-   - `getSourceIcon()` - handles undefined source
+### Files Fixed
 
-2. **AnalysisView.tsx**
-   - `getVerdictColor()` - handles undefined verdict
-   - `getVerdictBgColor()` - handles undefined verdict
-   - `getSeverityColor()` - handles undefined severity
-   - `getAuthStatusIcon()` - handles undefined result
+1. **App.tsx**
+   - Added `source` field to history URL/SMS transformation
+   - Added defaults for all mapped fields (severity, name, etc.)
+   - Fixed textSource.toUpperCase()
 
-3. **ScoringBreakdown.tsx**
-   - `getLevelConfig()` - handles undefined level
-   - `getCategoryIcon()` - handles undefined category
+2. **TextAnalysisResults.tsx**
+   - result.source || 'TEXT'
+   - result.classification || 'unknown'
+   - sandbox.threat_level || 'unknown'
 
-4. **AdvancedAnalysisView.tsx**
-   - API status display - handles undefined status
+3. **AdvancedAnalysisView.tsx**
+   - unifiedLevel || 'unknown'
+   - tiResults.fused_verdict || 'clean'
 
-### Pattern Applied
-```typescript
-// BEFORE (crashes on undefined):
-switch (level.toLowerCase()) { ... }
+4. **RiskScorePanel.tsx**
+   - riskScore.primary_classification || 'unknown'
 
-// AFTER (safe):
-switch ((level || '').toLowerCase()) { ... }
-```
+5. **ResultsPanel.tsx**
+   - verdict || 'unknown'
+
+6. **ScoringBreakdown.tsx**
+   - chain.name || 'unknown'
+
+7. **ExecutiveSummary.tsx**
+   - riskLevel || 'unknown'
+   - attackType || 'threat'
+   - threatLevel || 'unknown'
+
+8. **RulesManager.tsx**
+   - rule.severity || 'medium'
 
 ---
 
-## 🎯 v3.4.0 Features (Included)
+## 🐛 Fixed: Gmail Phishing Content Marked Legitimate
 
-### Comprehensive Scoring System
+**Problem:** Content analyzer was marking phishing content as legitimate 
+if the sender was from Gmail/Yahoo/etc.
 
-**10 Combination Bonuses:**
+**Root Cause:** The logic checked if sender domain is in "legitimate brands"
+but Gmail is a free email provider that anyone can use to send phishing.
+
+**Solution:**
+```python
+# Free email providers should NOT auto-mark as legitimate
+free_email_providers = ["gmail.com", "yahoo.com", "hotmail.com", ...]
+
+if sender_domain in free_email_providers:
+    # Don't auto-mark content as legitimate
+    # The content could be forwarded phishing content
+    continue
+```
+
+**File Changed:** `backend/app/services/ai/content_analyzer.py`
+
+---
+
+## 📊 Scoring System (v3.4.0 Features Included)
+
+### Combination Bonuses (10 Types)
 - Auth FAIL + content indicator → +15
 - Brand ≥70 + credential request → +20
-- URL shortener + brand mention → +15
-- 3+ SE techniques → +15
 - TI flagged + content indicator → +20
-- BEC pattern (full) → +25
+- BEC pattern → +25
 - And more...
 
-**12 Minimum Floors:**
+### Minimum Floors (12 Levels)
 - TI confirmed malicious → Floor 80
 - Brand ≥85 + Content ≥80 → Floor 75
 - Auth FAIL + high indicator → Floor 75
-- BEC pattern detected → Floor 70
 - And more...
 
-**Enhanced Header Analysis:**
-- Free email provider detection
-- Display name spoofing detection
-- Executive impersonation detection
-- Reply-to mismatch detection
-
-**New Attack Chains:**
-- brand_credential_phishing
-- social_engineering_attack
-
 ---
 
-## 📊 Expected Results
-
-### Test Phishing Email (Microsoft impersonation)
-```
-BEFORE v3.4.x:
-  Overall: 23 (MEDIUM) ❌
-
-AFTER v3.4.x:
-  Overall: 75-90 (CRITICAL) ✅
-```
-
----
-
-## 📁 Files Changed
+## 📁 All Files Changed
 
 ### Frontend (Null Safety)
+- `src/App.tsx` - History transformation + textSource
 - `src/components/analysis/TextAnalysisResults.tsx`
-- `src/components/analysis/AnalysisView.tsx`
 - `src/components/analysis/AdvancedAnalysisView.tsx`
+- `src/components/analysis/RiskScorePanel.tsx`
+- `src/components/analysis/ResultsPanel.tsx`
+- `src/components/analysis/AnalysisView.tsx`
 - `src/components/detection-viz/ScoringBreakdown.tsx`
+- `src/components/soc-tools/ExecutiveSummary.tsx`
+- `src/components/RulesManager.tsx`
 
-### Backend (Scoring Engine)
-- `app/services/detection/dynamic_scorer.py`
-- `app/services/detection/evidence.py`
+### Backend (Content + Scoring)
+- `app/services/ai/content_analyzer.py` - Gmail fix
+- `app/services/detection/dynamic_scorer.py` - Comprehensive scoring
+- `app/services/detection/evidence.py` - Enhanced detection
 
 ---
 
@@ -102,4 +111,5 @@ AFTER v3.4.x:
 |---------|---------|
 | v3.3.x | URL filtering, history fix, quota modal |
 | v3.4.0 | Comprehensive scoring engine |
-| **v3.4.1** | **Null safety fix for history view** |
+| v3.4.1 | First null safety pass |
+| **v3.4.2** | **Complete null safety + Gmail fix** |

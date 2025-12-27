@@ -189,7 +189,7 @@ const RiskScorePanel: React.FC<RiskScorePanelProps> = ({
             <div className="mb-3">
               <span className="text-sm text-gray-400">Classification</span>
               <p className="text-lg font-medium text-white">
-                {riskScore.primary_classification.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                {(riskScore.primary_classification || 'unknown').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
               </p>
             </div>
             
