@@ -14,7 +14,7 @@ from typing import Optional, List
 from pydantic import BaseModel
 import logging
 
-from app.services.sandbox import get_sandbox_service
+from app.services.hybrid_analysis import get_sandbox_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/sandbox", tags=["sandbox"])

@@ -18,6 +18,13 @@ from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional, Tuple, Set
 from enum import Enum
 
+# Import centralized scoring configuration
+try:
+    from app.config.scoring import get_scoring_config
+    USE_CENTRALIZED_CONFIG = True
+except ImportError:
+    USE_CENTRALIZED_CONFIG = False
+
 # Use try/except for flexible importing
 try:
     from .evidence import (
@@ -1033,41 +1040,40 @@ class DynamicScoreCalculator:
     
     def _calculate_level(self, score: float, confidence: float) -> str:
         """
-        Determine risk level dynamically.
+        Determine risk level dynamically using centralized config.
         
         Level depends on BOTH score AND confidence.
         """
-        # Thresholds adjust based on confidence
-        if confidence >= 0.7:
-            # High confidence = tighter thresholds
-            if score >= 70:
-                return "critical"
-            elif score >= 50:
-                return "high"
-            elif score >= 30:
-                return "medium"
-            elif score >= 15:
-                return "low"
-        elif confidence >= 0.4:
-            # Medium confidence
-            if score >= 80:
-                return "critical"
-            elif score >= 60:
-                return "high"
-            elif score >= 40:
-                return "medium"
-            elif score >= 20:
-                return "low"
+        # Get thresholds from centralized config
+        if USE_CENTRALIZED_CONFIG:
+            config = get_scoring_config()
+            thresholds = config.thresholds
+            
+            # Use confidence-adjusted thresholds from config
+            critical = thresholds.get_threshold("critical", confidence)
+            high = thresholds.get_threshold("high", confidence)
+            medium = thresholds.get_threshold("medium", confidence)
+            low = thresholds.get_threshold("low", confidence)
         else:
-            # Low confidence = wider thresholds
-            if score >= 90:
-                return "critical"
-            elif score >= 75:
-                return "high"
-            elif score >= 55:
-                return "medium"
-            elif score >= 30:
-                return "low"
+            # Fallback: Thresholds adjust based on confidence
+            if confidence >= 0.7:
+                # High confidence = tighter thresholds
+                critical, high, medium, low = 70, 50, 30, 15
+            elif confidence >= 0.4:
+                # Medium confidence
+                critical, high, medium, low = 80, 60, 40, 20
+            else:
+                # Low confidence = wider thresholds
+                critical, high, medium, low = 90, 75, 55, 30
+        
+        if score >= critical:
+            return "critical"
+        elif score >= high:
+            return "high"
+        elif score >= medium:
+            return "medium"
+        elif score >= low:
+            return "low"
         
         return "informational"
     

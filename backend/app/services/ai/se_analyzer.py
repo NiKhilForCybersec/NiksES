@@ -22,6 +22,13 @@ from app.utils.constants import (
     URGENCY_KEYWORDS, FEAR_KEYWORDS, AUTHORITY_KEYWORDS, BEC_KEYWORDS
 )
 
+# Import centralized scoring configuration
+try:
+    from app.config.scoring import get_scoring_config
+    USE_CENTRALIZED_CONFIG = True
+except ImportError:
+    USE_CENTRALIZED_CONFIG = False
+
 logger = logging.getLogger(__name__)
 
 
@@ -117,6 +124,15 @@ class SEAnalysisResult:
     llm_error: Optional[str] = None
     
     def to_dict(self) -> Dict[str, Any]:
+        # Use technique_scores if available (includes LLM blending), otherwise use raw heuristics
+        breakdown = self.technique_scores if self.technique_scores else {
+            "urgency": self.heuristic_results.urgency_score if self.heuristic_results else 0,
+            "fear": self.heuristic_results.fear_score if self.heuristic_results else 0,
+            "authority": self.heuristic_results.authority_score if self.heuristic_results else 0,
+            "reward": self.heuristic_results.reward_score if self.heuristic_results else 0,
+            "scarcity": self.heuristic_results.scarcity_score if self.heuristic_results else 0,
+        }
+        
         return {
             "se_score": self.se_score,
             "se_level": self.se_level,
@@ -129,13 +145,7 @@ class SEAnalysisResult:
             "key_indicators": self.key_indicators,
             "used_llm": self.used_llm,
             "llm_error": self.llm_error,
-            "heuristic_breakdown": {
-                "urgency": self.heuristic_results.urgency_score if self.heuristic_results else 0,
-                "fear": self.heuristic_results.fear_score if self.heuristic_results else 0,
-                "authority": self.heuristic_results.authority_score if self.heuristic_results else 0,
-                "reward": self.heuristic_results.reward_score if self.heuristic_results else 0,
-                "scarcity": self.heuristic_results.scarcity_score if self.heuristic_results else 0,
-            } if self.heuristic_results else {},
+            "heuristic_breakdown": breakdown,
         }
 
 
@@ -354,33 +364,64 @@ class SocialEngineeringAnalyzer:
         return text[start:end]
     
     def _calculate_heuristic_score(self, results: SEHeuristicResults) -> int:
-        """Calculate overall SE score from heuristics."""
+        """Calculate overall SE score from heuristics using dynamic config."""
+        
+        # Get dynamic weights from config
+        if USE_CENTRALIZED_CONFIG:
+            config = get_scoring_config()
+            se_weights = config.se_weights
+            se_thresholds = config.se_thresholds
+            
+            urgency_weight = se_weights.urgency
+            fear_weight = se_weights.fear
+            authority_weight = se_weights.authority
+            reward_weight = se_weights.reward
+            scarcity_weight = se_weights.scarcity
+            
+            technique_threshold = se_thresholds.technique_significant
+            multi_tactic_threshold = se_thresholds.multiple_tactics_threshold
+            multi_tactic_bonus = se_thresholds.multiple_tactics_bonus
+            strong_multi_threshold = se_thresholds.strong_multiple_tactics_threshold
+            strong_multi_bonus = se_thresholds.strong_multiple_tactics_bonus
+        else:
+            # Fallback defaults
+            urgency_weight = 0.25
+            fear_weight = 0.30
+            authority_weight = 0.20
+            reward_weight = 0.15
+            scarcity_weight = 0.10
+            technique_threshold = 30
+            multi_tactic_threshold = 2
+            multi_tactic_bonus = 10
+            strong_multi_threshold = 3
+            strong_multi_bonus = 15
+        
         # Weighted combination
         score = (
-            results.urgency_score * 0.25 +
-            results.fear_score * 0.30 +
-            results.authority_score * 0.20 +
-            results.reward_score * 0.15 +
-            results.scarcity_score * 0.10
+            results.urgency_score * urgency_weight +
+            results.fear_score * fear_weight +
+            results.authority_score * authority_weight +
+            results.reward_score * reward_weight +
+            results.scarcity_score * scarcity_weight
         )
         
         # Bonus for combined tactics
         tactics_count = sum([
-            1 if results.urgency_score > 30 else 0,
-            1 if results.fear_score > 30 else 0,
-            1 if results.authority_score > 30 else 0,
-            1 if results.reward_score > 30 else 0,
-            1 if results.scarcity_score > 30 else 0,
+            1 if results.urgency_score > technique_threshold else 0,
+            1 if results.fear_score > technique_threshold else 0,
+            1 if results.authority_score > technique_threshold else 0,
+            1 if results.reward_score > technique_threshold else 0,
+            1 if results.scarcity_score > technique_threshold else 0,
         ])
         
-        if tactics_count >= 3:
-            score += 15
-        elif tactics_count >= 2:
-            score += 10
+        if tactics_count >= strong_multi_threshold:
+            score += strong_multi_bonus
+        elif tactics_count >= multi_tactic_threshold:
+            score += multi_tactic_bonus
         
         # Bonus for deadline + threat combo
         if results.has_deadline and results.has_threat:
-            score += 10
+            score += multi_tactic_bonus
         
         # Cap at 100
         return min(100, int(score))
@@ -499,40 +540,57 @@ Return this exact JSON structure:
                 "scarcity": heuristics.scarcity_score,
             }
             
+            # Get dynamic threshold for intent inference
+            intent_threshold = se_thresholds.technique_strong if USE_CENTRALIZED_CONFIG and 'se_thresholds' in dir() else 50
+            
             # Infer intent from heuristics
-            if heuristics.fear_score > 50 and heuristics.urgency_score > 50:
+            if heuristics.fear_score > intent_threshold and heuristics.urgency_score > intent_threshold:
                 result.primary_intent = SEIntent.CREDENTIAL_HARVESTING
-            elif heuristics.reward_score > 50:
+            elif heuristics.reward_score > intent_threshold:
                 result.primary_intent = SEIntent.GIFT_CARD_SCAM
-            elif heuristics.authority_score > 50:
+            elif heuristics.authority_score > intent_threshold:
                 result.primary_intent = SEIntent.PAYMENT_FRAUD
             else:
                 result.primary_intent = SEIntent.UNKNOWN
             
             result.confidence = 0.6  # Lower confidence without LLM
         
-        # Set final score and level
+        # Set final score and level using dynamic thresholds
         result.se_score = min(100, final_score)
         
-        if result.se_score >= 75:
+        # Get dynamic thresholds for SE level
+        if USE_CENTRALIZED_CONFIG:
+            config = get_scoring_config()
+            se_th = config.se_thresholds
+            critical_th = se_th.critical
+            high_th = se_th.high
+            medium_th = se_th.medium
+            technique_th = se_th.technique_significant
+        else:
+            critical_th = 75
+            high_th = 50
+            medium_th = 25
+            technique_th = 30
+        
+        if result.se_score >= critical_th:
             result.se_level = "critical"
-        elif result.se_score >= 50:
+        elif result.se_score >= high_th:
             result.se_level = "high"
-        elif result.se_score >= 25:
+        elif result.se_score >= medium_th:
             result.se_level = "medium"
         else:
             result.se_level = "low"
         
-        # Determine which techniques are present
-        if result.technique_scores.get("urgency", 0) > 30:
+        # Determine which techniques are present using dynamic threshold
+        if result.technique_scores.get("urgency", 0) > technique_th:
             result.techniques.append(PersuasionTechnique.URGENCY)
-        if result.technique_scores.get("fear", 0) > 30:
+        if result.technique_scores.get("fear", 0) > technique_th:
             result.techniques.append(PersuasionTechnique.FEAR)
-        if result.technique_scores.get("authority", 0) > 30:
+        if result.technique_scores.get("authority", 0) > technique_th:
             result.techniques.append(PersuasionTechnique.AUTHORITY)
-        if result.technique_scores.get("reward", 0) > 30:
+        if result.technique_scores.get("reward", 0) > technique_th:
             result.techniques.append(PersuasionTechnique.REWARD)
-        if result.technique_scores.get("scarcity", 0) > 30:
+        if result.technique_scores.get("scarcity", 0) > technique_th:
             result.techniques.append(PersuasionTechnique.SCARCITY)
         
         return result

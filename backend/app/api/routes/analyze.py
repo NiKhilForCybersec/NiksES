@@ -35,7 +35,7 @@ from app.services.enrichment.geoip import GeoIPProvider, get_geoip_provider
 
 # Sandbox integration (optional - gracefully handles if not configured)
 try:
-    from app.services.sandbox import get_sandbox_service
+    from app.services.hybrid_analysis import get_sandbox_service
     SANDBOX_AVAILABLE = True
 except ImportError:
     SANDBOX_AVAILABLE = False
@@ -414,9 +414,98 @@ async def run_unified_analysis(
     
     logger.info(f"Analysis complete: score={result.overall_score}, level={result.overall_level}")
     
-    # 10. Generate AI description
-    ai_description = None
+    # 10. Run Two-Pass AI Analysis (if OpenAI available)
+    two_pass_result = None
     if openai_client:
+        try:
+            from app.services.ai.threat_analyzer import TwoPassThreatAnalyzer
+            
+            threat_analyzer = TwoPassThreatAnalyzer(openai_client)
+            
+            # Prepare email content
+            email_content = {
+                "subject": email.subject or "",
+                "body": email.body_text or "",
+                "sender": f"{email.sender.address}" if email.sender else "",
+            }
+            
+            # Prepare TI results for AI
+            ti_for_ai = None
+            if result.ti_results:
+                ti_for_ai = {
+                    "url_results": [],
+                    "ip_results": [],
+                    "fused": {
+                        "score": getattr(result.ti_results, 'fused_score', 0),
+                        "verdict": getattr(result.ti_results, 'fused_verdict', 'unknown'),
+                        "sources_checked": getattr(result.ti_results, 'sources_checked', 0),
+                        "sources_available": getattr(result.ti_results, 'sources_available', 0),
+                    }
+                }
+                # Add individual source results
+                if hasattr(result.ti_results, 'sources') and result.ti_results.sources:
+                    for source_name, source_data in result.ti_results.sources.items():
+                        if hasattr(source_data, 'to_dict'):
+                            source_dict = source_data.to_dict()
+                        elif hasattr(source_data, 'model_dump'):
+                            source_dict = source_data.model_dump()
+                        else:
+                            source_dict = source_data if isinstance(source_data, dict) else {}
+                        ti_for_ai["url_results"].append({
+                            "source": source_name,
+                            source_name: source_dict,
+                        })
+            
+            # Prepare detection results for AI
+            detection_for_ai = None
+            if result.detection_results:
+                dr = result.detection_results
+                detection_for_ai = {
+                    "score": getattr(dr, 'score', 0),
+                    "rules_triggered": [],
+                }
+                if hasattr(dr, 'triggered_rules'):
+                    for rule in (dr.triggered_rules or []):
+                        if hasattr(rule, 'to_dict'):
+                            detection_for_ai["rules_triggered"].append(rule.to_dict())
+                        elif hasattr(rule, 'model_dump'):
+                            detection_for_ai["rules_triggered"].append(rule.model_dump())
+                        else:
+                            detection_for_ai["rules_triggered"].append({
+                                "name": getattr(rule, 'name', 'Unknown'),
+                                "description": getattr(rule, 'description', ''),
+                                "severity": getattr(rule, 'severity', 'medium'),
+                            })
+            
+            # Prepare sender info
+            sender_info = None
+            if header_analysis:
+                sender_info = {
+                    "spf": header_analysis.get("spf_result", "unknown"),
+                    "dkim": header_analysis.get("dkim_result", "unknown"),
+                    "dmarc": header_analysis.get("dmarc_result", "unknown"),
+                    "anomalies": header_analysis.get("anomalies", []),
+                }
+            
+            # Run two-pass analysis
+            logger.info("Running Two-Pass AI Analysis...")
+            two_pass_result = await threat_analyzer.analyze(
+                email_content=email_content,
+                ti_results=ti_for_ai,
+                detection_results=detection_for_ai,
+                sender_info=sender_info,
+            )
+            
+            logger.info(f"Two-Pass AI complete: threat={two_pass_result.ai_threat_score}, se={two_pass_result.ai_se_score}")
+            
+        except Exception as e:
+            logger.warning(f"Two-Pass AI analysis failed: {e}", exc_info=True)
+    
+    # 11. Generate AI description (fallback if two-pass not available)
+    ai_description = None
+    if two_pass_result and two_pass_result.final_assessment.summary:
+        ai_description = two_pass_result.final_assessment.summary
+    elif openai_client:
         try:
             # Build analysis dict for description generator
             analysis_dict = {
@@ -450,7 +539,7 @@ async def run_unified_analysis(
         }
         ai_description = generate_fallback_description({}, analysis_dict)
     
-    # 11. Build proper AnalysisResult model
+    # 12. Build proper AnalysisResult model
     duration_ms = int((time.time() - start_time) * 1000)
     
     analysis_result = build_analysis_result(
@@ -463,6 +552,7 @@ async def run_unified_analysis(
         geoip_data=geoip_data,
         header_analysis=header_analysis,
         ai_description=ai_description,
+        two_pass_result=two_pass_result,
     )
     
     return analysis_result
@@ -478,6 +568,7 @@ def build_analysis_result(
     geoip_data: Optional[Dict[str, Any]] = None,
     header_analysis: Optional[Dict[str, Any]] = None,
     ai_description: Optional[str] = None,
+    two_pass_result = None,
 ) -> AnalysisResult:
     """Build proper AnalysisResult model from orchestrator result."""
     
@@ -488,7 +579,7 @@ def build_analysis_result(
     enrichment = build_enrichment_results(orchestrator_result, geoip_data)
     
     # Build AITriageResult with description
-    ai_triage = build_ai_triage_result(orchestrator_result, ai_description, header_analysis)
+    ai_triage = build_ai_triage_result(orchestrator_result, ai_description, header_analysis, two_pass_result)
     
     # Build HeaderAnalysisResult
     header_result = build_header_analysis_result(header_analysis, geoip_data)
@@ -497,8 +588,8 @@ def build_analysis_result(
     iocs = extract_iocs(email)
     
     # Build Enhanced Analysis Fields
-    se_analysis_model = build_se_analysis(orchestrator_result)
-    content_analysis_model = build_content_analysis(orchestrator_result)
+    se_analysis_model = build_se_analysis(orchestrator_result, two_pass_result)
+    content_analysis_model = build_content_analysis(orchestrator_result, two_pass_result)
     lookalike_analysis_model = build_lookalike_analysis(orchestrator_result)
     ti_results_model = build_ti_results(orchestrator_result)
     risk_score_model = build_risk_score(orchestrator_result)
@@ -553,8 +644,44 @@ def build_analysis_result(
     )
 
 
-def build_se_analysis(orchestrator_result) -> Optional[SocialEngineeringAnalysis]:
-    """Build SocialEngineeringAnalysis from orchestrator result."""
+def build_se_analysis(orchestrator_result, two_pass_result=None) -> Optional[SocialEngineeringAnalysis]:
+    """Build SocialEngineeringAnalysis from orchestrator result and two-pass AI."""
+    
+    # If we have two-pass results, use AI-derived SE scores
+    if two_pass_result and two_pass_result.first_pass:
+        fp = two_pass_result.first_pass
+        se_scores = fp.se_scores.to_dict()
+        
+        # Map intent to string
+        intent_str = fp.intent.value if hasattr(fp.intent, 'value') else str(fp.intent)
+        
+        # Determine SE level based on overall score
+        overall_se = fp.se_scores.overall_score
+        if overall_se >= 70:
+            se_level = "critical"
+        elif overall_se >= 50:
+            se_level = "high"
+        elif overall_se >= 30:
+            se_level = "medium"
+        else:
+            se_level = "low"
+        
+        return SocialEngineeringAnalysis(
+            se_score=overall_se,
+            se_level=se_level,
+            confidence=fp.intent_confidence,
+            primary_intent=intent_str,
+            secondary_intents=[],
+            techniques=[k for k, v in se_scores.items() if v >= 30],
+            technique_scores=se_scores,
+            heuristic_breakdown=se_scores,  # Same as technique_scores from AI
+            explanation=fp.language_analysis,
+            key_indicators=fp.red_flags,
+            used_llm=True,
+            llm_error=None,
+        )
+    
+    # Fallback to orchestrator result
     se = orchestrator_result.se_analysis
     if not se:
         return None
@@ -581,8 +708,56 @@ def build_se_analysis(orchestrator_result) -> Optional[SocialEngineeringAnalysis
     )
 
 
-def build_content_analysis(orchestrator_result) -> Optional[ContentAnalysis]:
-    """Build ContentAnalysis from orchestrator result."""
+def build_content_analysis(orchestrator_result, two_pass_result=None) -> Optional[ContentAnalysis]:
+    """Build ContentAnalysis from orchestrator result and two-pass AI."""
+    
+    # If we have two-pass results, use AI-derived intent
+    if two_pass_result and two_pass_result.first_pass:
+        fp = two_pass_result.first_pass
+        fa = two_pass_result.final_assessment
+        
+        # Map AI intent to content analysis intent
+        intent_str = fp.intent.value if hasattr(fp.intent, 'value') else str(fp.intent)
+        
+        # Intent severity mapping for score
+        intent_severity = {
+            'credential_theft': 90,
+            'malware_delivery': 85,
+            'financial_fraud': 85,
+            'business_email_compromise': 80,
+            'account_takeover': 80,
+            'data_exfiltration': 75,
+            'callback_phishing': 65,
+            'romance_scam': 70,
+            'tech_support_scam': 65,
+            'reconnaissance': 50,
+            'spam': 30,
+            'legitimate': 5,
+            'unknown': 25,
+        }
+        
+        base_score = intent_severity.get(intent_str, 25)
+        intent_score = int(base_score * fp.intent_confidence)
+        
+        return ContentAnalysis(
+            intent=intent_str,
+            intent_score=intent_score,
+            confidence=fp.intent_confidence,
+            requested_actions=fp.requested_actions,
+            target_data=[fp.target_role] if fp.target_role != "generic" else [],
+            business_process_abused='none',
+            spoofed_brand=fp.spoofed_brand,
+            spoofed_entity_type='brand' if fp.spoofed_brand else None,
+            potential_impact=fa.key_findings if fa else [],
+            mentioned_amounts=[],
+            mentioned_deadlines=[],
+            mentioned_organizations=[fp.spoofed_brand] if fp.spoofed_brand else [],
+            primary_intent=intent_str,
+            target=fp.target_role if fp.target_role != "generic" else None,
+            action_requested=fp.requested_actions[0] if fp.requested_actions else None,
+        )
+    
+    # Fallback to orchestrator result
     ca = orchestrator_result.content_analysis
     if not ca:
         return None
@@ -934,12 +1109,80 @@ def build_ai_triage_result(
     result,
     ai_description: Optional[str] = None,
     header_analysis: Optional[Dict[str, Any]] = None,
+    two_pass_result = None,
 ) -> Optional[AITriageResult]:
     """Build AITriageResult from SE and content analysis with AI description."""
     
     se = result.se_analysis
     content = result.content_analysis
     
+    # If we have two-pass results, use them directly
+    if two_pass_result and two_pass_result.final_assessment:
+        fa = two_pass_result.final_assessment
+        fp = two_pass_result.first_pass
+        
+        # Build recommended actions from AI assessment
+        recommended_actions = []
+        action_map = {
+            "block": RecommendedAction(action="block", priority=1, description="Block immediately", automated=True),
+            "quarantine": RecommendedAction(action="quarantine", priority=1, description="Quarantine for review", automated=True),
+            "escalate": RecommendedAction(action="escalate", priority=1, description="Escalate to security team", automated=False),
+            "allow": RecommendedAction(action="allow", priority=3, description="Allow with monitoring", automated=True),
+            "review": RecommendedAction(action="review", priority=2, description="Manual review recommended", automated=False),
+        }
+        
+        primary_action = action_map.get(fa.recommended_action, action_map["review"])
+        recommended_actions.append(primary_action)
+        
+        # Add response steps as additional actions
+        for i, step in enumerate(fa.response_steps[:2]):
+            recommended_actions.append(RecommendedAction(
+                action="step",
+                priority=i + 2,
+                description=step,
+                automated=False,
+            ))
+        
+        # Build summary with AI insight
+        summary = fa.summary if fa.summary else "AI analysis complete"
+        
+        # Combine key findings from AI
+        key_findings = fa.key_findings.copy() if fa.key_findings else []
+        if fa.ti_correlation:
+            key_findings.append(f"TI Correlation: {fa.ti_correlation}")
+        if fa.escalation_reason:
+            key_findings.append(f"⚠️ {fa.escalation_reason}")
+        if fp and fp.red_flags:
+            key_findings.extend([f"🚩 {rf}" for rf in fp.red_flags[:3]])
+        
+        # Build detailed analysis
+        detailed_parts = []
+        if fa.summary:
+            detailed_parts.append(f"**Summary:** {fa.summary}")
+        if fa.primary_threat:
+            detailed_parts.append(f"**Primary Threat:** {fa.primary_threat}")
+        if fa.attack_chain:
+            detailed_parts.append(f"**Attack Chain:** {' → '.join(fa.attack_chain)}")
+        if fa.ti_correlation:
+            detailed_parts.append(f"**TI Correlation:** {fa.ti_correlation}")
+        
+        detailed_analysis = "\n\n".join(detailed_parts) if detailed_parts else ai_description or "Analysis complete"
+        
+        return AITriageResult(
+            summary=summary,
+            detailed_analysis=detailed_analysis,
+            classification_reasoning=f"AI assessed as {fa.threat_level} ({fa.threat_score}/100) with {fa.confidence:.0%} confidence",
+            risk_reasoning=f"Primary threat: {fa.primary_threat or 'None identified'}",
+            key_findings=key_findings,
+            recommended_actions=recommended_actions,
+            mitre_tactics=fa.mitre_tactics,
+            mitre_techniques=[],
+            model_used=two_pass_result.model_used or "openai",
+            tokens_used=0,
+            analysis_timestamp=datetime.utcnow(),
+        )
+    
+    # Fallback to original logic if no two-pass result
     # Even if no SE/content, we might have AI description
     if not se and not content and not ai_description:
         return None

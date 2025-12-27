@@ -97,6 +97,14 @@ class FusedTIResult:
 
 
 # Source weights for score fusion
+# Import centralized scoring configuration
+try:
+    from app.config.scoring import get_scoring_config
+    USE_CENTRALIZED_CONFIG = True
+except ImportError:
+    USE_CENTRALIZED_CONFIG = False
+
+# Fallback weights (used if config not available)
 SOURCE_WEIGHTS = {
     "virustotal": 0.25,  # Multi-engine scanner
     "google_safebrowsing": 0.20,  # Google's real-time threat list
@@ -106,6 +114,13 @@ SOURCE_WEIGHTS = {
     "phishtank": 0.05,  # Phishing database
     "whois": 0.05,  # Domain age is supplementary
 }
+
+def get_source_weight(source: str) -> float:
+    """Get weight for a TI source from config or fallback."""
+    if USE_CENTRALIZED_CONFIG:
+        config = get_scoring_config()
+        return config.ti_weights.get_weight(source)
+    return SOURCE_WEIGHTS.get(source, 0.1)
 
 
 class ThreatIntelFusion:
@@ -326,13 +341,23 @@ class ThreatIntelFusion:
             result.confidence = 0.0
             return result
         
+        # Get dynamic config
+        if USE_CENTRALIZED_CONFIG:
+            config = get_scoring_config()
+            ti_thresholds = config.ti_thresholds
+            thresholds = config.thresholds
+        else:
+            # Fallback defaults
+            ti_thresholds = None
+            thresholds = None
+        
         # Weighted score calculation
         weighted_sum = 0.0
         weight_sum = 0.0
         
         for source, source_result in result.sources.items():
             if source_result.available and source_result.score is not None:
-                weight = SOURCE_WEIGHTS.get(source, 0.1)
+                weight = get_source_weight(source)
                 weighted_sum += source_result.score * weight
                 weight_sum += weight
         
@@ -341,10 +366,13 @@ class ThreatIntelFusion:
         else:
             result.fused_score = 0
         
-        # Determine verdict from fused score
-        if result.fused_score >= 70:
+        # Determine verdict from fused score using dynamic thresholds
+        malicious_threshold = thresholds.high if thresholds else 70
+        suspicious_threshold = thresholds.medium if thresholds else 40
+        
+        if result.fused_score >= malicious_threshold:
             result.fused_verdict = ThreatLevel.MALICIOUS
-        elif result.fused_score >= 40:
+        elif result.fused_score >= suspicious_threshold:
             result.fused_verdict = ThreatLevel.SUSPICIOUS
         elif result.fused_score > 0:
             result.fused_verdict = ThreatLevel.CLEAN
@@ -352,9 +380,12 @@ class ThreatIntelFusion:
             result.fused_verdict = ThreatLevel.UNKNOWN
         
         # Consensus boost: if multiple sources agree on malicious, boost score
-        if result.sources_flagged >= 2:
+        consensus_threshold = ti_thresholds.sources_flagged_for_malicious if ti_thresholds else 2
+        high_consensus = ti_thresholds.sources_flagged_for_consensus if ti_thresholds else 3
+        
+        if result.sources_flagged >= consensus_threshold:
             result.fused_score = min(100, result.fused_score + 10)
-            if result.sources_flagged >= 3:
+            if result.sources_flagged >= high_consensus:
                 result.fused_verdict = ThreatLevel.MALICIOUS
         
         # Calculate confidence based on source availability

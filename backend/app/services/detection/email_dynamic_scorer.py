@@ -16,6 +16,13 @@ from dataclasses import dataclass
 
 from app.models.detection import RiskLevel, EmailClassification
 
+# Import centralized scoring configuration
+try:
+    from app.config.scoring import get_scoring_config
+    USE_CENTRALIZED_CONFIG = True
+except ImportError:
+    USE_CENTRALIZED_CONFIG = False
+
 from .evidence import (
     Evidence,
     EvidenceCategory,
@@ -272,14 +279,21 @@ class DynamicMultiDimensionalScorer:
         return unified
     
     def _score_to_level(self, score: float) -> str:
-        """Convert score to level string."""
-        if score >= 75:
+        """Convert score to level string using dynamic thresholds."""
+        if USE_CENTRALIZED_CONFIG:
+            config = get_scoring_config()
+            th = config.thresholds
+            critical, high, medium, low = th.critical, th.high, th.medium, th.low
+        else:
+            critical, high, medium, low = 75, 50, 25, 10
+        
+        if score >= critical:
             return "critical"
-        elif score >= 50:
+        elif score >= high:
             return "high"
-        elif score >= 25:
+        elif score >= medium:
             return "medium"
-        elif score >= 10:
+        elif score >= low:
             return "low"
         return "informational"
     

@@ -143,7 +143,7 @@ async def update_settings(
             settings.hybrid_analysis_api_key = updates.api_keys.hybrid_analysis_api_key
             # Configure sandbox service with new key
             try:
-                from app.services.sandbox import get_sandbox_service
+                from app.services.hybrid_analysis import get_sandbox_service
                 sandbox = get_sandbox_service()
                 sandbox.configure(api_key=updates.api_keys.hybrid_analysis_api_key, enabled=True)
             except Exception as e:

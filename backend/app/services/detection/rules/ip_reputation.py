@@ -12,8 +12,26 @@ from app.models.detection import RiskLevel
 
 from .base import DetectionRule, RuleMatch, register_rule
 
+# Import centralized scoring configuration
+try:
+    from app.config.scoring import get_scoring_config
+    USE_CENTRALIZED_CONFIG = True
+except ImportError:
+    USE_CENTRALIZED_CONFIG = False
 
-# IP Reputation thresholds
+
+def get_abuseipdb_thresholds():
+    """Get AbuseIPDB thresholds from centralized config or fallback."""
+    if USE_CENTRALIZED_CONFIG:
+        config = get_scoring_config()
+        return (
+            config.ti_thresholds.abuseipdb_malicious,
+            config.ti_thresholds.abuseipdb_suspicious
+        )
+    return (75, 25)  # Fallback defaults
+
+
+# Fallback thresholds (used when config not available)
 ABUSEIPDB_MALICIOUS_THRESHOLD = 75  # Score >= 75 = malicious
 ABUSEIPDB_SUSPICIOUS_THRESHOLD = 25  # Score >= 25 = suspicious
 ABUSEIPDB_HIGH_REPORTS_THRESHOLD = 10  # More than 10 reports is concerning
@@ -198,8 +216,9 @@ class MaliciousIPRule(DetectionRule):
         if ip_data.abuseipdb_verdict == ThreatIntelVerdict.MALICIOUS:
             return True
         
-        # Check AbuseIPDB score threshold
-        if ip_data.abuseipdb_score is not None and ip_data.abuseipdb_score >= ABUSEIPDB_MALICIOUS_THRESHOLD:
+        # Check AbuseIPDB score threshold using dynamic config
+        malicious_th, _ = get_abuseipdb_thresholds()
+        if ip_data.abuseipdb_score is not None and ip_data.abuseipdb_score >= malicious_th:
             return True
         
         # Check VirusTotal verdict
@@ -282,10 +301,13 @@ class SuspiciousIPRule(DetectionRule):
     
     def _is_suspicious(self, ip_data: IPEnrichment) -> bool:
         """Check if IP is considered suspicious (but not malicious)."""
+        # Get dynamic thresholds
+        malicious_th, suspicious_th = get_abuseipdb_thresholds()
+        
         # Skip if already malicious (handled by IPREP-001)
         if ip_data.abuseipdb_verdict == ThreatIntelVerdict.MALICIOUS:
             return False
-        if ip_data.abuseipdb_score is not None and ip_data.abuseipdb_score >= ABUSEIPDB_MALICIOUS_THRESHOLD:
+        if ip_data.abuseipdb_score is not None and ip_data.abuseipdb_score >= malicious_th:
             return False
         if ip_data.virustotal_verdict == ThreatIntelVerdict.MALICIOUS:
             return False
@@ -296,7 +318,7 @@ class SuspiciousIPRule(DetectionRule):
         if ip_data.abuseipdb_verdict == ThreatIntelVerdict.SUSPICIOUS:
             return True
         
-        if ip_data.abuseipdb_score is not None and ip_data.abuseipdb_score >= ABUSEIPDB_SUSPICIOUS_THRESHOLD:
+        if ip_data.abuseipdb_score is not None and ip_data.abuseipdb_score >= suspicious_th:
             return True
         
         if ip_data.virustotal_verdict == ThreatIntelVerdict.SUSPICIOUS:

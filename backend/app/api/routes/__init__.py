@@ -14,6 +14,7 @@ from .health import router as health_router
 from .settings import router as settings_router
 from .rules import router as rules_router
 from .soc_tools import router as soc_tools_router
+from .scoring import router as scoring_router
 
 # Import sandbox router (Hybrid Analysis for files)
 try:
@@ -45,6 +46,7 @@ def get_api_router() -> APIRouter:
     api_router.include_router(settings_router)
     api_router.include_router(rules_router)
     api_router.include_router(soc_tools_router)
+    api_router.include_router(scoring_router)  # Dynamic scoring config
     
     # Include file sandbox router if available (Hybrid Analysis)
     if SANDBOX_AVAILABLE and sandbox_router:
@@ -67,6 +69,7 @@ __all__ = [
     'settings_router',
     'rules_router',
     'soc_tools_router',
+    'scoring_router',
     'sandbox_router',
     'url_sandbox_router',
     'SANDBOX_AVAILABLE',

@@ -15,6 +15,13 @@ from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional, Set, Tuple
 from urllib.parse import urlparse
 
+# Import centralized scoring configuration
+try:
+    from app.config.scoring import get_scoring_config
+    USE_CENTRALIZED_CONFIG = True
+except ImportError:
+    USE_CENTRALIZED_CONFIG = False
+
 # Use try/except for flexible importing
 try:
     from .evidence import (
@@ -1580,12 +1587,33 @@ class SMSDynamicScorer:
     
     def _calc_level(self, score: float, confidence: float) -> str:
         """
-        Calculate risk level with lower thresholds for aggressive threat detection.
+        Calculate risk level using dynamic thresholds from centralized config.
         
         Philosophy: Better to flag and review than to miss threats (10% FP acceptable)
         
         Thresholds tuned for maximum threat detection with acceptable FP rate.
         """
+        if USE_CENTRALIZED_CONFIG:
+            config = get_scoring_config()
+            thresholds = config.thresholds
+            
+            # Use confidence-adjusted thresholds from config
+            critical = thresholds.get_threshold("critical", confidence)
+            high = thresholds.get_threshold("high", confidence)
+            medium = thresholds.get_threshold("medium", confidence)
+            low = thresholds.get_threshold("low", confidence)
+            
+            if score >= critical:
+                return "critical"
+            elif score >= high:
+                return "high"
+            elif score >= medium:
+                return "medium"
+            elif score >= low:
+                return "low"
+            return "informational"
+        
+        # Fallback to hardcoded values
         if confidence >= 0.55:
             # High confidence - aggressive thresholds
             if score >= 50:

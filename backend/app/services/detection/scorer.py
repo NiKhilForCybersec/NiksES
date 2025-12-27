@@ -12,6 +12,13 @@ from app.models.detection import RiskLevel, EmailClassification
 from app.services.detection.rules.base import RuleMatch, SEVERITY_SCORES
 from app.utils.constants import RISK_THRESHOLDS
 
+# Import centralized scoring configuration
+try:
+    from app.config.scoring import get_scoring_config
+    USE_CENTRALIZED_CONFIG = True
+except ImportError:
+    USE_CENTRALIZED_CONFIG = False
+
 logger = logging.getLogger(__name__)
 
 
@@ -94,7 +101,7 @@ class RiskScorer:
     
     def get_verdict(self, score: int) -> str:
         """
-        Get verdict string from score.
+        Get verdict string from score using dynamic thresholds.
         
         Args:
             score: Risk score 0-100
@@ -102,9 +109,17 @@ class RiskScorer:
         Returns:
             Verdict: 'clean', 'suspicious', or 'malicious'
         """
-        if score >= 60:
+        if USE_CENTRALIZED_CONFIG:
+            config = get_scoring_config()
+            malicious_threshold = config.thresholds.high  # >= high = malicious
+            suspicious_threshold = config.thresholds.medium  # >= medium = suspicious
+        else:
+            malicious_threshold = 60
+            suspicious_threshold = 20
+        
+        if score >= malicious_threshold:
             return 'malicious'
-        elif score >= 20:
+        elif score >= suspicious_threshold:
             return 'suspicious'
         else:
             return 'clean'
