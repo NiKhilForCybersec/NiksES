@@ -248,7 +248,7 @@ export function SettingsModal({ isOpen, onClose, onSettingsChange }: SettingsMod
   if (!isOpen) return null;
 
   const configuredCount = settings ? Object.values(settings.api_keys_configured).filter(Boolean).length : 0;
-  const totalProviders = 6;
+  const totalProviders = settings ? Object.keys(settings.api_keys_configured).length : 10;
 
   return (
     <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/70 backdrop-blur-sm">
