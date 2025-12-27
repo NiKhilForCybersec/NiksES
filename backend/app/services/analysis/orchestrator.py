@@ -468,7 +468,15 @@ class AnalysisOrchestrator:
         result: CompleteAnalysisResult,
         email: Optional[ParsedEmail] = None,
     ) -> CompleteAnalysisResult:
-        """Calculate final unified score from all components."""
+        """
+        Calculate final unified score from all components.
+        
+        Uses Dynamic Intelligent Detection Architecture (DIDA):
+        - Evidence-based scoring (no hardcoded values)
+        - TI-anchored validation
+        - Attack chain detection
+        - Confidence-adjusted thresholds
+        """
         
         # Prepare inputs for scorer - all must be dicts
         detection_results = None
@@ -504,16 +512,93 @@ class AnalysisOrchestrator:
         if email and email.sender and email.sender.domain:
             sender_domain = email.sender.domain
         
-        # Calculate unified score
-        result.risk_score = self.scorer.calculate_unified_score(
-            detection_results=detection_results,
-            se_analysis=se_analysis,
-            content_analysis=content_analysis,
-            lookalike_results=lookalike_results,
-            ti_results=ti_results,
-            header_analysis=result.header_analysis,
-            sender_domain=sender_domain,
-        )
+        # Try Dynamic Intelligent Detection Architecture first
+        try:
+            from app.services.detection.dynamic_scorer import calculate_dynamic_score
+            
+            dynamic_result = calculate_dynamic_score(
+                detection_results=detection_results,
+                se_analysis=se_analysis,
+                content_analysis=content_analysis,
+                lookalike_results=lookalike_results,
+                ti_results=ti_results,
+                header_analysis=result.header_analysis,
+                ai_analysis=None,  # Can be added if AI analysis is available
+            )
+            
+            # Convert dynamic result to UnifiedRiskScore for backwards compatibility
+            from app.services.detection.multi_scorer import UnifiedRiskScore, RiskLevel, EmailClassification
+            
+            # Map level to RiskLevel
+            level_mapping = {
+                "critical": RiskLevel.CRITICAL,
+                "high": RiskLevel.HIGH,
+                "medium": RiskLevel.MEDIUM,
+                "low": RiskLevel.LOW,
+                "informational": RiskLevel.INFORMATIONAL,
+            }
+            
+            # Map classification
+            class_mapping = {
+                "phishing": EmailClassification.PHISHING,
+                "bec": EmailClassification.BEC,
+                "malware_delivery": EmailClassification.MALWARE_DELIVERY,
+                "spam": EmailClassification.SPAM,
+                "brand_impersonation": EmailClassification.IMPERSONATION,
+                "credential_phishing": EmailClassification.PHISHING,
+                "account_takeover": EmailClassification.PHISHING,
+                "callback_phishing": EmailClassification.PHISHING,
+                "smishing": EmailClassification.PHISHING,
+                "suspicious": EmailClassification.SUSPICIOUS,
+                "unknown": EmailClassification.UNKNOWN,
+            }
+            
+            result.risk_score = UnifiedRiskScore()
+            result.risk_score.overall_score = dynamic_result.value
+            result.risk_score.overall_level = dynamic_result.level
+            result.risk_score.primary_classification = class_mapping.get(
+                dynamic_result.classification.lower(),
+                EmailClassification.UNKNOWN
+            )
+            result.risk_score.confidence = dynamic_result.confidence
+            
+            # Store breakdown for detailed analysis
+            if hasattr(result.risk_score, 'explanation'):
+                result.risk_score.explanation = dynamic_result.explanation
+            
+            # Store MITRE techniques
+            if hasattr(result.risk_score, 'mitre_techniques'):
+                result.risk_score.mitre_techniques = dynamic_result.mitre_techniques
+            
+            # Store attack chains
+            if hasattr(result.risk_score, 'attack_chains'):
+                result.risk_score.attack_chains = [c.to_dict() for c in dynamic_result.attack_chains]
+            
+            # Store detailed breakdown in dimensions
+            if dynamic_result.breakdown and dynamic_result.breakdown.dimensions:
+                for dim_name, dim_score in dynamic_result.breakdown.dimensions.items():
+                    if dim_name in result.risk_score.dimensions:
+                        result.risk_score.dimensions[dim_name].score = dim_score.score
+                        result.risk_score.dimensions[dim_name].weight = dim_score.weight
+            
+            self.logger.info(
+                f"Dynamic score: {dynamic_result.value} ({dynamic_result.level}) "
+                f"confidence={dynamic_result.confidence:.2f} "
+                f"chains={len(dynamic_result.attack_chains)}"
+            )
+            
+        except Exception as e:
+            # Fallback to legacy scoring
+            self.logger.warning(f"Dynamic scoring failed, using legacy: {e}")
+            result.risk_score = self.scorer.calculate_unified_score(
+                detection_results=detection_results,
+                se_analysis=se_analysis,
+                content_analysis=content_analysis,
+                lookalike_results=lookalike_results,
+                ti_results=ti_results,
+                header_analysis=result.header_analysis,
+                sender_domain=sender_domain,
+            )
         
         # Set quick access fields
         if result.risk_score:
