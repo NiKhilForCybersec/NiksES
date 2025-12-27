@@ -850,9 +850,12 @@ async def enrich_urls(urls: List[str]) -> List[URLEnrichmentResult]:
         
         settings = get_settings()
         
-        vt = VirusTotalProvider()
-        pt = PhishTankProvider()
-        uh = URLhausProvider()
+        # Initialize providers WITH API keys from settings
+        vt_key = getattr(settings, 'virustotal_api_key', None)
+        vt = VirusTotalProvider(vt_key) if vt_key else None
+        
+        pt = PhishTankProvider()  # Free, no key needed
+        uh = URLhausProvider()   # Free, no key needed
         
         # Initialize IPQS provider
         ipqs_key = getattr(settings, 'ipqualityscore_api_key', '') or ''
@@ -863,7 +866,7 @@ async def enrich_urls(urls: List[str]) -> List[URLEnrichmentResult]:
         gsb_available = False
         
         # Log which services are available
-        vt_available = vt.is_configured
+        vt_available = vt is not None and vt.is_configured
         ipqs_available = ipqs is not None and bool(ipqs.api_key)
         
         logger.info(f"=== URL ENRICHMENT CONFIG ===")
@@ -928,29 +931,37 @@ async def enrich_urls(urls: List[str]) -> List[URLEnrichmentResult]:
                         logger.warning(f"IPQualityScore check failed for {url}: {e}")
                 
                 # URLhaus check (free, no limits, most reliable for malware)
+                urlhaus_checked = False
                 try:
                     uh_result = await uh.check_url(url)
+                    urlhaus_checked = True
+                    sources.append("URLhaus")  # Always add - it's free and was checked
                     if uh_result and uh_result.get('threat'):
                         enrichment.is_malicious = True
                         enrichment.threat_score = max(enrichment.threat_score, 90)
-                        sources.append("URLhaus")
                         enrichment.categories.append(uh_result.get('threat_type', 'malware'))
                         logger.info(f"URLhaus: {url} flagged as {uh_result.get('threat_type', 'malware')}")
+                    else:
+                        logger.info(f"URLhaus: {url} - clean (not in database)")
                 except Exception as e:
-                    logger.debug(f"URLhaus check failed for {url}: {e}")
+                    logger.warning(f"URLhaus check failed for {url}: {e}")
                 
                 # PhishTank check (free, no limits)
+                phishtank_checked = False
                 try:
                     pt_result = await pt.check_url(url)
+                    phishtank_checked = True
+                    sources.append("PhishTank")  # Always add - it's free and was checked
                     if pt_result and pt_result.get('is_phish'):
                         enrichment.is_malicious = True
                         enrichment.threat_score = max(enrichment.threat_score, 80)
-                        sources.append("PhishTank")
+                        enrichment.categories.append("phishing")
                         logger.info(f"PhishTank: {url} flagged as phishing")
+                    else:
+                        logger.info(f"PhishTank: {url} - clean (not in database)")
                 except Exception as e:
-                    logger.debug(f"PhishTank check failed for {url}: {e}")
+                    logger.warning(f"PhishTank check failed for {url}: {e}")
                 
-                # VirusTotal check LAST (has rate limits, may fail)
                 # VirusTotal check LAST (has rate limits, may fail)
                 if vt_available:
                     try:

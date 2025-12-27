@@ -348,30 +348,43 @@ const RiskScorePanel: React.FC<RiskScorePanelProps> = ({
 
           {showActions && (
             <div className="mt-4 space-y-2">
-              {riskScore.recommended_actions.map((action, idx) => (
+              {riskScore.recommended_actions.map((action: any, idx: number) => (
                 <div 
                   key={idx}
                   className="flex items-start gap-3 p-3 bg-gray-900 rounded-lg"
                 >
-                  <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                    action.priority === 1 ? 'bg-red-500/20 text-red-400' :
-                    action.priority === 2 ? 'bg-orange-500/20 text-orange-400' :
-                    action.priority === 3 ? 'bg-yellow-500/20 text-yellow-400' :
-                    'bg-gray-500/20 text-gray-400'
-                  }`}>
-                    P{action.priority}
-                  </span>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-white font-medium">{action.action}</span>
-                      {action.automated && (
-                        <span className="px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded text-xs">
-                          Auto
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-sm text-gray-400 mt-1">{action.description}</p>
-                  </div>
+                  {typeof action === 'string' ? (
+                    <>
+                      <span className="px-2 py-0.5 rounded text-xs font-medium bg-green-500/20 text-green-400">
+                        →
+                      </span>
+                      <span className="text-white">{action}</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                        action.priority === 1 ? 'bg-red-500/20 text-red-400' :
+                        action.priority === 2 ? 'bg-orange-500/20 text-orange-400' :
+                        action.priority === 3 ? 'bg-yellow-500/20 text-yellow-400' :
+                        'bg-gray-500/20 text-gray-400'
+                      }`}>
+                        P{action.priority || '-'}
+                      </span>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-white font-medium">{action.action}</span>
+                          {action.automated && (
+                            <span className="px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded text-xs">
+                              Auto
+                            </span>
+                          )}
+                        </div>
+                        {action.description && (
+                          <p className="text-sm text-gray-400 mt-1">{action.description}</p>
+                        )}
+                      </div>
+                    </>
+                  )}
                 </div>
               ))}
             </div>

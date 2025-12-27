@@ -537,12 +537,29 @@ const AdvancedAnalysisView: React.FC<AdvancedAnalysisViewProps> = ({ result, onE
                 {result.ai_triage.recommended_actions?.length > 0 && (
                   <div>
                     <h3 className="text-sm font-semibold text-gray-400 mb-2">Recommended Actions</h3>
-                    <ul className="space-y-1">
-                      {result.ai_triage.recommended_actions.slice(0, 3).map((action: any, idx: number) => (
-                        <li key={idx} className="flex items-start text-sm">
+                    <ul className="space-y-2">
+                      {result.ai_triage.recommended_actions.slice(0, 5).map((action: any, idx: number) => (
+                        <li key={idx} className="flex items-start text-sm bg-gray-800/50 rounded-lg p-3">
                           <Zap className="w-4 h-4 mr-2 text-green-400 flex-shrink-0 mt-0.5" />
-                          <span className="font-medium mr-2">{action.action}:</span>
-                          <span className="text-gray-400">{action.details}</span>
+                          {typeof action === 'string' ? (
+                            <span className="text-gray-200">{action}</span>
+                          ) : (
+                            <div>
+                              <span className="font-medium text-green-300">{action.action}</span>
+                              {action.description && (
+                                <p className="text-gray-400 mt-1">{action.description}</p>
+                              )}
+                              {action.priority && (
+                                <span className={`text-xs px-2 py-0.5 rounded mt-1 inline-block ${
+                                  action.priority === 1 ? 'bg-red-500/20 text-red-300' :
+                                  action.priority === 2 ? 'bg-orange-500/20 text-orange-300' :
+                                  'bg-blue-500/20 text-blue-300'
+                                }`}>
+                                  Priority {action.priority}
+                                </span>
+                              )}
+                            </div>
+                          )}
                         </li>
                       ))}
                     </ul>
@@ -2376,17 +2393,27 @@ const AdvancedAnalysisView: React.FC<AdvancedAnalysisViewProps> = ({ result, onE
                     <div className="space-y-3">
                       {result.ai_triage.recommended_actions.map((action: any, idx: number) => (
                         <div key={idx} className="bg-gray-900 rounded p-3 border-l-4 border-green-500">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="font-semibold text-green-400">{action.action}</span>
-                            <span className={`text-xs px-2 py-0.5 rounded ${
-                              action.priority === 'high' ? 'bg-red-900/50 text-red-400' :
-                              action.priority === 'medium' ? 'bg-yellow-900/50 text-yellow-400' :
-                              'bg-blue-900/50 text-blue-400'
-                            }`}>
-                              {action.priority} priority
-                            </span>
-                          </div>
-                          <p className="text-sm text-gray-400">{action.details}</p>
+                          {typeof action === 'string' ? (
+                            <p className="text-gray-200">{action}</p>
+                          ) : (
+                            <>
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="font-semibold text-green-400">{action.action}</span>
+                                {action.priority && (
+                                  <span className={`text-xs px-2 py-0.5 rounded ${
+                                    action.priority === 1 || action.priority === 'high' ? 'bg-red-900/50 text-red-400' :
+                                    action.priority === 2 || action.priority === 'medium' ? 'bg-yellow-900/50 text-yellow-400' :
+                                    'bg-blue-900/50 text-blue-400'
+                                  }`}>
+                                    Priority {action.priority}
+                                  </span>
+                                )}
+                              </div>
+                              {action.description && (
+                                <p className="text-sm text-gray-400">{action.description}</p>
+                              )}
+                            </>
+                          )}
                         </div>
                       ))}
                     </div>
