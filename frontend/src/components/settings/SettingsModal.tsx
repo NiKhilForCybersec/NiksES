@@ -43,6 +43,8 @@ interface APIKeyConfig {
   abuseipdb_api_key?: string;
   phishtank_api_key?: string;
   mxtoolbox_api_key?: string;
+  ipqualityscore_api_key?: string;
+  google_safebrowsing_api_key?: string;
   hybrid_analysis_api_key?: string;
   anthropic_api_key?: string;
   openai_api_key?: string;
@@ -422,6 +424,42 @@ export function SettingsModal({ isOpen, onClose, onSettingsChange }: SettingsMod
                     rateLimit="Varies by plan"
                   />
 
+                  {/* IPQualityScore */}
+                  <APIKeyInput
+                    name="IPQualityScore"
+                    description="Advanced URL scanning with phishing, malware detection, and domain age analysis"
+                    keyName="ipqualityscore_api_key"
+                    value={apiKeys.ipqualityscore_api_key || ''}
+                    onChange={(value) => handleKeyChange('ipqualityscore_api_key', value)}
+                    showKey={showKeys['ipqualityscore'] || false}
+                    onToggleShow={() => toggleShowKey('ipqualityscore')}
+                    isConfigured={settings?.api_keys_configured?.ipqualityscore || false}
+                    onTest={() => testConnection('ipqualityscore')}
+                    isTesting={testingProvider === 'ipqualityscore'}
+                    testResult={testResults['ipqualityscore']}
+                    signupUrl="https://www.ipqualityscore.com/create-account"
+                    icon={<Zap className="w-5 h-5 text-cyan-400" />}
+                    rateLimit="5000 req/month (free)"
+                  />
+
+                  {/* Google Safe Browsing */}
+                  <APIKeyInput
+                    name="Google Safe Browsing"
+                    description="Check URLs against Google's constantly updated threat lists (malware, phishing, unwanted software)"
+                    keyName="google_safebrowsing_api_key"
+                    value={apiKeys.google_safebrowsing_api_key || ''}
+                    onChange={(value) => handleKeyChange('google_safebrowsing_api_key', value)}
+                    showKey={showKeys['google_safebrowsing'] || false}
+                    onToggleShow={() => toggleShowKey('google_safebrowsing')}
+                    isConfigured={settings?.api_keys_configured?.google_safebrowsing || false}
+                    onTest={() => testConnection('google_safebrowsing')}
+                    isTesting={testingProvider === 'google_safebrowsing'}
+                    testResult={testResults['google_safebrowsing']}
+                    signupUrl="https://console.cloud.google.com/apis/library/safebrowsing.googleapis.com"
+                    icon={<Shield className="w-5 h-5 text-green-400" />}
+                    rateLimit="10,000 req/day (free)"
+                  />
+
                   {/* Hybrid Analysis - Sandbox */}
                   <APIKeyInput
                     name="Hybrid Analysis"
@@ -445,7 +483,7 @@ export function SettingsModal({ isOpen, onClose, onSettingsChange }: SettingsMod
                       <Info className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
                       <div className="text-sm text-blue-200">
                         <p className="font-medium">Free Tier APIs Available</p>
-                        <p className="text-blue-300/80">VirusTotal, AbuseIPDB, and PhishTank all offer free API access for personal/research use. Requests are automatically throttled to respect rate limits.</p>
+                        <p className="text-blue-300/80">VirusTotal, AbuseIPDB, PhishTank, IPQualityScore, and Google Safe Browsing all offer free API access for personal/research use. Requests are automatically throttled to respect rate limits.</p>
                       </div>
                     </div>
                   </div>

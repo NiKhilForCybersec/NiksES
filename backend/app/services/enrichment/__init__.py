@@ -60,6 +60,20 @@ from .mxtoolbox import (
     configure_mxtoolbox,
 )
 
+from .ipqualityscore import (
+    IPQualityScoreClient,
+    get_client as get_ipqs_client,
+    scan_url as ipqs_scan_url,
+    scan_urls as ipqs_scan_urls,
+)
+
+from .google_safebrowsing import (
+    GoogleSafeBrowsingClient,
+    get_client as get_gsb_client,
+    check_url as gsb_check_url,
+    check_urls as gsb_check_urls,
+)
+
 __all__ = [
     # Orchestrator
     'EnrichmentOrchestrator',
@@ -105,4 +119,16 @@ __all__ = [
     'MXToolboxProvider',
     'get_mxtoolbox_provider',
     'configure_mxtoolbox',
+    
+    # IPQualityScore
+    'IPQualityScoreClient',
+    'get_ipqs_client',
+    'ipqs_scan_url',
+    'ipqs_scan_urls',
+    
+    # Google Safe Browsing
+    'GoogleSafeBrowsingClient',
+    'get_gsb_client',
+    'gsb_check_url',
+    'gsb_check_urls',
 ]

@@ -117,6 +117,19 @@ class URLEnrichment(BaseModel):
     phishtank_verified: bool = Field(False)
     phishtank_verified_at: Optional[datetime] = Field(None)
     
+    # IPQualityScore
+    ipqs_risk_score: Optional[int] = Field(None, description="IPQS risk score 0-100")
+    ipqs_is_phishing: Optional[bool] = Field(None, description="IPQS phishing detection")
+    ipqs_is_malware: Optional[bool] = Field(None, description="IPQS malware detection")
+    ipqs_is_suspicious: Optional[bool] = Field(None, description="IPQS suspicious flag")
+    ipqs_domain_age: Optional[str] = Field(None, description="Domain age from IPQS")
+    ipqs_threat_level: Optional[str] = Field(None, description="IPQS threat level: safe/low/medium/high/critical")
+    
+    # Google Safe Browsing
+    gsb_is_safe: Optional[bool] = Field(None, description="Google Safe Browsing safe status")
+    gsb_threats: List[Dict[str, Any]] = Field(default_factory=list, description="GSB threat matches")
+    gsb_primary_threat: Optional[str] = Field(None, description="Primary threat type from GSB")
+    
     # Overall
     final_verdict: ThreatIntelVerdict = Field(ThreatIntelVerdict.UNKNOWN)
     is_shortened: bool = Field(False)

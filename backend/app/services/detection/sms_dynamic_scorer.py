@@ -280,18 +280,157 @@ URL_SHORTENERS = {
     "rebrand.ly", "short.io", "cutt.ly", "rb.gy", "tiny.cc",
 }
 
+# =============================================================================
+# SAFE DOMAINS WHITELIST - Legitimate domains that should NOT trigger alerts
+# =============================================================================
+SAFE_DOMAINS = {
+    # AI/Tech Companies
+    "openai.com", "chat.openai.com", "chatgpt.com", "platform.openai.com",
+    "anthropic.com", "claude.ai",
+    "google.com", "www.google.com", "mail.google.com", "drive.google.com", 
+    "docs.google.com", "accounts.google.com", "play.google.com", "cloud.google.com",
+    "gemini.google.com", "bard.google.com",
+    "microsoft.com", "www.microsoft.com", "login.microsoftonline.com",
+    "office.com", "office365.com", "outlook.com", "outlook.live.com",
+    "live.com", "login.live.com", "azure.com", "portal.azure.com",
+    "bing.com", "copilot.microsoft.com",
+    "apple.com", "www.apple.com", "icloud.com", "appleid.apple.com",
+    "support.apple.com", "store.apple.com",
+    "amazon.com", "www.amazon.com", "aws.amazon.com", "console.aws.amazon.com",
+    "amazonaws.com", "amazon.co.uk", "amazon.de", "amazon.fr", "amazon.in",
+    
+    # Social Media
+    "facebook.com", "www.facebook.com", "m.facebook.com", "fb.com",
+    "instagram.com", "www.instagram.com",
+    "twitter.com", "x.com", "mobile.twitter.com",
+    "linkedin.com", "www.linkedin.com",
+    "tiktok.com", "www.tiktok.com",
+    "reddit.com", "www.reddit.com", "old.reddit.com",
+    "youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be",
+    "pinterest.com", "snapchat.com", "discord.com", "discord.gg",
+    "whatsapp.com", "web.whatsapp.com", "wa.me",
+    "telegram.org", "t.me", "web.telegram.org",
+    "slack.com", "app.slack.com",
+    
+    # Financial (Legitimate)
+    "paypal.com", "www.paypal.com", "paypal.me",
+    "chase.com", "www.chase.com", "secure.chase.com",
+    "bankofamerica.com", "www.bankofamerica.com",
+    "wellsfargo.com", "www.wellsfargo.com",
+    "citi.com", "citibank.com", "online.citi.com",
+    "capitalone.com", "www.capitalone.com",
+    "americanexpress.com", "www.americanexpress.com",
+    "discover.com", "www.discover.com",
+    "usbank.com", "www.usbank.com",
+    "stripe.com", "dashboard.stripe.com",
+    "square.com", "squareup.com", "cash.app",
+    "venmo.com", "account.venmo.com",
+    "wise.com", "transferwise.com",
+    
+    # Crypto (Legitimate)
+    "coinbase.com", "www.coinbase.com", "pro.coinbase.com",
+    "binance.com", "www.binance.com",
+    "kraken.com", "www.kraken.com",
+    "crypto.com",
+    
+    # Streaming/Entertainment
+    "netflix.com", "www.netflix.com",
+    "spotify.com", "open.spotify.com", "accounts.spotify.com",
+    "hulu.com", "www.hulu.com",
+    "disneyplus.com", "www.disneyplus.com",
+    "hbomax.com", "max.com",
+    "primevideo.com", "www.primevideo.com",
+    "twitch.tv", "www.twitch.tv",
+    
+    # E-commerce
+    "ebay.com", "www.ebay.com",
+    "walmart.com", "www.walmart.com",
+    "target.com", "www.target.com",
+    "bestbuy.com", "www.bestbuy.com",
+    "etsy.com", "www.etsy.com",
+    "shopify.com", "myshopify.com",
+    "aliexpress.com",
+    
+    # Shipping/Logistics (Legitimate)
+    "usps.com", "www.usps.com", "tools.usps.com",
+    "ups.com", "www.ups.com", "wwwapps.ups.com",
+    "fedex.com", "www.fedex.com",
+    "dhl.com", "www.dhl.com",
+    
+    # Email Providers
+    "gmail.com", "mail.google.com",
+    "yahoo.com", "mail.yahoo.com",
+    "protonmail.com", "mail.protonmail.com", "proton.me",
+    "zoho.com", "mail.zoho.com",
+    
+    # Development/Tech
+    "github.com", "www.github.com", "gist.github.com",
+    "gitlab.com", "www.gitlab.com",
+    "bitbucket.org",
+    "stackoverflow.com",
+    "npmjs.com", "www.npmjs.com",
+    "pypi.org",
+    "docker.com", "hub.docker.com",
+    "heroku.com", "herokuapp.com",
+    "railway.app",
+    "vercel.com", "vercel.app",
+    "netlify.com", "netlify.app",
+    "cloudflare.com", "dash.cloudflare.com",
+    "digitalocean.com",
+    "linode.com",
+    
+    # News/Media
+    "nytimes.com", "www.nytimes.com",
+    "washingtonpost.com",
+    "cnn.com", "www.cnn.com",
+    "bbc.com", "www.bbc.com", "bbc.co.uk",
+    "reuters.com", "www.reuters.com",
+    "theguardian.com",
+    "forbes.com", "www.forbes.com",
+    "bloomberg.com",
+    
+    # Productivity
+    "notion.so", "www.notion.so",
+    "trello.com",
+    "asana.com",
+    "monday.com",
+    "figma.com", "www.figma.com",
+    "canva.com", "www.canva.com",
+    "dropbox.com", "www.dropbox.com",
+    "box.com", "www.box.com",
+    "zoom.us", "us02web.zoom.us", "us04web.zoom.us",
+    "webex.com",
+    "teams.microsoft.com",
+    
+    # Government
+    "irs.gov", "www.irs.gov",
+    "ssa.gov", "www.ssa.gov",
+    "usa.gov", "www.usa.gov",
+    "medicare.gov", "www.medicare.gov",
+    "gov.uk", "www.gov.uk",
+    
+    # Education
+    "wikipedia.org", "en.wikipedia.org",
+    "khanacademy.org",
+    "coursera.org", "www.coursera.org",
+    "udemy.com", "www.udemy.com",
+    "edx.org", "www.edx.org",
+}
+
 # Brand domains for impersonation detection
 BRAND_DOMAINS = {
-    "microsoft": ["microsoft.com", "office.com", "outlook.com", "live.com"],
-    "google": ["google.com", "gmail.com", "youtube.com"],
-    "amazon": ["amazon.com", "amazon.co.uk", "amazonaws.com"],
+    "microsoft": ["microsoft.com", "office.com", "outlook.com", "live.com", "azure.com", "bing.com"],
+    "google": ["google.com", "gmail.com", "youtube.com", "googleapis.com", "gstatic.com"],
+    "amazon": ["amazon.com", "amazon.co.uk", "amazonaws.com", "aws.amazon.com", "primevideo.com"],
     "paypal": ["paypal.com", "paypal.me"],
-    "apple": ["apple.com", "icloud.com"],
-    "facebook": ["facebook.com", "fb.com", "instagram.com"],
+    "apple": ["apple.com", "icloud.com", "appleid.apple.com"],
+    "facebook": ["facebook.com", "fb.com", "instagram.com", "meta.com"],
     "netflix": ["netflix.com"],
     "chase": ["chase.com"],
     "wellsfargo": ["wellsfargo.com"],
     "bankofamerica": ["bankofamerica.com"],
+    "openai": ["openai.com", "chatgpt.com", "chat.openai.com"],
+    "anthropic": ["anthropic.com", "claude.ai"],
 }
 
 # Homoglyph characters
@@ -323,6 +462,7 @@ class SMSEvidenceCollector:
         self.specificity_calc = SpecificityCalculator()
         self.evidence_list: List[Evidence] = []
         self.api_status: Dict[str, str] = {}
+        self.is_safe_domain = False  # Track if URL is from a safe domain
     
     def set_api_status(self, status: Dict[str, str]):
         """Set API status for reliability calculations."""
@@ -331,6 +471,35 @@ class SMSEvidenceCollector:
     def clear(self):
         """Clear collected evidence."""
         self.evidence_list = []
+        self.is_safe_domain = False
+    
+    def _is_domain_safe(self, domain: str) -> bool:
+        """Check if domain is in the safe whitelist."""
+        domain_lower = domain.lower().strip()
+        
+        # Direct match
+        if domain_lower in SAFE_DOMAINS:
+            return True
+        
+        # Check if it's a subdomain of a safe domain
+        for safe_domain in SAFE_DOMAINS:
+            if domain_lower.endswith(f".{safe_domain}"):
+                return True
+            # Also check base domain match
+            if domain_lower == safe_domain or domain_lower == f"www.{safe_domain}":
+                return True
+        
+        return False
+    
+    def _get_base_domain(self, domain: str) -> str:
+        """Extract base domain from full domain."""
+        parts = domain.split('.')
+        if len(parts) >= 2:
+            # Handle common SLDs like co.uk
+            if len(parts) >= 3 and parts[-2] in ['co', 'com', 'org', 'net', 'gov', 'edu']:
+                return '.'.join(parts[-3:])
+            return '.'.join(parts[-2:])
+        return domain
     
     def collect_from_text(
         self,
@@ -342,6 +511,36 @@ class SMSEvidenceCollector:
         Collect all evidence from SMS/URL text.
         """
         text_lower = text.lower()
+        
+        # FIRST: Check if ALL URLs are from safe domains
+        all_urls_safe = True
+        safe_domain_found = None
+        
+        for url in urls:
+            try:
+                parsed = urlparse(url)
+                domain = parsed.netloc.lower()
+                if domain.startswith('www.'):
+                    domain = domain[4:]
+                
+                if self._is_domain_safe(domain):
+                    safe_domain_found = domain
+                else:
+                    all_urls_safe = False
+                    break
+            except:
+                all_urls_safe = False
+                break
+        
+        # If all URLs are safe and no suspicious text patterns, mark as safe
+        if urls and all_urls_safe:
+            self.is_safe_domain = True
+            logger.info(f"URL from safe domain: {safe_domain_found}")
+            return  # Skip evidence collection for safe domains
+        
+        # 1. Analyze URLs for risk indicators (only for non-safe domains)
+        if urls:
+            self._collect_url_evidence(urls)
         
         # 1. Analyze URLs
         self._collect_url_evidence(urls)
@@ -365,6 +564,11 @@ class SMSEvidenceCollector:
             try:
                 parsed = urlparse(url)
                 domain = parsed.netloc.lower()
+                
+                # SKIP safe domains entirely
+                if self._is_domain_safe(domain):
+                    logger.debug(f"Skipping safe domain: {domain}")
+                    continue
                 
                 # Check for IP address in URL
                 if re.match(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}', domain):
@@ -397,7 +601,7 @@ class SMSEvidenceCollector:
                         source=EvidenceSource.PATTERN_ENGINE,
                         description=f"Suspicious TLD: .{tld}",
                         raw_value=domain,
-                        specificity_boost=-0.1,  # Less specific
+                        specificity_boost=0.1,  # Suspicious TLD is more specific
                     )
                 
                 # Check for excessive subdomains
@@ -420,10 +624,10 @@ class SMSEvidenceCollector:
                         source=EvidenceSource.LOOKALIKE_DETECTOR,
                         description=f"Homoglyph characters in domain: {homoglyphs_found}",
                         raw_value=domain,
-                        specificity_boost=0.2,
+                        specificity_boost=0.25,  # Homoglyphs are very suspicious
                     )
                 
-                # Check for brand in URL
+                # Check for brand in URL (only for non-safe domains)
                 brand_match = self._check_brand_in_url(domain, url)
                 if brand_match:
                     self._add_evidence(
@@ -432,6 +636,7 @@ class SMSEvidenceCollector:
                         source=EvidenceSource.PATTERN_ENGINE,
                         description=f"Brand '{brand_match}' in suspicious URL",
                         raw_value=url,
+                        specificity_boost=0.15,
                     )
                 
                 # Check for credential parameters
@@ -449,7 +654,7 @@ class SMSEvidenceCollector:
                         )
                         break
                 
-                # Check for no HTTPS
+                # Check for no HTTPS (only a minor indicator)
                 if parsed.scheme == 'http':
                     self._add_evidence(
                         evidence_type=EvidenceType.EXTERNAL_LINK,
@@ -457,7 +662,7 @@ class SMSEvidenceCollector:
                         source=EvidenceSource.PATTERN_ENGINE,
                         description="URL uses insecure HTTP",
                         raw_value=url,
-                        specificity_boost=-0.1,
+                        specificity_boost=-0.15,  # Very minor indicator
                     )
                 
             except Exception as e:
@@ -950,6 +1155,22 @@ class SMSDynamicScorer:
         # From text and URLs
         collector.collect_from_text(text, urls, sender)
         
+        # CHECK: If all URLs are from safe domains, return very low score
+        if collector.is_safe_domain:
+            logger.info("All URLs from safe domains - returning clean score")
+            return FinalScore(
+                value=0,
+                level="informational",
+                confidence=0.95,
+                verdict="⚪ SAFE - Legitimate domain (95% confidence)",
+                classification="Legitimate",
+                attack_chains=[],
+                top_evidence=[],
+                explanation=["✅ URL belongs to a known legitimate domain"],
+                recommended_action="No action needed - legitimate URL",
+                mitre_techniques=[],
+            )
+        
         # From enrichment
         if url_enrichment:
             collector.add_from_enrichment(url_enrichment, url_sandbox)
@@ -959,6 +1180,21 @@ class SMSDynamicScorer:
             collector.add_from_ai_analysis(ai_analysis)
         
         evidence_list = collector.get_all_evidence()
+        
+        # If no evidence and no TI flags, return low score
+        if not evidence_list and not url_enrichment:
+            return FinalScore(
+                value=5,
+                level="informational",
+                confidence=0.6,
+                verdict="⚪ LOW RISK - No suspicious indicators found",
+                classification="Unknown",
+                attack_chains=[],
+                top_evidence=[],
+                explanation=["No suspicious patterns detected"],
+                recommended_action="Appears safe, exercise normal caution",
+                mitre_techniques=[],
+            )
         
         # Build TI results from enrichment
         ti_results = self._build_ti_results(url_enrichment, url_sandbox)
@@ -973,6 +1209,10 @@ class SMSDynamicScorer:
         ai_score = ai_analysis.get("confidence", 0) * 20 if ai_analysis else 0
         correlation_bonus = self._calc_correlation(evidence_list, ti_score, chains)
         
+        # HIGH-RISK URL PATTERN BOOST
+        # Directly boost score for obvious phishing patterns
+        url_risk_boost = self._calc_url_risk_boost(urls, evidence_list)
+        
         # Dynamic weights
         weights = self._calc_weights(evidence_list, ti_score, chains, ai_analysis)
         
@@ -982,7 +1222,8 @@ class SMSDynamicScorer:
             ti_score.value * weights["ti"] +
             chain_score * weights["chain"] +
             ai_score * weights["ai"] +
-            correlation_bonus
+            correlation_bonus +
+            url_risk_boost  # Add URL risk boost
         )
         
         # Confidence
@@ -1073,18 +1314,49 @@ class SMSDynamicScorer:
             return 0.0
         
         total = 0.0
+        high_risk_indicators = 0
+        
         for evidence in evidence_list:
             weight = self.evidence_weighter.calculate_weight(
                 evidence, evidence_list, ti_score
             )
-            # Increased scale factor for more sensitive detection
-            total += evidence.quality_score * weight * 15
+            
+            # Base contribution
+            contrib = evidence.quality_score * weight * 18
+            
+            # BOOST for high-risk evidence types
+            if evidence.evidence_type in [
+                EvidenceType.HOMOGLYPH_DETECTED,
+                EvidenceType.BRAND_IN_URL,
+                EvidenceType.BRAND_KEYWORD_MISMATCH,
+                EvidenceType.CREDENTIAL_REQUEST,
+            ]:
+                contrib *= 1.5
+                high_risk_indicators += 1
+            
+            # BOOST for suspicious TLDs
+            if evidence.category == EvidenceCategory.INFRASTRUCTURE:
+                if "suspicious tld" in (evidence.description or "").lower():
+                    contrib *= 1.4
+                    high_risk_indicators += 1
+            
+            # BOOST for URL shorteners (hiding destination)
+            if evidence.evidence_type == EvidenceType.SHORTENED_URL:
+                contrib *= 1.3
+            
+            total += contrib
         
-        # Less aggressive diminishing returns to catch more threats
+        # Softer diminishing returns
         count = len(evidence_list)
         if count > 1:
-            scale = 1 + (math.log(count + 1) / math.log(6))  # Softer scaling
-            total = (total / scale) * 1.5
+            scale = 1 + (math.log(count + 1) / math.log(8))
+            total = (total / scale) * 1.6
+        
+        # High-risk indicator bonus
+        if high_risk_indicators >= 2:
+            total += 20
+        elif high_risk_indicators >= 1:
+            total += 10
         
         return min(100, total)
     
@@ -1096,12 +1368,12 @@ class SMSDynamicScorer:
         score = 0.0
         for chain in chains:
             # Increased chain contribution
-            contrib = chain.confidence * 35
+            contrib = chain.confidence * 45
             if chain.ti_confirmation:
-                contrib *= 1.3
+                contrib *= 1.4
             score += contrib
         
-        return min(score, 50)
+        return min(score, 60)
     
     def _calc_correlation(
         self,
@@ -1132,6 +1404,83 @@ class SMSDynamicScorer:
             bonus += 5
         
         return min(bonus, 25)
+    
+    def _calc_url_risk_boost(
+        self,
+        urls: List[str],
+        evidence_list: List[Evidence],
+    ) -> float:
+        """
+        Calculate direct URL risk boost for obvious phishing patterns.
+        
+        This catches cases where URL structure alone indicates phishing:
+        - Suspicious TLD + brand impersonation
+        - Homoglyphs in domain
+        - Known phishing patterns
+        """
+        if not urls:
+            return 0.0
+        
+        boost = 0.0
+        
+        for url in urls:
+            try:
+                parsed = urlparse(url)
+                domain = parsed.netloc.lower()
+                path = parsed.path.lower()
+                
+                # Skip safe domains
+                if domain in SAFE_DOMAINS or any(domain.endswith(f".{sd}") for sd in SAFE_DOMAINS):
+                    continue
+                
+                tld = domain.split('.')[-1] if '.' in domain else ''
+                
+                # HIGH RISK: Suspicious TLD + brand in domain/path
+                if tld in SUSPICIOUS_TLDS:
+                    boost += 15  # Base boost for suspicious TLD
+                    
+                    # Check for brand impersonation
+                    for brand in BRAND_DOMAINS.keys():
+                        if brand in domain or brand in path:
+                            boost += 25  # Brand + suspicious TLD = phishing
+                            logger.info(f"High-risk pattern: {brand} in {domain} with .{tld}")
+                            break
+                
+                # HIGH RISK: Homoglyphs (character substitution)
+                has_homoglyph = any(
+                    e.evidence_type == EvidenceType.HOMOGLYPH_DETECTED 
+                    for e in evidence_list
+                )
+                if has_homoglyph:
+                    boost += 25
+                
+                # MEDIUM RISK: Brand in non-brand domain
+                for brand, legit_domains in BRAND_DOMAINS.items():
+                    if brand in domain:
+                        is_legit = any(
+                            domain == d or domain.endswith(f".{d}") 
+                            for d in legit_domains
+                        )
+                        if not is_legit:
+                            boost += 20
+                            break
+                
+                # MEDIUM RISK: Login/verify/secure in path with suspicious domain
+                risky_paths = ['login', 'verify', 'secure', 'account', 'update', 'confirm']
+                for risky in risky_paths:
+                    if risky in path:
+                        boost += 10
+                        break
+                
+                # MEDIUM RISK: URL shortener
+                base_domain = domain.split('.')[-2] + '.' + tld if domain.count('.') >= 1 else domain
+                if base_domain in URL_SHORTENERS or domain in URL_SHORTENERS:
+                    boost += 12
+                
+            except Exception as e:
+                logger.warning(f"Error calculating URL risk boost: {e}")
+        
+        return min(boost, 50)  # Cap at 50 to prevent runaway scores
     
     def _calc_weights(
         self,

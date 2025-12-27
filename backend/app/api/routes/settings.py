@@ -23,6 +23,8 @@ class APIKeyConfig(BaseModel):
     abuseipdb_api_key: Optional[str] = Field(None, description="AbuseIPDB API key")
     phishtank_api_key: Optional[str] = Field(None, description="PhishTank API key")
     mxtoolbox_api_key: Optional[str] = Field(None, description="MXToolbox API key")
+    ipqualityscore_api_key: Optional[str] = Field(None, description="IPQualityScore API key")
+    google_safebrowsing_api_key: Optional[str] = Field(None, description="Google Safe Browsing API key")
     anthropic_api_key: Optional[str] = Field(None, description="Anthropic API key")
     openai_api_key: Optional[str] = Field(None, description="OpenAI API key")
     hybrid_analysis_api_key: Optional[str] = Field(None, description="Hybrid Analysis API key")
@@ -69,6 +71,8 @@ async def get_current_settings(
         "abuseipdb": bool(settings.abuseipdb_api_key if settings else False),
         "phishtank": bool(settings.phishtank_api_key if settings else False),
         "mxtoolbox": bool(getattr(settings, 'mxtoolbox_api_key', None) if settings else False),
+        "ipqualityscore": bool(getattr(settings, 'ipqualityscore_api_key', None) if settings else False),
+        "google_safebrowsing": bool(getattr(settings, 'google_safebrowsing_api_key', None) if settings else False),
         "anthropic": bool(settings.anthropic_api_key if settings else False),
         "openai": bool(settings.openai_api_key if settings else False),
         "hybrid_analysis": bool(getattr(settings, 'hybrid_analysis_api_key', None) if settings else False),
@@ -123,6 +127,10 @@ async def update_settings(
             settings.phishtank_api_key = updates.api_keys.phishtank_api_key
         if updates.api_keys.mxtoolbox_api_key:
             settings.mxtoolbox_api_key = updates.api_keys.mxtoolbox_api_key
+        if updates.api_keys.ipqualityscore_api_key:
+            settings.ipqualityscore_api_key = updates.api_keys.ipqualityscore_api_key
+        if updates.api_keys.google_safebrowsing_api_key:
+            settings.google_safebrowsing_api_key = updates.api_keys.google_safebrowsing_api_key
         if updates.api_keys.anthropic_api_key:
             settings.anthropic_api_key = updates.api_keys.anthropic_api_key
             # Reinitialize AI analyzer

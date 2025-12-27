@@ -779,9 +779,11 @@ async def enrich_urls(urls: List[str]) -> List[URLEnrichmentResult]:
     Enrich URLs with threat intelligence from multiple sources.
     
     Sources (in order of reliability):
-    1. URLhaus - Free, no rate limits, malware database
-    2. PhishTank - Free, no rate limits, phishing database  
-    3. VirusTotal - Has rate limits (4/min free tier), reputation check
+    1. Google Safe Browsing - Google's threat database
+    2. IPQualityScore - Comprehensive URL scanning  
+    3. URLhaus - Free, no rate limits, malware database
+    4. PhishTank - Free, no rate limits, phishing database  
+    5. VirusTotal - Has rate limits (4/min free tier), reputation check
     
     The function gracefully handles when any source fails or is unavailable.
     """
@@ -792,14 +794,25 @@ async def enrich_urls(urls: List[str]) -> List[URLEnrichmentResult]:
         from app.services.enrichment.virustotal import VirusTotalProvider
         from app.services.enrichment.phishtank import PhishTankProvider
         from app.services.enrichment.urlhaus import URLhausProvider
+        from app.services.enrichment.ipqualityscore import IPQualityScoreClient
+        from app.services.enrichment.google_safebrowsing import GoogleSafeBrowsingClient
+        from app.config import get_settings
+        
+        settings = get_settings()
         
         vt = VirusTotalProvider()
         pt = PhishTankProvider()
         uh = URLhausProvider()
         
+        # Initialize new providers
+        ipqs = IPQualityScoreClient(getattr(settings, 'ipqualityscore_api_key', '') or '')
+        gsb = GoogleSafeBrowsingClient(getattr(settings, 'google_safebrowsing_api_key', '') or '')
+        
         # Log which services are available
         vt_available = vt.is_configured
-        logger.info(f"URL enrichment services: VT={vt_available}, PT=True, UH=True")
+        ipqs_available = bool(ipqs.api_key)
+        gsb_available = bool(gsb.api_key)
+        logger.info(f"URL enrichment services: VT={vt_available}, PT=True, UH=True, IPQS={ipqs_available}, GSB={gsb_available}")
         
         for url in urls[:5]:  # Limit to 5 URLs
             try:
@@ -813,7 +826,53 @@ async def enrich_urls(urls: List[str]) -> List[URLEnrichmentResult]:
                 
                 sources = []
                 
-                # URLhaus check FIRST (free, no limits, most reliable for malware)
+                # Google Safe Browsing check FIRST (highly reliable)
+                if gsb_available:
+                    try:
+                        gsb_result = await gsb.check_url(url)
+                        if gsb_result and not gsb_result.get('error'):
+                            if gsb_result.get('is_malicious'):
+                                enrichment.is_malicious = True
+                                enrichment.threat_score = max(enrichment.threat_score, 95)
+                                sources.append("Google Safe Browsing")
+                                primary_threat = gsb_result.get('primary_threat', 'malicious')
+                                enrichment.categories.append(f"GSB: {primary_threat}")
+                                logger.info(f"Google Safe Browsing: {url} flagged as {primary_threat}")
+                            elif gsb_result.get('safe') is True:
+                                # Clean in GSB is a positive signal
+                                sources.append("Google Safe Browsing")
+                    except Exception as e:
+                        logger.debug(f"Google Safe Browsing check failed for {url}: {e}")
+                
+                # IPQualityScore check (comprehensive)
+                if ipqs_available:
+                    try:
+                        ipqs_result = await ipqs.scan_url(url)
+                        if ipqs_result and ipqs_result.get('success'):
+                            risk_score = ipqs_result.get('risk_score', 0)
+                            if ipqs_result.get('is_phishing') or ipqs_result.get('is_malware'):
+                                enrichment.is_malicious = True
+                                enrichment.threat_score = max(enrichment.threat_score, 90)
+                                sources.append("IPQualityScore")
+                                if ipqs_result.get('is_phishing'):
+                                    enrichment.categories.append("IPQS: phishing")
+                                if ipqs_result.get('is_malware'):
+                                    enrichment.categories.append("IPQS: malware")
+                                logger.info(f"IPQualityScore: {url} flagged (risk: {risk_score})")
+                            elif risk_score >= 75:
+                                enrichment.is_malicious = True
+                                enrichment.threat_score = max(enrichment.threat_score, risk_score)
+                                sources.append("IPQualityScore")
+                                logger.info(f"IPQualityScore: {url} high risk ({risk_score})")
+                            elif risk_score >= 50:
+                                enrichment.threat_score = max(enrichment.threat_score, risk_score)
+                                sources.append("IPQualityScore")
+                            else:
+                                sources.append("IPQualityScore")
+                    except Exception as e:
+                        logger.debug(f"IPQualityScore check failed for {url}: {e}")
+                
+                # URLhaus check (free, no limits, most reliable for malware)
                 try:
                     uh_result = await uh.check_url(url)
                     if uh_result and uh_result.get('threat'):

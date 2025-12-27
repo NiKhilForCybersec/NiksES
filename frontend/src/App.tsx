@@ -30,6 +30,7 @@ import ResultsPanel from './components/analysis/ResultsPanel';
 import { SettingsModal, APIStatusIndicator, APISetupBanner, SettingsState } from './components/settings';
 import HistoryPanel from './components/history/HistoryPanel';
 import { FullSOCToolsView } from './components/soc-tools';
+import { DetectionEngineViz } from './components/detection-viz';
 
 // Types
 interface AnalysisResult {
@@ -139,6 +140,7 @@ function App() {
   const [debugMode, setDebugMode] = useState(false);
   const [globalSettings, setGlobalSettings] = useState<SettingsState | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [detectionVizOpen, setDetectionVizOpen] = useState(false);
 
   // SMS/Text analysis state
   const [inputType, setInputType] = useState<'email' | 'sms'>('email');
@@ -771,6 +773,14 @@ function App() {
             <span className="text-sm">Dashboard</span>
           </button>
           <button
+            onClick={() => setDetectionVizOpen(true)}
+            className="px-4 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 rounded-lg transition flex items-center gap-2 group"
+            title="View Detection Engine Architecture"
+          >
+            <Zap className="w-4 h-4 group-hover:animate-pulse" />
+            <span className="text-sm">DIDA Engine</span>
+          </button>
+          <button
             onClick={() => setHistoryOpen(true)}
             className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition flex items-center gap-2"
           >
@@ -1338,6 +1348,34 @@ function App() {
           onClose={() => setDashboardOpen(false)}
         />
       )}
+
+      {/* Detection Engine Visualization Modal */}
+      <DetectionEngineViz
+        isOpen={detectionVizOpen}
+        onClose={() => setDetectionVizOpen(false)}
+        analysisData={result ? {
+          score: result.detection?.risk_score,
+          level: result.detection?.risk_level,
+          confidence: result.detection?.confidence,
+          evidenceCount: result.detection?.rules_triggered?.length,
+          rules_triggered: result.detection?.rules_triggered,
+          attackChains: enhancedResult?.attack_chains || (result.detection as any)?.attack_chains,
+          breakdown: enhancedResult?.breakdown || (result.detection as any)?.breakdown,
+          ti_results: enhancedResult?.ti_results || result.enrichment,
+        } : (textAnalysisResult ? {
+          score: textAnalysisResult.risk_score,
+          level: textAnalysisResult.risk_level,
+          confidence: textAnalysisResult.confidence,
+          rules_triggered: textAnalysisResult.indicators?.map((ind: any, i: number) => ({
+            rule_id: `indicator_${i}`,
+            description: ind,
+            category: 'content',
+            score: 50,
+          })),
+          attackChains: textAnalysisResult.attack_chains,
+          breakdown: textAnalysisResult.breakdown,
+        } : undefined)}
+      />
 
       {/* Full Analysis View Modal */}
       {fullAnalysisOpen && result && (

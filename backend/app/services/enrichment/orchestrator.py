@@ -33,6 +33,8 @@ from .abuseipdb import AbuseIPDBProvider, get_abuseipdb_provider
 from .urlhaus import URLhausProvider, get_urlhaus_provider
 from .phishtank import PhishTankProvider, get_phishtank_provider
 from .mxtoolbox import MXToolboxProvider, get_mxtoolbox_provider
+from .ipqualityscore import IPQualityScoreClient
+from .google_safebrowsing import GoogleSafeBrowsingClient
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +62,8 @@ class EnrichmentOrchestrator:
         abuseipdb_api_key: Optional[str] = None,
         phishtank_api_key: Optional[str] = None,
         mxtoolbox_api_key: Optional[str] = None,
+        ipqualityscore_api_key: Optional[str] = None,
+        google_safebrowsing_api_key: Optional[str] = None,
     ):
         # Initialize providers
         self.geoip = get_geoip_provider()
@@ -71,6 +75,10 @@ class EnrichmentOrchestrator:
         self.phishtank = get_phishtank_provider(phishtank_api_key)
         self.mxtoolbox = get_mxtoolbox_provider(mxtoolbox_api_key)
         
+        # New providers
+        self.ipqualityscore = IPQualityScoreClient(ipqualityscore_api_key or "")
+        self.google_safebrowsing = GoogleSafeBrowsingClient(google_safebrowsing_api_key or "")
+        
         # Simple in-memory cache
         self._cache: Dict[str, Dict[str, Any]] = {}
         self._cache_timestamps: Dict[str, datetime] = {}
@@ -81,6 +89,8 @@ class EnrichmentOrchestrator:
         abuseipdb_api_key: Optional[str] = None,
         phishtank_api_key: Optional[str] = None,
         mxtoolbox_api_key: Optional[str] = None,
+        ipqualityscore_api_key: Optional[str] = None,
+        google_safebrowsing_api_key: Optional[str] = None,
     ) -> None:
         """Update API keys for providers."""
         if virustotal_api_key:
@@ -91,6 +101,10 @@ class EnrichmentOrchestrator:
             self.phishtank = get_phishtank_provider(phishtank_api_key)
         if mxtoolbox_api_key:
             self.mxtoolbox = get_mxtoolbox_provider(mxtoolbox_api_key)
+        if ipqualityscore_api_key:
+            self.ipqualityscore = IPQualityScoreClient(ipqualityscore_api_key)
+        if google_safebrowsing_api_key:
+            self.google_safebrowsing = GoogleSafeBrowsingClient(google_safebrowsing_api_key)
     
     def _get_cache(self, key: str) -> Optional[Dict[str, Any]]:
         """Get cached result if valid."""
@@ -355,13 +369,17 @@ class EnrichmentOrchestrator:
         if cached:
             return URLEnrichment(**cached)
         
-        # Run lookups in parallel
+        # Run lookups in parallel - include new APIs
         vt_task = self.virustotal.check_url(url.url) if self.virustotal.is_configured else asyncio.sleep(0)
         urlhaus_task = self.urlhaus.check_url(url.url)
         phishtank_task = self.phishtank.check_url(url.url)
         
-        vt_data, urlhaus_data, phishtank_data = await asyncio.gather(
-            vt_task, urlhaus_task, phishtank_task,
+        # New API tasks
+        ipqs_task = self.ipqualityscore.scan_url(url.url) if self.ipqualityscore.api_key else asyncio.sleep(0)
+        gsb_task = self.google_safebrowsing.check_url(url.url) if self.google_safebrowsing.api_key else asyncio.sleep(0)
+        
+        vt_data, urlhaus_data, phishtank_data, ipqs_data, gsb_data = await asyncio.gather(
+            vt_task, urlhaus_task, phishtank_task, ipqs_task, gsb_task,
             return_exceptions=True
         )
         
@@ -369,13 +387,33 @@ class EnrichmentOrchestrator:
         vt_data = vt_data if isinstance(vt_data, dict) else {}
         urlhaus_data = urlhaus_data if isinstance(urlhaus_data, dict) else {}
         phishtank_data = phishtank_data if isinstance(phishtank_data, dict) else {}
+        ipqs_data = ipqs_data if isinstance(ipqs_data, dict) else {}
+        gsb_data = gsb_data if isinstance(gsb_data, dict) else {}
         
-        # Determine final verdict
+        # Determine final verdict - include new sources
         verdicts = [
             vt_data.get('verdict', ThreatIntelVerdict.UNKNOWN),
             urlhaus_data.get('verdict', ThreatIntelVerdict.UNKNOWN),
             phishtank_data.get('verdict', ThreatIntelVerdict.UNKNOWN),
         ]
+        
+        # Add IPQS verdict
+        if ipqs_data.get('success'):
+            if ipqs_data.get('is_phishing') or ipqs_data.get('is_malware'):
+                verdicts.append(ThreatIntelVerdict.MALICIOUS)
+            elif ipqs_data.get('is_suspicious') or ipqs_data.get('risk_score', 0) >= 75:
+                verdicts.append(ThreatIntelVerdict.SUSPICIOUS)
+            elif ipqs_data.get('risk_score', 0) >= 50:
+                verdicts.append(ThreatIntelVerdict.SUSPICIOUS)
+            else:
+                verdicts.append(ThreatIntelVerdict.CLEAN)
+        
+        # Add Google Safe Browsing verdict
+        if not gsb_data.get('error'):
+            if gsb_data.get('is_malicious'):
+                verdicts.append(ThreatIntelVerdict.MALICIOUS)
+            elif gsb_data.get('safe') is True:
+                verdicts.append(ThreatIntelVerdict.CLEAN)
         
         final_verdict = self._combine_verdicts(verdicts)
         
@@ -392,6 +430,17 @@ class EnrichmentOrchestrator:
             phishtank_in_database=phishtank_data.get('in_database', False),
             phishtank_verified=phishtank_data.get('verified', False),
             phishtank_verified_at=phishtank_data.get('verified_at'),
+            # IPQualityScore fields
+            ipqs_risk_score=ipqs_data.get('risk_score') if ipqs_data.get('success') else None,
+            ipqs_is_phishing=ipqs_data.get('is_phishing', False) if ipqs_data.get('success') else None,
+            ipqs_is_malware=ipqs_data.get('is_malware', False) if ipqs_data.get('success') else None,
+            ipqs_is_suspicious=ipqs_data.get('is_suspicious', False) if ipqs_data.get('success') else None,
+            ipqs_domain_age=ipqs_data.get('domain_age', {}).get('human') if ipqs_data.get('success') else None,
+            ipqs_threat_level=ipqs_data.get('threat_level') if ipqs_data.get('success') else None,
+            # Google Safe Browsing fields
+            gsb_is_safe=gsb_data.get('safe') if not gsb_data.get('error') else None,
+            gsb_threats=gsb_data.get('threats', []) if not gsb_data.get('error') else [],
+            gsb_primary_threat=gsb_data.get('primary_threat') if not gsb_data.get('error') else None,
             final_verdict=final_verdict,
             is_shortened=url.is_shortened,
         )
