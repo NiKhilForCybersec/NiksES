@@ -127,6 +127,41 @@ const getSourceIcon = (source: string | undefined | null) => {
 };
 
 const TextAnalysisResults: React.FC<Props> = ({ result, onClose }) => {
+  // Normalize result with safe defaults to prevent crashes
+  const safeResult = {
+    analysis_id: result?.analysis_id || '',
+    analyzed_at: result?.analyzed_at || new Date().toISOString(),
+    analysis_type: result?.analysis_type || 'url',
+    source: result?.source || 'url',
+    original_text: result?.original_text || '',
+    message_length: result?.message_length || (result?.original_text || '').length || 0,
+    overall_score: result?.overall_score || 0,
+    overall_level: result?.overall_level || 'low',
+    classification: result?.classification || 'unknown',
+    is_threat: result?.is_threat || false,
+    confidence: result?.confidence || 0,
+    urls_found: result?.urls_found || [],
+    domains_found: result?.domains_found || [],
+    ips_found: result?.ips_found || [],
+    phone_numbers_found: result?.phone_numbers_found || [],
+    url_enrichment: result?.url_enrichment || [],
+    url_sandbox: result?.url_sandbox || [],
+    patterns_matched: result?.patterns_matched || [],
+    threat_indicators: result?.threat_indicators || [],
+    ai_analysis: result?.ai_analysis || {
+      enabled: false,
+      provider: '',
+      summary: '',
+      threat_assessment: '',
+      key_findings: [],
+      social_engineering_tactics: [],
+      recommendations: [],
+      confidence: 0,
+    },
+    recommendations: result?.recommendations || [],
+    mitre_techniques: result?.mitre_techniques || [],
+  };
+
   const [expandedSections, setExpandedSections] = React.useState<Record<string, boolean>>({
     indicators: true,
     patterns: true,
@@ -143,18 +178,18 @@ const TextAnalysisResults: React.FC<Props> = ({ result, onClose }) => {
     navigator.clipboard.writeText(text);
   };
 
-  const isUrlMode = result.source === 'url';
+  const isUrlMode = safeResult.source === 'url';
 
   return (
     <div className="space-y-4 md:space-y-6">
       {/* Header with Risk Score */}
-      <div className={`p-4 md:p-6 rounded-xl border-2 ${getRiskColor(result.overall_level)}`}>
+      <div className={`p-4 md:p-6 rounded-xl border-2 ${getRiskColor(safeResult.overall_level)}`}>
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3 md:gap-4">
             <div className={`w-12 h-12 md:w-16 md:h-16 rounded-xl flex items-center justify-center ${
-              result.is_threat ? 'bg-red-500/30' : 'bg-green-500/30'
+              safeResult.is_threat ? 'bg-red-500/30' : 'bg-green-500/30'
             }`}>
-              {result.is_threat ? (
+              {safeResult.is_threat ? (
                 <AlertTriangle className="w-6 h-6 md:w-8 md:h-8 text-red-400" />
               ) : (
                 <CheckCircle className="w-6 h-6 md:w-8 md:h-8 text-green-400" />
@@ -162,13 +197,13 @@ const TextAnalysisResults: React.FC<Props> = ({ result, onClose }) => {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                {getSourceIcon(result.source)}
+                {getSourceIcon(safeResult.source)}
                 <h2 className="text-lg md:text-xl font-bold">
-                  {isUrlMode ? 'URL Analysis' : `${(result.source || 'TEXT').toUpperCase()} Analysis`}
+                  {isUrlMode ? 'URL Analysis' : `${(safeResult.source || 'TEXT').toUpperCase()} Analysis`}
                 </h2>
               </div>
               <p className="text-xs md:text-sm text-slate-400 mt-1">
-                {(result.classification || 'unknown').replace(/_/g, ' ').toUpperCase()}
+                {(safeResult.classification || 'unknown').replace(/_/g, ' ').toUpperCase()}
               </p>
             </div>
           </div>
@@ -176,11 +211,11 @@ const TextAnalysisResults: React.FC<Props> = ({ result, onClose }) => {
           {/* Risk Score Circle */}
           <div className="text-center self-end sm:self-auto">
             <div className={`w-16 h-16 md:w-20 md:h-20 rounded-full border-4 flex items-center justify-center ${
-              result.overall_score >= 70 ? 'border-red-500' :
-              result.overall_score >= 40 ? 'border-orange-500' :
-              result.overall_score >= 20 ? 'border-yellow-500' : 'border-green-500'
+              safeResult.overall_score >= 70 ? 'border-red-500' :
+              safeResult.overall_score >= 40 ? 'border-orange-500' :
+              safeResult.overall_score >= 20 ? 'border-yellow-500' : 'border-green-500'
             }`}>
-              <span className="text-xl md:text-2xl font-bold">{result.overall_score}</span>
+              <span className="text-xl md:text-2xl font-bold">{safeResult.overall_score}</span>
             </div>
             <p className="text-[10px] md:text-xs text-slate-400 mt-1">Risk Score</p>
           </div>
@@ -189,19 +224,19 @@ const TextAnalysisResults: React.FC<Props> = ({ result, onClose }) => {
         {/* Quick Stats */}
         <div className="grid grid-cols-4 gap-2 md:gap-4 mt-4 md:mt-6">
           <div className="bg-slate-800/50 rounded-lg p-2 md:p-3 text-center">
-            <p className="text-lg md:text-2xl font-bold text-blue-400">{result.urls_found.length}</p>
+            <p className="text-lg md:text-2xl font-bold text-blue-400">{safeResult.urls_found.length}</p>
             <p className="text-[10px] md:text-xs text-slate-400">URLs</p>
           </div>
           <div className="bg-slate-800/50 rounded-lg p-2 md:p-3 text-center">
-            <p className="text-lg md:text-2xl font-bold text-purple-400">{result.patterns_matched.length}</p>
+            <p className="text-lg md:text-2xl font-bold text-purple-400">{safeResult.patterns_matched.length}</p>
             <p className="text-[10px] md:text-xs text-slate-400">Patterns</p>
           </div>
           <div className="bg-slate-800/50 rounded-lg p-2 md:p-3 text-center">
-            <p className="text-lg md:text-2xl font-bold text-orange-400">{result.phone_numbers_found.length}</p>
+            <p className="text-lg md:text-2xl font-bold text-orange-400">{safeResult.phone_numbers_found.length}</p>
             <p className="text-[10px] md:text-xs text-slate-400">Phones</p>
           </div>
           <div className="bg-slate-800/50 rounded-lg p-2 md:p-3 text-center">
-            <p className="text-lg md:text-2xl font-bold text-green-400">{Math.round(result.confidence * 100)}%</p>
+            <p className="text-lg md:text-2xl font-bold text-green-400">{Math.round(safeResult.confidence * 100)}%</p>
             <p className="text-[10px] md:text-xs text-slate-400">Confidence</p>
           </div>
         </div>
@@ -214,12 +249,12 @@ const TextAnalysisResults: React.FC<Props> = ({ result, onClose }) => {
           Original Content
         </h3>
         <div className="bg-slate-900 rounded-lg p-3 md:p-4 font-mono text-xs md:text-sm text-slate-300 whitespace-pre-wrap break-all max-h-32 md:max-h-40 overflow-y-auto">
-          {result.original_text}
+          {safeResult.original_text || '(No content)'}
         </div>
         <div className="flex items-center justify-between mt-2 text-[10px] md:text-xs text-slate-500">
-          <span>{result.message_length} characters</span>
+          <span>{safeResult.message_length} characters</span>
           <button
-            onClick={() => copyToClipboard(result.original_text)}
+            onClick={() => copyToClipboard(safeResult.original_text)}
             className="flex items-center gap-1 hover:text-slate-300"
           >
             <Copy className="w-3 h-3" /> Copy
@@ -228,7 +263,7 @@ const TextAnalysisResults: React.FC<Props> = ({ result, onClose }) => {
       </div>
 
       {/* AI Analysis */}
-      {result.ai_analysis.enabled && (
+      {safeResult.ai_analysis.enabled && (
         <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
           <button
             onClick={() => toggleSection('ai')}
@@ -237,9 +272,9 @@ const TextAnalysisResults: React.FC<Props> = ({ result, onClose }) => {
             <div className="flex items-center gap-2">
               <Brain className="w-5 h-5 text-purple-400" />
               <h3 className="font-semibold">AI Analysis</h3>
-              {result.ai_analysis.provider && (
+              {safeResult.ai_analysis.provider && (
                 <span className="text-xs bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded">
-                  {result.ai_analysis.provider}
+                  {safeResult.ai_analysis.provider}
                 </span>
               )}
             </div>
@@ -250,27 +285,27 @@ const TextAnalysisResults: React.FC<Props> = ({ result, onClose }) => {
             <div className="p-4 pt-0 space-y-4">
               {/* Summary */}
               <div className="bg-slate-900 rounded-lg p-4">
-                <p className="text-slate-300">{result.ai_analysis.summary}</p>
+                <p className="text-slate-300">{safeResult.ai_analysis.summary}</p>
               </div>
 
               {/* Threat Assessment */}
-              {result.ai_analysis.threat_assessment && (
+              {safeResult.ai_analysis.threat_assessment && (
                 <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full ${
-                  result.ai_analysis.threat_assessment === 'MALICIOUS' ? 'bg-red-500/20 text-red-300' :
-                  result.ai_analysis.threat_assessment === 'SUSPICIOUS' ? 'bg-orange-500/20 text-orange-300' :
+                  safeResult.ai_analysis.threat_assessment === 'MALICIOUS' ? 'bg-red-500/20 text-red-300' :
+                  safeResult.ai_analysis.threat_assessment === 'SUSPICIOUS' ? 'bg-orange-500/20 text-orange-300' :
                   'bg-green-500/20 text-green-300'
                 }`}>
                   <Shield className="w-4 h-4" />
-                  {result.ai_analysis.threat_assessment}
+                  {safeResult.ai_analysis.threat_assessment}
                 </div>
               )}
 
               {/* Key Findings */}
-              {result.ai_analysis.key_findings.length > 0 && (
+              {safeResult.ai_analysis.key_findings.length > 0 && (
                 <div>
                   <h4 className="text-sm font-medium text-slate-400 mb-2">Key Findings</h4>
                   <ul className="space-y-1">
-                    {result.ai_analysis.key_findings.map((finding, i) => (
+                    {safeResult.ai_analysis.key_findings.map((finding, i) => (
                       <li key={i} className="flex items-start gap-2 text-sm text-slate-300">
                         <AlertCircle className="w-4 h-4 text-yellow-400 mt-0.5 flex-shrink-0" />
                         {finding}
@@ -281,11 +316,11 @@ const TextAnalysisResults: React.FC<Props> = ({ result, onClose }) => {
               )}
 
               {/* Social Engineering Tactics */}
-              {result.ai_analysis.social_engineering_tactics.length > 0 && (
+              {safeResult.ai_analysis.social_engineering_tactics.length > 0 && (
                 <div>
                   <h4 className="text-sm font-medium text-slate-400 mb-2">Social Engineering Tactics</h4>
                   <div className="flex flex-wrap gap-2">
-                    {result.ai_analysis.social_engineering_tactics.map((tactic, i) => (
+                    {safeResult.ai_analysis.social_engineering_tactics.map((tactic, i) => (
                       <span key={i} className="px-2 py-1 bg-orange-500/20 text-orange-300 rounded text-xs">
                         {tactic}
                       </span>
@@ -308,7 +343,7 @@ const TextAnalysisResults: React.FC<Props> = ({ result, onClose }) => {
             <AlertTriangle className="w-5 h-5 text-orange-400" />
             <h3 className="font-semibold">Threat Indicators</h3>
             <span className="text-xs bg-slate-700 px-2 py-0.5 rounded">
-              {result.threat_indicators.length}
+              {safeResult.threat_indicators.length}
             </span>
           </div>
           {expandedSections.indicators ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
@@ -317,7 +352,7 @@ const TextAnalysisResults: React.FC<Props> = ({ result, onClose }) => {
         {expandedSections.indicators && (
           <div className="p-4 pt-0">
             <ul className="space-y-2">
-              {result.threat_indicators.map((indicator, i) => (
+              {safeResult.threat_indicators.map((indicator, i) => (
                 <li key={i} className="flex items-start gap-2 text-sm text-slate-300 bg-slate-900 rounded-lg p-2">
                   {indicator}
                 </li>
@@ -328,7 +363,7 @@ const TextAnalysisResults: React.FC<Props> = ({ result, onClose }) => {
       </div>
 
       {/* Detected Patterns */}
-      {result.patterns_matched.length > 0 && (
+      {safeResult.patterns_matched.length > 0 && (
         <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
           <button
             onClick={() => toggleSection('patterns')}
@@ -338,7 +373,7 @@ const TextAnalysisResults: React.FC<Props> = ({ result, onClose }) => {
               <Target className="w-5 h-5 text-red-400" />
               <h3 className="font-semibold">Detected Patterns</h3>
               <span className="text-xs bg-red-500/20 text-red-300 px-2 py-0.5 rounded">
-                {result.patterns_matched.length}
+                {safeResult.patterns_matched.length}
               </span>
             </div>
             {expandedSections.patterns ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
@@ -346,7 +381,7 @@ const TextAnalysisResults: React.FC<Props> = ({ result, onClose }) => {
           
           {expandedSections.patterns && (
             <div className="p-4 pt-0 space-y-3">
-              {result.patterns_matched.map((pattern, i) => (
+              {safeResult.patterns_matched.map((pattern, i) => (
                 <div key={i} className="bg-slate-900 rounded-lg p-3">
                   <div className="flex items-center gap-2 mb-1">
                     <span className={`w-2 h-2 rounded-full ${getSeverityColor(pattern.severity)}`} />
@@ -378,7 +413,7 @@ const TextAnalysisResults: React.FC<Props> = ({ result, onClose }) => {
       )}
 
       {/* URLs & Enrichment */}
-      {result.urls_found.length > 0 && (
+      {safeResult.urls_found.length > 0 && (
         <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
           <button
             onClick={() => toggleSection('urls')}
@@ -388,7 +423,7 @@ const TextAnalysisResults: React.FC<Props> = ({ result, onClose }) => {
               <Link className="w-5 h-5 text-blue-400" />
               <h3 className="font-semibold">URLs & Threat Intel</h3>
               <span className="text-xs bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded">
-                {result.urls_found.length}
+                {safeResult.urls_found.length}
               </span>
             </div>
             {expandedSections.urls ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
@@ -396,8 +431,8 @@ const TextAnalysisResults: React.FC<Props> = ({ result, onClose }) => {
           
           {expandedSections.urls && (
             <div className="p-4 pt-0 space-y-3">
-              {result.url_enrichment.length > 0 ? (
-                result.url_enrichment.map((enrichment, i) => (
+              {safeResult.url_enrichment.length > 0 ? (
+                safeResult.url_enrichment.map((enrichment, i) => (
                   <div key={i} className={`rounded-lg p-3 border ${
                     enrichment.is_malicious ? 'bg-red-500/10 border-red-500/50' : 'bg-slate-900 border-slate-700'
                   }`}>
@@ -453,7 +488,7 @@ const TextAnalysisResults: React.FC<Props> = ({ result, onClose }) => {
                   </div>
                 ))
               ) : (
-                result.urls_found.map((url, i) => (
+                safeResult.urls_found.map((url, i) => (
                   <div key={i} className="bg-slate-900 rounded-lg p-3 flex items-center justify-between">
                     <span className="text-sm text-slate-300 truncate">{url}</span>
                     <a
@@ -473,7 +508,7 @@ const TextAnalysisResults: React.FC<Props> = ({ result, onClose }) => {
       )}
 
       {/* URL Sandbox (Dynamic Analysis) */}
-      {result.url_sandbox && result.url_sandbox.length > 0 && (
+      {safeResult.url_sandbox && safeResult.url_sandbox.length > 0 && (
         <div className="bg-slate-800 rounded-xl border border-orange-600/50 overflow-hidden">
           <div className="p-4 bg-orange-500/10 border-b border-orange-600/30">
             <div className="flex items-center gap-2">
@@ -487,7 +522,7 @@ const TextAnalysisResults: React.FC<Props> = ({ result, onClose }) => {
           </div>
           
           <div className="p-4 space-y-4">
-            {result.url_sandbox.map((sandbox, i) => (
+            {safeResult.url_sandbox.map((sandbox, i) => (
               <div key={i} className={`rounded-lg p-4 border ${
                 sandbox.is_malicious ? 'bg-red-500/10 border-red-500/50' : 'bg-slate-900 border-slate-700'
               }`}>
@@ -629,14 +664,14 @@ const TextAnalysisResults: React.FC<Props> = ({ result, onClose }) => {
       )}
 
       {/* MITRE ATT&CK */}
-      {result.mitre_techniques.length > 0 && (
+      {safeResult.mitre_techniques.length > 0 && (
         <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
           <h3 className="text-sm font-semibold text-slate-300 mb-3 flex items-center gap-2">
             <Target className="w-4 h-4 text-purple-400" />
             MITRE ATT&CK Techniques
           </h3>
           <div className="flex flex-wrap gap-2">
-            {result.mitre_techniques.map((technique, i) => (
+            {safeResult.mitre_techniques.map((technique, i) => (
               <a
                 key={i}
                 href={`https://attack.mitre.org/techniques/${technique.id}/`}
@@ -670,7 +705,7 @@ const TextAnalysisResults: React.FC<Props> = ({ result, onClose }) => {
         {expandedSections.recommendations && (
           <div className="p-4 pt-0">
             <ul className="space-y-2">
-              {result.recommendations.map((rec, i) => (
+              {safeResult.recommendations.map((rec, i) => (
                 <li key={i} className="flex items-start gap-2 text-sm text-slate-300">
                   <span className="text-green-400 mt-0.5">→</span>
                   {rec}
@@ -683,7 +718,7 @@ const TextAnalysisResults: React.FC<Props> = ({ result, onClose }) => {
 
       {/* Analysis Metadata */}
       <div className="text-xs text-slate-500 text-center">
-        Analysis ID: {result.analysis_id} | Analyzed: {new Date(result.analyzed_at).toLocaleString()}
+        Analysis ID: {safeResult.analysis_id} | Analyzed: {new Date(safeResult.analyzed_at).toLocaleString()}
       </div>
     </div>
   );

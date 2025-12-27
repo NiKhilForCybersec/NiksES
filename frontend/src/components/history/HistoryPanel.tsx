@@ -70,7 +70,7 @@ interface AnalysisSummary {
 interface HistoryPanelProps {
   isOpen: boolean;
   onClose: () => void;
-  onViewAnalysis: (analysisId: string) => void;
+  onViewAnalysis: (analysisId: string, analysisType: 'email' | 'url' | 'sms') => void;
   onExportAnalysis: (analysisId: string, format: string) => void;
 }
 
@@ -466,13 +466,26 @@ const HistoryPanel: React.FC<HistoryPanelProps> = ({
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-1">
-                        <button
-                          onClick={() => onViewAnalysis(analysis.analysis_id)}
-                          className="p-1.5 hover:bg-indigo-100 rounded text-indigo-600"
-                          title="View Analysis"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </button>
+                        {(() => {
+                          const typeDisplay = getTypeDisplay(analysis.sender_email, analysis.subject);
+                          const analysisType = getAnalysisType(analysis.sender_email, analysis.subject);
+                          const buttonConfig = {
+                            email: { icon: Eye, color: 'text-indigo-600 hover:bg-indigo-100', title: 'View Email Analysis' },
+                            url: { icon: Globe, color: 'text-blue-600 hover:bg-blue-100', title: 'View URL Report' },
+                            sms: { icon: MessageSquare, color: 'text-green-600 hover:bg-green-100', title: 'View SMS Report' },
+                          };
+                          const config = buttonConfig[analysisType];
+                          const ButtonIcon = config.icon;
+                          return (
+                            <button
+                              onClick={() => onViewAnalysis(analysis.analysis_id, analysisType)}
+                              className={`p-1.5 rounded ${config.color}`}
+                              title={config.title}
+                            >
+                              <ButtonIcon className="w-4 h-4" />
+                            </button>
+                          );
+                        })()}
                         <button
                           onClick={() => onExportAnalysis(analysis.analysis_id, 'json')}
                           className="p-1.5 hover:bg-gray-100 rounded text-gray-600"

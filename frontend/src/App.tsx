@@ -1455,92 +1455,73 @@ function App() {
       <HistoryPanel
         isOpen={historyOpen}
         onClose={() => setHistoryOpen(false)}
-        onViewAnalysis={async (analysisId: string) => {
+        onViewAnalysis={async (analysisId: string, analysisType: 'email' | 'url' | 'sms') => {
           try {
             const response = await apiClient.get(`/analyses/${analysisId}`);
             const data = response.data;
             
-            // Detect analysis type from multiple sources
-            // 1. sender email: url@analysis.local or sms@analysis.local
-            // 2. subject prefix: "URL Analysis:" or "SMS Analysis:"
-            const senderEmail = data?.email?.sender?.email || '';
-            const subject = data?.email?.subject || '';
-            
-            const isUrlAnalysis = senderEmail === 'url@analysis.local' || 
-                                  subject.startsWith('URL Analysis:') ||
-                                  subject.includes('URL Analysis');
-            const isSmsAnalysis = senderEmail === 'sms@analysis.local' || 
-                                  subject.startsWith('SMS Analysis:') ||
-                                  subject.includes('SMS Analysis');
-            
-            console.log('[History View] Analysis type detection:', {
-              analysisId,
-              senderEmail,
-              subject,
-              isUrlAnalysis,
-              isSmsAnalysis
-            });
+            console.log('[History View] Loading analysis:', analysisId, 'type:', analysisType);
             
             setHistoryOpen(false);
             
-            if (isUrlAnalysis || isSmsAnalysis) {
-              // Clear email analysis state first
+            if (analysisType === 'url' || analysisType === 'sms') {
+              // URL/SMS: Show in dedicated TextAnalysisResults view
               setFullAnalysisOpen(false);
               setResult(null);
               
-              // Transform the pseudo-email back to TextAnalysisResults format
+              // Create TextAnalysisResult format with safe defaults
               const textResult = {
-                analysis_id: data.analysis_id,
-                analyzed_at: data.analyzed_at,
-                analysis_type: isUrlAnalysis ? 'url' : 'sms',
-                source: isUrlAnalysis ? 'url' : 'sms',  // Add source field
-                original_text: data.email?.body_text || '',
-                urls_found: (data.email?.urls || []).map((u: any) => u.url || u),
+                analysis_id: data.analysis_id || analysisId,
+                analyzed_at: data.analyzed_at || new Date().toISOString(),
+                analysis_type: analysisType,
+                source: analysisType,
+                original_text: data.email?.body_text || data.email?.body_html || '',
+                message_length: (data.email?.body_text || '').length,
+                overall_score: data.overall_score ?? data.detection?.risk_score ?? 0,
+                overall_level: data.overall_level || data.detection?.risk_level || 'low',
+                classification: data.classification || 'unknown',
+                is_threat: (data.overall_score ?? 0) >= 50,
+                confidence: data.detection?.confidence ?? 0.5,
+                urls_found: (data.email?.urls || []).map((u: any) => typeof u === 'string' ? u : u.url || ''),
                 domains_found: data.iocs?.domains || [],
                 ips_found: data.iocs?.ips || [],
-                phones_found: data.iocs?.phone_numbers || [],
-                overall_score: data.overall_score || data.detection?.risk_score || 0,
-                overall_level: data.overall_level || data.detection?.risk_level || 'unknown',
-                risk_score: data.overall_score || data.detection?.risk_score || 0,
-                risk_level: data.overall_level || data.detection?.risk_level || 'unknown',
-                classification: data.classification || 'unknown',
-                confidence: data.detection?.confidence || 0,
-                is_threat: (data.overall_score || 0) >= 50,
-                patterns_matched: (data.detection?.rules_triggered || []).map((r: any) => ({
-                  pattern_id: r.rule_id || '',
-                  name: r.rule_name || '',
-                  description: r.description || '',
-                  severity: r.severity || 'medium',
-                  matched_text: r.evidence?.[0] || '',
-                  mitre_technique: r.mitre_technique || '',
-                })),
-                threat_indicators: (data.detection?.rules_triggered || []).map((r: any) => r.rule_name || ''),
-                recommendations: data.ai_triage?.recommendations || [],
-                ai_analysis: data.ai_triage ? {
-                  enabled: true,
-                  provider: data.ai_triage.provider || 'ai',
-                  summary: data.ai_triage.summary || '',
-                  key_findings: data.ai_triage.key_findings || [],
-                  recommendations: data.ai_triage.recommendations || [],
-                } : undefined,
+                phone_numbers_found: data.iocs?.phone_numbers || [],
                 url_enrichment: data.enrichment?.urls || [],
                 url_sandbox: data.sandbox_results || [],
-                message_length: (data.email?.body_text || '').length,
+                patterns_matched: (data.detection?.rules_triggered || []).map((r: any) => ({
+                  pattern_id: r.rule_id || 'unknown',
+                  name: r.rule_name || r.name || 'Unknown Rule',
+                  description: r.description || '',
+                  severity: r.severity || 'medium',
+                  matched_text: Array.isArray(r.evidence) ? r.evidence[0] : '',
+                  mitre_technique: r.mitre_technique || '',
+                })),
+                threat_indicators: (data.detection?.rules_triggered || []).map((r: any) => r.rule_name || r.name || ''),
+                ai_analysis: {
+                  enabled: !!data.ai_triage,
+                  provider: data.ai_triage?.provider || 'ai',
+                  summary: data.ai_triage?.summary || '',
+                  threat_assessment: data.ai_triage?.threat_assessment || '',
+                  key_findings: data.ai_triage?.key_findings || [],
+                  social_engineering_tactics: data.ai_triage?.social_engineering_tactics || [],
+                  recommendations: data.ai_triage?.recommendations || [],
+                  confidence: data.ai_triage?.confidence ?? 0,
+                },
+                recommendations: data.ai_triage?.recommendations || data.recommendations || [],
                 mitre_techniques: data.detection?.mitre_techniques || [],
               };
               
-              // Set the text analysis result - this will show TextAnalysisResults inline
               setTextAnalysisResult(textResult);
-              
-              // Scroll to top to show results
               window.scrollTo({ top: 0, behavior: 'smooth' });
             } else {
-              // Regular email analysis - clear text state first
+              // Email: Show in AdvancedAnalysisView
               setTextAnalysisResult(null);
               setResult(data);
               setFullAnalysisOpen(true);
             }
+            
           } catch (error) {
+            console.error('[History View] Error:', error);
             toast.error('Failed to load analysis');
           }
         }}
