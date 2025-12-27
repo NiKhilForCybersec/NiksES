@@ -17,25 +17,28 @@ logger = logging.getLogger(__name__)
 
 
 class Settings(BaseModel):
-    """Application settings."""
+    """Application settings - all API keys from Railway environment."""
     
     # Feature flags
     enrichment_enabled: bool = True
-    ai_enabled: bool = False
+    ai_enabled: bool = True  # Default to true
     
     # AI Configuration
-    ai_provider: str = "anthropic"
+    ai_provider: str = "openai"  # Default to openai since user has it
     anthropic_api_key: Optional[str] = None
     openai_api_key: Optional[str] = None
     
-    # Enrichment API Keys
+    # Threat Intelligence API Keys
     virustotal_api_key: Optional[str] = None
     abuseipdb_api_key: Optional[str] = None
     phishtank_api_key: Optional[str] = None
     mxtoolbox_api_key: Optional[str] = None
+    ipqualityscore_api_key: Optional[str] = None
+    google_safebrowsing_api_key: Optional[str] = None
     
     # Sandbox API Keys
     hybrid_analysis_api_key: Optional[str] = None
+    urlscan_api_key: Optional[str] = None
     
     # Storage
     storage_type: str = "memory"  # memory, sqlite, postgres
@@ -47,6 +50,7 @@ class Settings(BaseModel):
     
     class Config:
         env_prefix = "NIKSES_"
+        extra = "ignore"  # Ignore extra fields
 
 
 # Global settings instance

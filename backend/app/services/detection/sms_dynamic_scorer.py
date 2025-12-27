@@ -418,19 +418,61 @@ SAFE_DOMAINS = {
 }
 
 # Brand domains for impersonation detection
+# These are legitimate domains - if URL contains brand name but domain isn't here, it's suspicious
 BRAND_DOMAINS = {
-    "microsoft": ["microsoft.com", "office.com", "outlook.com", "live.com", "azure.com", "bing.com"],
-    "google": ["google.com", "gmail.com", "youtube.com", "googleapis.com", "gstatic.com"],
-    "amazon": ["amazon.com", "amazon.co.uk", "amazonaws.com", "aws.amazon.com", "primevideo.com"],
-    "paypal": ["paypal.com", "paypal.me"],
-    "apple": ["apple.com", "icloud.com", "appleid.apple.com"],
-    "facebook": ["facebook.com", "fb.com", "instagram.com", "meta.com"],
-    "netflix": ["netflix.com"],
-    "chase": ["chase.com"],
-    "wellsfargo": ["wellsfargo.com"],
-    "bankofamerica": ["bankofamerica.com"],
-    "openai": ["openai.com", "chatgpt.com", "chat.openai.com"],
-    "anthropic": ["anthropic.com", "claude.ai"],
+    # Tech Giants
+    "microsoft": ["microsoft.com", "office.com", "outlook.com", "live.com", "azure.com", "bing.com", "xbox.com", "linkedin.com", "skype.com", "msn.com", "windows.com", "microsoftonline.com", "office365.com", "onedrive.com", "sharepoint.com", "teams.microsoft.com"],
+    "google": ["google.com", "gmail.com", "youtube.com", "googleapis.com", "gstatic.com", "googleusercontent.com", "google.co.uk", "google.ca", "drive.google.com", "docs.google.com", "cloud.google.com", "play.google.com", "accounts.google.com"],
+    "apple": ["apple.com", "icloud.com", "appleid.apple.com", "itunes.com", "me.com", "mzstatic.com", "apple.co", "icloud-content.com", "cdn-apple.com"],
+    "amazon": ["amazon.com", "amazon.co.uk", "amazon.ca", "amazon.de", "amazon.in", "amazonaws.com", "aws.amazon.com", "primevideo.com", "alexa.com", "a]mazon.in", "amazon.es", "amazon.fr", "amazon.it", "amazonpay.com"],
+    "facebook": ["facebook.com", "fb.com", "instagram.com", "meta.com", "messenger.com", "whatsapp.com", "fb.me", "facebookcorewwwi.onion"],
+    "openai": ["openai.com", "chatgpt.com", "chat.openai.com", "platform.openai.com", "api.openai.com"],
+    "anthropic": ["anthropic.com", "claude.ai", "console.anthropic.com"],
+    
+    # Financial
+    "paypal": ["paypal.com", "paypal.me", "paypal-communication.com"],
+    "chase": ["chase.com", "jpmorganchase.com"],
+    "wellsfargo": ["wellsfargo.com", "wf.com"],
+    "wells fargo": ["wellsfargo.com", "wf.com"],
+    "bankofamerica": ["bankofamerica.com", "bofa.com", "boa.com"],
+    "bank of america": ["bankofamerica.com", "bofa.com", "boa.com"],
+    "citi": ["citi.com", "citibank.com", "citicards.com"],
+    "citibank": ["citi.com", "citibank.com", "citicards.com"],
+    "hdfc": ["hdfcbank.com", "hdfcbank.net", "hdfc.com"],
+    "icici": ["icicibank.com", "icicibank.co.in"],
+    "sbi": ["sbi.co.in", "onlinesbi.com", "sbicard.com"],
+    "axis": ["axisbank.com", "axisbank.co.in"],
+    "hsbc": ["hsbc.com", "hsbc.co.uk", "hsbc.com.hk"],
+    "barclays": ["barclays.com", "barclays.co.uk"],
+    
+    # Streaming/Entertainment
+    "netflix": ["netflix.com", "nflxso.net"],
+    "spotify": ["spotify.com", "scdn.co"],
+    "disney": ["disney.com", "disneyplus.com", "go.com"],
+    "hulu": ["hulu.com", "huluim.com"],
+    "hbo": ["hbo.com", "hbomax.com"],
+    
+    # Shipping/Delivery
+    "usps": ["usps.com", "usps.gov"],
+    "ups": ["ups.com"],
+    "fedex": ["fedex.com"],
+    "dhl": ["dhl.com", "dhl.de"],
+    
+    # Government
+    "irs": ["irs.gov"],
+    "ssa": ["ssa.gov", "socialsecurity.gov"],
+    "dmv": ["dmv.gov", "dmv.ca.gov", "dmv.ny.gov"],
+    
+    # Crypto
+    "coinbase": ["coinbase.com"],
+    "binance": ["binance.com", "binance.us"],
+    "metamask": ["metamask.io"],
+    
+    # E-commerce
+    "walmart": ["walmart.com"],
+    "target": ["target.com"],
+    "ebay": ["ebay.com"],
+    "bestbuy": ["bestbuy.com"],
 }
 
 # Homoglyph characters
@@ -701,15 +743,20 @@ class SMSEvidenceCollector:
                     metadata={"pattern_name": pattern_name, "match_count": match_count},
                 )
             
-            # Check for brand mentions
+            # Check for brand mentions - but only if there are also suspicious URLs
+            # Brand mentions alone shouldn't flag as impersonation
             for brand in pattern_config.get("brands", []):
                 if brand.lower() in text_lower:
+                    # Only add as evidence if we have a suspicious URL context
+                    # This will be set by _collect_url_evidence if brand is found in non-legitimate URL
+                    # Store for later correlation but with very low weight
                     self._add_evidence(
                         evidence_type=EvidenceType.BRAND_KEYWORD_MISMATCH,
                         category=EvidenceCategory.BRAND_IMPERSONATION,
                         source=EvidenceSource.PATTERN_ENGINE,
-                        description=f"Brand mentioned: {brand}",
+                        description=f"Brand mentioned: {brand} (verify URL legitimacy)",
                         raw_value=brand,
+                        specificity_boost=-0.3,  # Low weight unless corroborated by URL evidence
                     )
     
     def _collect_sender_evidence(self, sender: str):

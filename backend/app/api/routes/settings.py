@@ -73,6 +73,7 @@ async def get_current_settings(
         "mxtoolbox": bool(getattr(settings, 'mxtoolbox_api_key', None) if settings else False),
         "ipqualityscore": bool(getattr(settings, 'ipqualityscore_api_key', None) if settings else False),
         "google_safebrowsing": bool(getattr(settings, 'google_safebrowsing_api_key', None) if settings else False),
+        "urlscan": bool(getattr(settings, 'urlscan_api_key', None) if settings else False),
         "anthropic": bool(settings.anthropic_api_key if settings else False),
         "openai": bool(settings.openai_api_key if settings else False),
         "hybrid_analysis": bool(getattr(settings, 'hybrid_analysis_api_key', None) if settings else False),

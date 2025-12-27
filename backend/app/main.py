@@ -36,17 +36,37 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting NiksES API...")
     
-    # Initialize settings from environment
+    # Initialize settings from environment - ALL API keys
     settings = init_settings(
+        # Threat Intelligence APIs
         virustotal_api_key=os.getenv("VIRUSTOTAL_API_KEY"),
         abuseipdb_api_key=os.getenv("ABUSEIPDB_API_KEY"),
         phishtank_api_key=os.getenv("PHISHTANK_API_KEY"),
         mxtoolbox_api_key=os.getenv("MXTOOLBOX_API_KEY"),
+        ipqualityscore_api_key=os.getenv("IPQUALITYSCORE_API_KEY"),
+        google_safebrowsing_api_key=os.getenv("GOOGLE_SAFEBROWSING_API_KEY"),
+        # Sandbox APIs
+        hybrid_analysis_api_key=os.getenv("HYBRID_ANALYSIS_API_KEY"),
+        urlscan_api_key=os.getenv("URLSCAN_API_KEY"),
+        # AI APIs
         anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"),
         openai_api_key=os.getenv("OPENAI_API_KEY"),
-        ai_enabled=os.getenv("AI_ENABLED", "false").lower() == "true",
-        ai_provider=os.getenv("AI_PROVIDER", "anthropic"),
+        ai_enabled=os.getenv("AI_ENABLED", "true").lower() == "true",  # Default to true
+        ai_provider=os.getenv("AI_PROVIDER", "openai"),  # Default to openai since user has it
     )
+    
+    # Log configured APIs
+    logger.info("=== API Configuration ===")
+    logger.info(f"  VirusTotal: {'✓' if settings.virustotal_api_key else '✗'}")
+    logger.info(f"  AbuseIPDB: {'✓' if settings.abuseipdb_api_key else '✗'}")
+    logger.info(f"  IPQualityScore: {'✓' if settings.ipqualityscore_api_key else '✗'}")
+    logger.info(f"  Google Safe Browsing: {'✓' if settings.google_safebrowsing_api_key else '✗'}")
+    logger.info(f"  MXToolbox: {'✓' if settings.mxtoolbox_api_key else '✗'}")
+    logger.info(f"  Hybrid Analysis: {'✓' if settings.hybrid_analysis_api_key else '✗'}")
+    logger.info(f"  URLScan: {'✓' if getattr(settings, 'urlscan_api_key', None) else '✗'}")
+    logger.info(f"  OpenAI: {'✓' if settings.openai_api_key else '✗'}")
+    logger.info(f"  Anthropic: {'✓' if settings.anthropic_api_key else '✗'}")
+    logger.info(f"  AI Enabled: {settings.ai_enabled}, Provider: {settings.ai_provider}")
     
     # Initialize analysis store (SQLite for persistence)
     init_analysis_store("sqlite")
@@ -72,7 +92,7 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"AI analyzer not available: {e}")
     
-    # Initialize enrichment orchestrator
+    # Initialize enrichment orchestrator with ALL APIs
     try:
         from app.services.enrichment import get_enrichment_orchestrator
         from app.services.enrichment.mxtoolbox import configure_mxtoolbox
@@ -82,6 +102,9 @@ async def lifespan(app: FastAPI):
             virustotal_api_key=settings.virustotal_api_key,
             abuseipdb_api_key=settings.abuseipdb_api_key,
             phishtank_api_key=settings.phishtank_api_key,
+            mxtoolbox_api_key=settings.mxtoolbox_api_key,
+            ipqualityscore_api_key=settings.ipqualityscore_api_key,
+            google_safebrowsing_api_key=settings.google_safebrowsing_api_key,
         )
         
         # Configure MXToolbox if key is set
@@ -90,7 +113,7 @@ async def lifespan(app: FastAPI):
             configure_mxtoolbox(mxtoolbox_key)
             logger.info("MXToolbox API configured")
         
-        logger.info("Enrichment orchestrator initialized")
+        logger.info("Enrichment orchestrator initialized with all TI sources")
     except Exception as e:
         logger.warning(f"Enrichment orchestrator not available: {e}")
     

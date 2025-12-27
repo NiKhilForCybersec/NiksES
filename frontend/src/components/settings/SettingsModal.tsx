@@ -46,6 +46,7 @@ interface APIKeyConfig {
   ipqualityscore_api_key?: string;
   google_safebrowsing_api_key?: string;
   hybrid_analysis_api_key?: string;
+  urlscan_api_key?: string;
   anthropic_api_key?: string;
   openai_api_key?: string;
 }
@@ -478,12 +479,30 @@ export function SettingsModal({ isOpen, onClose, onSettingsChange }: SettingsMod
                     rateLimit="100 submissions/month (free)"
                   />
 
+                  {/* URLScan.io - URL Sandbox */}
+                  <APIKeyInput
+                    name="URLScan.io"
+                    description="Live URL scanning and screenshot capture. Analyzes JavaScript, network requests, and page behavior."
+                    keyName="urlscan_api_key"
+                    value={apiKeys.urlscan_api_key || ''}
+                    onChange={(value) => handleKeyChange('urlscan_api_key', value)}
+                    showKey={showKeys['urlscan'] || false}
+                    onToggleShow={() => toggleShowKey('urlscan')}
+                    isConfigured={settings?.api_keys_configured?.urlscan || false}
+                    onTest={() => testConnection('urlscan')}
+                    isTesting={testingProvider === 'urlscan'}
+                    testResult={testResults['urlscan']}
+                    signupUrl="https://urlscan.io/user/signup"
+                    icon={<Globe className="w-5 h-5 text-indigo-400" />}
+                    rateLimit="1000 scans/day (free)"
+                  />
+
                   <div className="p-4 bg-blue-900/30 rounded-lg border border-blue-700">
                     <div className="flex items-start gap-3">
                       <Info className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
                       <div className="text-sm text-blue-200">
                         <p className="font-medium">Free Tier APIs Available</p>
-                        <p className="text-blue-300/80">VirusTotal, AbuseIPDB, PhishTank, IPQualityScore, and Google Safe Browsing all offer free API access for personal/research use. Requests are automatically throttled to respect rate limits.</p>
+                        <p className="text-blue-300/80">VirusTotal, AbuseIPDB, PhishTank, IPQualityScore, Google Safe Browsing, and URLScan.io all offer free API access for personal/research use. Requests are automatically throttled to respect rate limits.</p>
                       </div>
                     </div>
                   </div>

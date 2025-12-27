@@ -48,7 +48,7 @@ class Settings(BaseSettings):
     # Security
     # =========================================================================
     secret_key: str = Field(default="change-me-in-production-use-railway-env", description="Secret key for encryption")
-    cors_origins: List[str] = ["http://localhost:3000", "http://localhost:5173", "*"]
+    cors_origins: str = Field(default="*", description="CORS origins - comma separated or * for all")
     
     # =========================================================================
     # Threat Intelligence API Keys (Set in Railway Dashboard > Variables)
@@ -67,6 +67,7 @@ class Settings(BaseSettings):
     
     # Sandbox Analysis
     hybrid_analysis_api_key: Optional[str] = Field(default=None, description="Hybrid Analysis API key")
+    urlscan_api_key: Optional[str] = Field(default=None, description="URLScan.io API key")
     
     # =========================================================================
     # AI Analysis API Keys (Set in Railway Dashboard > Variables)

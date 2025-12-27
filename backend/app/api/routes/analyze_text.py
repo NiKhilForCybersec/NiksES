@@ -101,7 +101,7 @@ class URLSandboxResult(BaseModel):
 
 
 class AIAnalysisResult(BaseModel):
-    """AI analysis results."""
+    """AI analysis results with full threat intelligence context."""
     enabled: bool = False
     provider: Optional[str] = None
     summary: str = ""
@@ -110,6 +110,7 @@ class AIAnalysisResult(BaseModel):
     recommendations: List[str] = []
     social_engineering_tactics: List[str] = []
     confidence: float = 0.0
+    intent: Optional[str] = None  # What the attacker is trying to achieve
 
 
 def _ensure_list(value: Any) -> List[str]:
@@ -949,8 +950,21 @@ async def get_ai_analysis(
     patterns: List[ScamPattern],
     urls: List[str],
     score: int,
+    url_enrichment: List[Dict] = None,
+    url_sandbox: List[Dict] = None,
 ) -> AIAnalysisResult:
-    """Get AI-powered analysis."""
+    """
+    Get AI-powered analysis with full threat intelligence context.
+    
+    Args:
+        text: The message/URL content
+        source: Source type (SMS, URL, etc.)
+        patterns: Detected scam patterns
+        urls: URLs found in content
+        score: Current risk score
+        url_enrichment: TI results from VirusTotal, IPQS, GSB, etc.
+        url_sandbox: Dynamic analysis results
+    """
     try:
         from app.services.ai.openai_provider import OpenAIProvider
         from app.services.ai.anthropic_provider import AnthropicProvider
@@ -973,42 +987,89 @@ async def get_ai_analysis(
         if not provider or not provider.is_configured():
             return AIAnalysisResult(enabled=False, summary="AI analysis not configured")
         
-        # Build prompt
+        # Build prompt with full context
         source_type = "URL" if source == TextSource.URL else f"{source.value.upper()} message"
         patterns_text = "\n".join([f"- {p.name}: {p.description}" for p in patterns]) if patterns else "None detected"
         urls_text = "\n".join(urls[:5]) if urls else "None"
         
-        prompt = f"""Analyze this {source_type} for security threats:
+        # Build threat intelligence summary
+        ti_findings = []
+        if url_enrichment:
+            for enrichment in url_enrichment:
+                url = enrichment.get('url', 'Unknown URL')
+                sources = enrichment.get('sources', [])
+                is_malicious = enrichment.get('is_malicious', False)
+                threat_score = enrichment.get('threat_score', 0)
+                categories = enrichment.get('categories', [])
+                
+                if is_malicious or threat_score >= 50:
+                    ti_findings.append(f"⚠️ {url}: MALICIOUS (score: {threat_score}, sources: {', '.join(sources)}, categories: {', '.join(categories)})")
+                elif threat_score > 0:
+                    ti_findings.append(f"⚡ {url}: Suspicious (score: {threat_score}, sources: {', '.join(sources)})")
+                elif sources:
+                    ti_findings.append(f"✓ {url}: Clean (checked by: {', '.join(sources)})")
+        
+        ti_text = "\n".join(ti_findings) if ti_findings else "No threat intelligence data available"
+        
+        # Build sandbox summary
+        sandbox_findings = []
+        if url_sandbox:
+            for sandbox in url_sandbox:
+                url = sandbox.get('url', 'Unknown URL')
+                is_malicious = sandbox.get('is_malicious', False)
+                threat_level = sandbox.get('threat_level', 'unknown')
+                threat_score = sandbox.get('threat_score', 0)
+                
+                if is_malicious:
+                    sandbox_findings.append(f"🔴 {url}: MALICIOUS (level: {threat_level}, score: {threat_score})")
+                elif threat_score > 50:
+                    sandbox_findings.append(f"🟡 {url}: Suspicious (level: {threat_level}, score: {threat_score})")
+        
+        sandbox_text = "\n".join(sandbox_findings) if sandbox_findings else "No sandbox analysis performed"
+        
+        prompt = f"""Analyze this {source_type} for security threats. Use ALL the intelligence data provided.
 
-CONTENT:
+=== CONTENT ===
 {text[:1500]}
 
-DETECTED PATTERNS:
+=== DETECTED PATTERNS ===
 {patterns_text}
 
-URLs FOUND:
+=== URLs FOUND ===
 {urls_text}
 
-CURRENT RISK SCORE: {score}/100
+=== THREAT INTELLIGENCE FINDINGS ===
+{ti_text}
 
-Provide a security analysis with:
-1. SUMMARY: 2-3 sentence assessment
+=== SANDBOX ANALYSIS ===
+{sandbox_text}
+
+=== CURRENT RISK SCORE ===
+{score}/100
+
+Based on ALL the above intelligence, provide:
+1. SUMMARY: 2-3 sentence assessment incorporating TI findings
 2. THREAT_ASSESSMENT: One of [MALICIOUS, SUSPICIOUS, LIKELY_SAFE, SAFE]
-3. KEY_FINDINGS: 3-5 bullet points
-4. SOCIAL_ENGINEERING: Tactics used (if any)
-5. RECOMMENDATIONS: 3-5 actionable steps
+3. KEY_FINDINGS: 3-5 bullet points (reference specific TI sources if they found threats)
+4. INTENT: What is the attacker trying to achieve? (credential theft, malware delivery, financial fraud, etc.)
+5. SOCIAL_ENGINEERING: Tactics used (urgency, fear, authority, etc.)
+6. RECOMMENDATIONS: 3-5 actionable steps for SOC analyst
 
-Format as JSON."""
+IMPORTANT: If threat intelligence APIs flagged URLs as malicious, this should heavily influence your threat assessment.
 
-        system_prompt = """You are a SOC analyst specializing in SMS smishing, phishing URLs, and social engineering attacks. 
-Analyze the content and provide actionable threat intelligence. Be concise and specific.
-Always respond in valid JSON format."""
+Format response as valid JSON."""
+
+        system_prompt = """You are a senior SOC analyst specializing in SMS smishing, phishing URLs, and social engineering attacks.
+You have access to threat intelligence from multiple sources: VirusTotal, IPQualityScore, Google Safe Browsing, PhishTank, URLhaus.
+Analyze the content AND the threat intelligence findings to provide accurate threat assessment.
+Always weight confirmed TI findings heavily in your assessment.
+Respond in valid JSON format only."""
 
         response = await provider.generate(
             prompt=prompt,
             system_prompt=system_prompt,
             temperature=0.3,
-            max_tokens=800,
+            max_tokens=1000,
         )
         
         # Parse response
@@ -1028,6 +1089,20 @@ Always respond in valid JSON format."""
             social_eng = _ensure_list(data.get("SOCIAL_ENGINEERING", data.get("social_engineering")))
             recommendations = _ensure_list(data.get("RECOMMENDATIONS", data.get("recommendations")))
             
+            # Extract intent
+            intent = data.get("INTENT", data.get("intent", ""))
+            if isinstance(intent, list):
+                intent = ", ".join(intent)
+            
+            # Adjust confidence based on TI data availability
+            base_confidence = 0.7
+            if url_enrichment:
+                base_confidence += 0.1  # Higher confidence with TI data
+                if any(e.get('is_malicious') for e in url_enrichment):
+                    base_confidence += 0.1  # Even higher if TI confirms malicious
+            if url_sandbox:
+                base_confidence += 0.05
+            
             return AIAnalysisResult(
                 enabled=True,
                 provider=provider_name,
@@ -1036,7 +1111,8 @@ Always respond in valid JSON format."""
                 key_findings=key_findings,
                 social_engineering_tactics=social_eng,
                 recommendations=recommendations,
-                confidence=0.85 if patterns else 0.7,
+                confidence=min(0.95, base_confidence),
+                intent=intent,
             )
         except json.JSONDecodeError:
             # Return raw response if JSON parsing fails
@@ -1173,12 +1249,45 @@ async def analyze_text(
         except Exception as e:
             logger.error(f"URL sandbox failed: {e}")
     
-    # AI Analysis - Run BEFORE scoring to include in calculation  
+    # Convert enrichment to dict format BEFORE AI analysis
+    enrichment_dicts = [
+        {
+            "url": e.url,
+            "domain": e.domain,
+            "is_malicious": e.is_malicious,
+            "threat_score": e.threat_score,
+            "sources": e.sources,
+            "categories": e.categories,
+        }
+        for e in url_enrichment
+    ] if url_enrichment else []
+    
+    # Convert sandbox results to dict format
+    sandbox_dicts = [
+        {
+            "url": s.url,
+            "is_malicious": s.is_malicious,
+            "threat_score": s.threat_score,
+            "threat_level": s.threat_level,
+            "categories": s.categories,
+        }
+        for s in url_sandbox
+    ] if url_sandbox else []
+    
+    # AI Analysis - Run AFTER enrichment to include TI findings
     ai_result = AIAnalysisResult(enabled=False)
     if request.enable_ai_analysis:
         try:
-            # Pass preliminary score of 0, AI doesn't need it
-            ai_result = await get_ai_analysis(text, request.source, patterns, urls, 0)
+            # Pass ALL threat intelligence data to AI
+            ai_result = await get_ai_analysis(
+                text=text,
+                source=request.source,
+                patterns=patterns,
+                urls=urls,
+                score=0,  # Preliminary score
+                url_enrichment=enrichment_dicts,
+                url_sandbox=sandbox_dicts,
+            )
         except Exception as e:
             logger.error(f"AI analysis failed: {e}")
     
@@ -1189,30 +1298,7 @@ async def analyze_text(
     try:
         from app.services.detection.sms_dynamic_scorer import calculate_sms_dynamic_score
         
-        # Convert enrichment to dict format for dynamic scorer
-        enrichment_dicts = [
-            {
-                "url": e.url,
-                "domain": e.domain,
-                "is_malicious": e.is_malicious,
-                "threat_score": e.threat_score,
-                "sources": e.sources,
-                "categories": e.categories,
-            }
-            for e in url_enrichment
-        ]
-        
-        # Convert sandbox results to dict format
-        sandbox_dicts = [
-            {
-                "url": s.url,
-                "is_malicious": s.is_malicious,
-                "threat_score": s.threat_score,
-                "threat_level": s.threat_level,
-                "categories": s.categories,
-            }
-            for s in url_sandbox
-        ] if url_sandbox else []
+        # enrichment_dicts and sandbox_dicts already created above
         
         # Convert AI result to dict
         ai_dict = None
@@ -1223,6 +1309,8 @@ async def analyze_text(
                 "confidence": ai_result.confidence,
                 "key_findings": ai_result.key_findings,
                 "social_engineering_tactics": ai_result.social_engineering_tactics,
+                "threat_assessment": getattr(ai_result, 'threat_assessment', None),
+                "intent": getattr(ai_result, 'intent', None),
             }
         
         # Calculate using Dynamic Intelligent Detection Architecture
