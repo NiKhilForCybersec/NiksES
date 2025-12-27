@@ -323,6 +323,9 @@ async def run_unified_analysis(
     vt_provider = None
     abuseipdb_provider = None
     urlhaus_provider = None
+    ipqs_provider = None
+    gsb_provider = None
+    phishtank_provider = None
     
     vt_key = getattr(settings, 'virustotal_api_key', None)
     if vt_key:
@@ -341,11 +344,47 @@ async def run_unified_analysis(
     apis_configured.append("urlhaus")
     logger.info("URLhaus provider configured (free)")
     
-    # 6. Initialize TI Fusion with individual providers
+    # IPQualityScore
+    ipqs_key = getattr(settings, 'ipqualityscore_api_key', None)
+    if ipqs_key:
+        try:
+            from app.services.enrichment.ipqualityscore import IPQualityScoreClient
+            ipqs_provider = IPQualityScoreClient(ipqs_key)
+            apis_configured.append("ipqualityscore")
+            logger.info("IPQualityScore provider configured")
+        except Exception as e:
+            logger.warning(f"Failed to initialize IPQualityScore: {e}")
+    
+    # Google Safe Browsing
+    gsb_key = getattr(settings, 'google_safebrowsing_api_key', None)
+    if gsb_key:
+        try:
+            from app.services.enrichment.google_safebrowsing import GoogleSafeBrowsingClient
+            gsb_provider = GoogleSafeBrowsingClient(gsb_key)
+            apis_configured.append("google_safebrowsing")
+            logger.info("Google Safe Browsing provider configured")
+        except Exception as e:
+            logger.warning(f"Failed to initialize Google Safe Browsing: {e}")
+    
+    # PhishTank (free)
+    phishtank_key = getattr(settings, 'phishtank_api_key', None)
+    if phishtank_key:
+        try:
+            from app.services.enrichment.phishtank import PhishTankProvider
+            phishtank_provider = PhishTankProvider(phishtank_key)
+            apis_configured.append("phishtank")
+            logger.info("PhishTank provider configured")
+        except Exception as e:
+            logger.warning(f"Failed to initialize PhishTank: {e}")
+    
+    # 6. Initialize TI Fusion with ALL providers
     ti_fusion = ThreatIntelFusion(
         virustotal_provider=vt_provider,
         abuseipdb_provider=abuseipdb_provider,
         urlhaus_provider=urlhaus_provider,
+        ipqualityscore_provider=ipqs_provider,
+        google_safebrowsing_provider=gsb_provider,
+        phishtank_provider=phishtank_provider,
     )
     
     # 7. Initialize Lookalike detector

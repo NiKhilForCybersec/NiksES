@@ -40,6 +40,10 @@ class IPQualityScoreClient:
         self.timeout = aiohttp.ClientTimeout(total=15)
         self._session: Optional[aiohttp.ClientSession] = None
     
+    def is_configured(self) -> bool:
+        """Check if API key is configured."""
+        return bool(self.api_key)
+    
     async def _get_session(self) -> aiohttp.ClientSession:
         """Get or create aiohttp session."""
         if self._session is None or self._session.closed:

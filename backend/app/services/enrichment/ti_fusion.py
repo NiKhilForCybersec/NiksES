@@ -98,10 +98,12 @@ class FusedTIResult:
 
 # Source weights for score fusion
 SOURCE_WEIGHTS = {
-    "virustotal": 0.35,  # Highest weight - most comprehensive
-    "abuseipdb": 0.25,
-    "urlhaus": 0.20,
-    "phishtank": 0.15,
+    "virustotal": 0.25,  # Multi-engine scanner
+    "google_safebrowsing": 0.20,  # Google's real-time threat list
+    "ipqualityscore": 0.20,  # Comprehensive URL/domain analysis
+    "abuseipdb": 0.15,  # IP reputation
+    "urlhaus": 0.10,  # Malware URL database
+    "phishtank": 0.05,  # Phishing database
     "whois": 0.05,  # Domain age is supplementary
 }
 
@@ -119,6 +121,15 @@ class ThreatIntelFusion:
     
     IMPORTANT: If any API fails after 4 retries, analysis continues
     with available data. No single API failure blocks the analysis.
+    
+    Supported Sources:
+    - VirusTotal (URL, domain, IP, hash)
+    - Google Safe Browsing (URL)
+    - IPQualityScore (URL, domain)
+    - AbuseIPDB (IP)
+    - URLhaus (URL)
+    - PhishTank (URL)
+    - WHOIS (domain age)
     """
     
     # Per-source timeout (seconds) - after this, move on
@@ -131,6 +142,8 @@ class ThreatIntelFusion:
         urlhaus_provider=None,
         phishtank_provider=None,
         whois_provider=None,
+        ipqualityscore_provider=None,
+        google_safebrowsing_provider=None,
         timeout: float = None,
     ):
         """Initialize with enrichment providers."""
@@ -140,6 +153,8 @@ class ThreatIntelFusion:
             "urlhaus": urlhaus_provider,
             "phishtank": phishtank_provider,
             "whois": whois_provider,
+            "ipqualityscore": ipqualityscore_provider,
+            "google_safebrowsing": google_safebrowsing_provider,
         }
         self.timeout = timeout or self.DEFAULT_TIMEOUT  # Per-source timeout
         self.logger = logging.getLogger(__name__)
@@ -158,6 +173,12 @@ class ThreatIntelFusion:
         
         # Define tasks for each source
         tasks = {}
+        
+        if self.providers.get("google_safebrowsing"):
+            tasks["google_safebrowsing"] = self._check_google_safebrowsing(url)
+        
+        if self.providers.get("ipqualityscore"):
+            tasks["ipqualityscore"] = self._check_ipqualityscore_url(url)
         
         if self.providers.get("virustotal"):
             tasks["virustotal"] = self._check_virustotal_url(url)
@@ -729,6 +750,113 @@ class ThreatIntelFusion:
                 source_result.available = False
                 source_result.error = result.error
                 source_result.was_rate_limited = result.was_rate_limited
+                
+        except asyncio.TimeoutError:
+            source_result.available = False
+            source_result.error = "Timeout"
+        except Exception as e:
+            source_result.available = False
+            source_result.error = str(e)
+        
+        return source_result
+    
+    async def _check_ipqualityscore_url(self, url: str) -> TISourceResult:
+        """Check URL on IPQualityScore."""
+        source_result = TISourceResult(source="ipqualityscore")
+        
+        try:
+            provider = self.providers.get("ipqualityscore")
+            if not provider:
+                source_result.available = False
+                source_result.error = "Not configured"
+                return source_result
+            
+            # Check if provider is configured
+            if hasattr(provider, 'is_configured') and not provider.is_configured():
+                source_result.available = False
+                source_result.error = "Not configured"
+                return source_result
+            
+            result = await asyncio.wait_for(
+                provider.scan_url(url),
+                timeout=self.timeout
+            )
+            
+            if result and result.get("success", False):
+                source_result.available = True
+                source_result.raw_data = result
+                
+                # IPQualityScore returns risk_score 0-100
+                risk_score = result.get("risk_score", 0)
+                source_result.score = risk_score
+                
+                is_phishing = result.get("is_phishing", False)
+                is_malware = result.get("is_malware", False)
+                is_suspicious = result.get("is_suspicious", False)
+                
+                if is_phishing or is_malware or risk_score >= 85:
+                    source_result.verdict = ThreatLevel.MALICIOUS
+                elif is_suspicious or risk_score >= 75:
+                    source_result.verdict = ThreatLevel.SUSPICIOUS
+                elif risk_score >= 50:
+                    source_result.verdict = ThreatLevel.SUSPICIOUS
+                else:
+                    source_result.verdict = ThreatLevel.CLEAN
+            else:
+                source_result.available = False
+                source_result.error = result.get("message", "Unknown error") if result else "No response"
+                
+        except asyncio.TimeoutError:
+            source_result.available = False
+            source_result.error = "Timeout"
+        except Exception as e:
+            source_result.available = False
+            source_result.error = str(e)
+        
+        return source_result
+    
+    async def _check_google_safebrowsing(self, url: str) -> TISourceResult:
+        """Check URL on Google Safe Browsing."""
+        source_result = TISourceResult(source="google_safebrowsing")
+        
+        try:
+            provider = self.providers.get("google_safebrowsing")
+            if not provider:
+                source_result.available = False
+                source_result.error = "Not configured"
+                return source_result
+            
+            # Check if provider is configured
+            if hasattr(provider, 'is_configured') and not provider.is_configured():
+                source_result.available = False
+                source_result.error = "Not configured"
+                return source_result
+            
+            result = await asyncio.wait_for(
+                provider.check_url(url),
+                timeout=self.timeout
+            )
+            
+            if result:
+                source_result.available = True
+                source_result.raw_data = result
+                
+                is_safe = result.get("safe", True)
+                threats = result.get("threats", [])
+                
+                if not is_safe or threats:
+                    source_result.score = 100  # GSB is binary - if flagged, it's bad
+                    source_result.verdict = ThreatLevel.MALICIOUS
+                    
+                    # Store threat types
+                    threat_types = [t.get("threatType", "unknown") for t in threats]
+                    source_result.raw_data["threat_types"] = threat_types
+                else:
+                    source_result.score = 0
+                    source_result.verdict = ThreatLevel.CLEAN
+            else:
+                source_result.available = False
+                source_result.error = "No response"
                 
         except asyncio.TimeoutError:
             source_result.available = False
