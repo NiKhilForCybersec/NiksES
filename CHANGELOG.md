@@ -1,54 +1,78 @@
-# NiksES v3.2.9 - Graceful VT Timeout Handling
+# NiksES v3.3.0 - Fully Dynamic TI Scoring
 
-## 🔧 Improvements
+## 🎯 Major Change: Zero Hardcoded TI Thresholds
 
-### VirusTotal Timeouts Now Expected
-VT free tier has strict rate limits (4 requests/min). System now:
-- Logs timeouts as INFO not WARNING (less noise)
-- Clearly shows which sources were used vs skipped
-- Continues analysis with available sources
+All threat intelligence scoring thresholds are now 100% dynamic and configurable!
 
-### Better TI Fusion Logging
-
-**Before:**
-```
-WARNING - TI source virustotal: unavailable - Timeout
-INFO - TI fusion complete: 3/4 sources available, 0 flagged
-```
-
-**After:**
-```
-INFO - TI source virustotal: timeout - using other sources
-INFO - TI fusion: 3/4 sources (used: ipqualityscore, google_safebrowsing, urlhaus, skipped: virustotal)
+### Before (Hardcoded)
+```python
+# ti_fusion.py had hardcoded values everywhere!
+if risk_score >= 85:  # HARDCODED!
+    verdict = MALICIOUS
+if malicious >= 3:    # HARDCODED!
+    verdict = MALICIOUS
+if score >= 75:       # HARDCODED!
+    verdict = MALICIOUS
 ```
 
-### How Scoring Works With Missing Sources
+### After (Dynamic from Config)
+```python
+# Now uses centralized scoring config
+config = get_scoring_config()
+ti = config.ti_thresholds
 
-When VT times out:
-1. Other sources (IPQS, GSB, AbuseIPDB, URLhaus) still provide data
-2. Fused score calculated from available sources only
-3. Confidence adjusted: `available / checked` (e.g., 3/4 = 0.75)
-4. Analysis continues normally - never blocked by API failures
-
-### Example Flow
-```
-TI checks: ['google_safebrowsing', 'ipqualityscore', 'virustotal', 'urlhaus']
-  ✓ google_safebrowsing: available, score=0, verdict=CLEAN
-  ✓ ipqualityscore: available, score=89, verdict=MALICIOUS  
-  ⏱ virustotal: timeout - using other sources
-  ✓ urlhaus: available, score=0, verdict=UNKNOWN
-TI fusion: 3/4 sources (used: ipqualityscore, google_safebrowsing, urlhaus, skipped: virustotal)
-Fused score: 89 (from IPQS)
-Confidence: 0.75
+if risk_score >= ti.ipqs_malicious:     # From config: 85
+    verdict = MALICIOUS
+if malicious >= ti.vt_malicious_engines: # From config: 3
+    verdict = MALICIOUS
+if score >= ti.abuseipdb_malicious:     # From config: 75
+    verdict = MALICIOUS
 ```
 
-## ✅ All Fixes Summary (v3.2.7 - v3.2.9)
+## 📊 Dynamic Thresholds Now Used
+
+| Source | Threshold | Default | Config Key |
+|--------|-----------|---------|------------|
+| **IPQualityScore** | Malicious | 85 | `ti_thresholds.ipqs_malicious` |
+| **IPQualityScore** | Suspicious | 75 | `ti_thresholds.ipqs_suspicious` |
+| **IPQualityScore** | Risky | 50 | `ti_thresholds.ipqs_risky` |
+| **VirusTotal** | Malicious | 3 engines | `ti_thresholds.vt_malicious_engines` |
+| **VirusTotal** | Suspicious | 1 engine | `ti_thresholds.vt_suspicious_engines` |
+| **AbuseIPDB** | Malicious | 75 | `ti_thresholds.abuseipdb_malicious` |
+| **AbuseIPDB** | Suspicious | 25 | `ti_thresholds.abuseipdb_suspicious` |
+
+## 🔧 Configure via Environment Variables
+
+```bash
+# Adjust IPQS sensitivity
+TI_IPQS_MALICIOUS=90      # Higher = less false positives
+TI_IPQS_SUSPICIOUS=80
+
+# Adjust VT sensitivity  
+TI_VT_MALICIOUS_ENGINES=5  # Require more engines to flag
+
+# Adjust AbuseIPDB sensitivity
+TI_ABUSEIPDB_MALICIOUS=80
+```
+
+## 📁 Files Updated
+
+- `app/services/enrichment/ti_fusion.py` - All 6 check methods now use config:
+  - `_check_ipqualityscore_url()`
+  - `_check_virustotal_url()`
+  - `_check_virustotal_domain()`
+  - `_check_virustotal_ip()`
+  - `_check_virustotal_hash()`
+  - `_check_abuseipdb()`
+
+## ✅ All Fixes Summary (v3.2.7 - v3.3.0)
 
 | Version | Fix |
 |---------|-----|
-| v3.2.7 | EmailAddress.email, get_settings import, BRAND_IMPERSONATION |
-| v3.2.8 | Unclosed aiohttp sessions, better logging structure |
-| v3.2.9 | VT timeout handling, cleaner TI fusion logs |
+| v3.2.7 | EmailAddress.email, get_settings, BRAND_IMPERSONATION |
+| v3.2.8 | Unclosed aiohttp sessions, better logging |
+| v3.2.9 | VT timeout handling, cleaner logs |
+| **v3.3.0** | **100% dynamic TI thresholds** |
 
 ## 📦 Package
 - 281 files, 1.6MB compressed

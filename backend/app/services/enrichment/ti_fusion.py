@@ -442,10 +442,20 @@ class ThreatIntelFusion:
                 else:
                     source_result.score = 0
                 
+                # Get dynamic thresholds from config
+                if USE_CENTRALIZED_CONFIG:
+                    config = get_scoring_config()
+                    ti = config.ti_thresholds
+                    malicious_threshold = ti.vt_malicious_engines  # default 3
+                    suspicious_threshold = ti.vt_suspicious_engines  # default 1
+                else:
+                    malicious_threshold = 3
+                    suspicious_threshold = 1
+                
                 # Determine verdict
-                if malicious >= 3:
+                if malicious >= malicious_threshold:
                     source_result.verdict = ThreatLevel.MALICIOUS
-                elif malicious >= 1 or suspicious >= 2:
+                elif malicious >= suspicious_threshold or suspicious >= 2:
                     source_result.verdict = ThreatLevel.SUSPICIOUS
                 else:
                     source_result.verdict = ThreatLevel.CLEAN
@@ -495,9 +505,19 @@ class ThreatIntelFusion:
                 else:
                     source_result.score = 0
                 
-                if malicious >= 3:
+                # Get dynamic thresholds from config
+                if USE_CENTRALIZED_CONFIG:
+                    config = get_scoring_config()
+                    ti = config.ti_thresholds
+                    malicious_threshold = ti.vt_malicious_engines
+                    suspicious_threshold = ti.vt_suspicious_engines
+                else:
+                    malicious_threshold = 3
+                    suspicious_threshold = 1
+                
+                if malicious >= malicious_threshold:
                     source_result.verdict = ThreatLevel.MALICIOUS
-                elif malicious >= 1 or suspicious >= 2:
+                elif malicious >= suspicious_threshold or suspicious >= 2:
                     source_result.verdict = ThreatLevel.SUSPICIOUS
                 else:
                     source_result.verdict = ThreatLevel.CLEAN
@@ -543,9 +563,19 @@ class ThreatIntelFusion:
                 
                 source_result.score = min(100, malicious * 15 + suspicious * 5)
                 
-                if malicious >= 3:
+                # Get dynamic thresholds from config
+                if USE_CENTRALIZED_CONFIG:
+                    config = get_scoring_config()
+                    ti = config.ti_thresholds
+                    malicious_threshold = ti.vt_malicious_engines
+                    suspicious_threshold = ti.vt_suspicious_engines
+                else:
+                    malicious_threshold = 3
+                    suspicious_threshold = 1
+                
+                if malicious >= malicious_threshold:
                     source_result.verdict = ThreatLevel.MALICIOUS
-                elif malicious >= 1 or suspicious >= 2:
+                elif malicious >= suspicious_threshold or suspicious >= 2:
                     source_result.verdict = ThreatLevel.SUSPICIOUS
                 else:
                     source_result.verdict = ThreatLevel.CLEAN
@@ -591,9 +621,20 @@ class ThreatIntelFusion:
                 if total > 0:
                     source_result.score = int((malicious * 100) / total)
                 
-                if malicious >= 5:
+                # Get dynamic thresholds from config (use higher thresholds for files)
+                if USE_CENTRALIZED_CONFIG:
+                    config = get_scoring_config()
+                    ti = config.ti_thresholds
+                    # For file hashes, use slightly higher thresholds
+                    malicious_threshold = max(5, ti.vt_malicious_engines + 2)
+                    suspicious_threshold = ti.vt_suspicious_engines
+                else:
+                    malicious_threshold = 5
+                    suspicious_threshold = 1
+                
+                if malicious >= malicious_threshold:
                     source_result.verdict = ThreatLevel.MALICIOUS
-                elif malicious >= 1:
+                elif malicious >= suspicious_threshold:
                     source_result.verdict = ThreatLevel.SUSPICIOUS
                 else:
                     source_result.verdict = ThreatLevel.CLEAN
@@ -633,9 +674,19 @@ class ThreatIntelFusion:
                 score = result.data.get("abuseConfidenceScore", 0)
                 source_result.score = score
                 
-                if score >= 75:
+                # Get dynamic thresholds from config
+                if USE_CENTRALIZED_CONFIG:
+                    config = get_scoring_config()
+                    ti = config.ti_thresholds
+                    malicious_threshold = ti.abuseipdb_malicious  # default 75
+                    suspicious_threshold = ti.abuseipdb_suspicious  # default 25
+                else:
+                    malicious_threshold = 75
+                    suspicious_threshold = 25
+                
+                if score >= malicious_threshold:
                     source_result.verdict = ThreatLevel.MALICIOUS
-                elif score >= 25:
+                elif score >= suspicious_threshold:
                     source_result.verdict = ThreatLevel.SUSPICIOUS
                 else:
                     source_result.verdict = ThreatLevel.CLEAN
@@ -836,11 +887,23 @@ class ThreatIntelFusion:
                 is_malware = result.get("is_malware", False)
                 is_suspicious = result.get("is_suspicious", False)
                 
-                if is_phishing or is_malware or risk_score >= 85:
+                # Get dynamic thresholds from config
+                if USE_CENTRALIZED_CONFIG:
+                    config = get_scoring_config()
+                    ti = config.ti_thresholds
+                    malicious_threshold = ti.ipqs_malicious  # default 85
+                    suspicious_threshold = ti.ipqs_suspicious  # default 75
+                    risky_threshold = ti.ipqs_risky  # default 50
+                else:
+                    malicious_threshold = 85
+                    suspicious_threshold = 75
+                    risky_threshold = 50
+                
+                if is_phishing or is_malware or risk_score >= malicious_threshold:
                     source_result.verdict = ThreatLevel.MALICIOUS
-                elif is_suspicious or risk_score >= 75:
+                elif is_suspicious or risk_score >= suspicious_threshold:
                     source_result.verdict = ThreatLevel.SUSPICIOUS
-                elif risk_score >= 50:
+                elif risk_score >= risky_threshold:
                     source_result.verdict = ThreatLevel.SUSPICIOUS
                 else:
                     source_result.verdict = ThreatLevel.CLEAN
