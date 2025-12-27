@@ -375,6 +375,9 @@ class AnalysisOrchestrator:
             if not self.ti_fusion:
                 return None
             
+            # Import URL filter
+            from app.services.enrichment.url_filter import filter_urls_for_ti
+            
             # Collect IOCs to check
             urls_to_check = []
             domains_to_check = []
@@ -383,9 +386,21 @@ class AnalysisOrchestrator:
             
             # Extract URLs
             if email.urls:
+                raw_urls = []
                 for url_info in email.urls:
                     url = url_info.url if hasattr(url_info, 'url') else str(url_info)
-                    urls_to_check.append(url)
+                    raw_urls.append(url)
+                
+                # Filter URLs - skip images, safe domains, tracking pixels
+                # Only check suspicious/unknown URLs (max 5)
+                urls_to_check, skipped = filter_urls_for_ti(
+                    raw_urls, 
+                    max_urls=5,
+                    include_all_suspicious=True
+                )
+                
+                if skipped:
+                    self.logger.info(f"Skipped {len(skipped)} safe/asset URLs from TI check")
             
             # Extract IPs from headers
             if email.received_chain:
@@ -404,8 +419,8 @@ class AnalysisOrchestrator:
             # Run TI checks (limit to avoid API abuse)
             ti_tasks = []
             
-            # Check first 3 URLs
-            for url in urls_to_check[:3]:
+            # Check filtered URLs (filter already prioritizes suspicious ones)
+            for url in urls_to_check:
                 ti_tasks.append(("url", url, self.ti_fusion.check_url(url)))
             
             # Check first 3 IPs

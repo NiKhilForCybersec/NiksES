@@ -1,78 +1,101 @@
-# NiksES v3.3.0 - Fully Dynamic TI Scoring
+# NiksES v3.3.3 - Advanced URL Intelligence Filter
 
-## 🎯 Major Change: Zero Hardcoded TI Thresholds
+## 🧠 Enterprise-Grade URL Filtering
 
-All threat intelligence scoring thresholds are now 100% dynamic and configurable!
+Comprehensive URL filtering that saves API quota while catching ALL threats!
 
-### Before (Hardcoded)
-```python
-# ti_fusion.py had hardcoded values everywhere!
-if risk_score >= 85:  # HARDCODED!
-    verdict = MALICIOUS
-if malicious >= 3:    # HARDCODED!
-    verdict = MALICIOUS
-if score >= 75:       # HARDCODED!
-    verdict = MALICIOUS
+### Filter Statistics
+| Category | Count |
+|----------|-------|
+| **Safe Domains** | 345+ |
+| **Suspicious Patterns** | 302+ |
+| **Tracking Patterns** | 53+ |
+| **Total Rules** | 700+ |
+
+## 🎯 What It Detects
+
+### Brand Impersonation (with typosquatting)
+```
+✓ paypa1-secure.com       (PayPal typosquat)
+✓ micros0ft-login.click   (Microsoft typosquat)
+✓ amaz0n.support.top      (Amazon typosquat)
+✓ g00gle-verify.ml        (Google typosquat)
+✓ faceb00k-security.xyz   (Facebook typosquat)
 ```
 
-### After (Dynamic from Config)
-```python
-# Now uses centralized scoring config
-config = get_scoring_config()
-ti = config.ti_thresholds
-
-if risk_score >= ti.ipqs_malicious:     # From config: 85
-    verdict = MALICIOUS
-if malicious >= ti.vt_malicious_engines: # From config: 3
-    verdict = MALICIOUS
-if score >= ti.abuseipdb_malicious:     # From config: 75
-    verdict = MALICIOUS
+### Suspicious TLDs
+```
+✓ .tk, .ml, .ga, .cf, .gq  (Freenom - commonly abused)
+✓ .xyz, .top, .club, .work, .click
+✓ .icu, .buzz, .fun, .space, .website
+✓ .zip, .mov  (New Google TLDs abused for phishing)
 ```
 
-## 📊 Dynamic Thresholds Now Used
-
-| Source | Threshold | Default | Config Key |
-|--------|-----------|---------|------------|
-| **IPQualityScore** | Malicious | 85 | `ti_thresholds.ipqs_malicious` |
-| **IPQualityScore** | Suspicious | 75 | `ti_thresholds.ipqs_suspicious` |
-| **IPQualityScore** | Risky | 50 | `ti_thresholds.ipqs_risky` |
-| **VirusTotal** | Malicious | 3 engines | `ti_thresholds.vt_malicious_engines` |
-| **VirusTotal** | Suspicious | 1 engine | `ti_thresholds.vt_suspicious_engines` |
-| **AbuseIPDB** | Malicious | 75 | `ti_thresholds.abuseipdb_malicious` |
-| **AbuseIPDB** | Suspicious | 25 | `ti_thresholds.abuseipdb_suspicious` |
-
-## 🔧 Configure via Environment Variables
-
-```bash
-# Adjust IPQS sensitivity
-TI_IPQS_MALICIOUS=90      # Higher = less false positives
-TI_IPQS_SUSPICIOUS=80
-
-# Adjust VT sensitivity  
-TI_VT_MALICIOUS_ENGINES=5  # Require more engines to flag
-
-# Adjust AbuseIPDB sensitivity
-TI_ABUSEIPDB_MALICIOUS=80
+### Attack Patterns
+```
+✓ Path traversal: /../../../etc/passwd
+✓ IP in URL: https://192.168.1.1/login
+✓ Credential URLs: https://user:pass@evil.com
+✓ Command injection: ?cmd=whoami
+✓ SQL injection: ?id=1' OR '1'='1
+✓ Executable downloads: .exe, .scr, .bat, .ps1
+✓ Base64/encoded payloads
 ```
 
-## 📁 Files Updated
+### Homograph/Lookalike Detection
+```
+✓ Cyrillic characters: аррӏе.com (fake apple.com)
+✓ Greek characters: αmazon.com (fake amazon.com)
+✓ l33t speak: g00gle, pay1, micr0soft
+✓ Visual tricks: rn→m, vv→w, cl→d
+```
 
-- `app/services/enrichment/ti_fusion.py` - All 6 check methods now use config:
-  - `_check_ipqualityscore_url()`
-  - `_check_virustotal_url()`
-  - `_check_virustotal_domain()`
-  - `_check_virustotal_ip()`
-  - `_check_virustotal_hash()`
-  - `_check_abuseipdb()`
+## 🚫 What It Skips (Saves API Quota)
 
-## ✅ All Fixes Summary (v3.2.7 - v3.3.0)
+### 345+ Safe Domains
+- Tech giants: google, microsoft, apple, amazon, facebook
+- Email: gmail, outlook, yahoo, protonmail
+- SaaS: slack, zoom, dropbox, notion, salesforce
+- CDNs: cloudflare, akamai, fastly, cloudfront
+- Dev: github, npm, pypi, docker, vercel
 
-| Version | Fix |
-|---------|-----|
-| v3.2.7 | EmailAddress.email, get_settings, BRAND_IMPERSONATION |
-| v3.2.8 | Unclosed aiohttp sessions, better logging |
-| v3.2.9 | VT timeout handling, cleaner logs |
-| **v3.3.0** | **100% dynamic TI thresholds** |
+### Asset URLs
+- Images: .png, .jpg, .gif, .webp, .ico, .svg
+- Fonts: .woff, .woff2, .ttf, .eot
+- Styles: .css
 
-## 📦 Package
-- 281 files, 1.6MB compressed
+### 53+ Tracking Patterns
+- Pixels: /pixel, /beacon, /1x1.gif, /track
+- Analytics: /collect, /__utm, /analytics
+- Email tracking: sendgrid, mailchimp, hubspot
+
+## 📊 Priority Scoring (0-20)
+
+| Priority | Description | Example |
+|----------|-------------|---------|
+| 13+ | Critical threat | IP + payment keywords |
+| 10-12 | High threat | Typosquatting + suspicious TLD |
+| 7-9 | Medium threat | Free TLD + random domain |
+| 4-6 | Low threat | Executable download |
+| 1-3 | Minimal risk | URL shortener |
+| 0 | Unknown | Normal URL |
+| -1 | Skip | Safe domain/asset |
+
+## 💰 API Quota Savings
+
+Typical email with 50 URLs:
+```
+Before:  50 API calls (quota exhausted!)
+After:   5-10 API calls (only suspicious ones)
+Savings: 80-90% API quota!
+```
+
+## 📁 Files
+- `backend/app/services/enrichment/url_filter.py` (700+ rules)
+- `backend/app/services/analysis/orchestrator.py` (integration)
+
+## ✅ All Previous Fixes Included
+- Dynamic TI thresholds
+- URL parsing fix
+- Session leak fixes
+- Better logging

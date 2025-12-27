@@ -349,8 +349,37 @@ URL_THREAT_PATTERNS = {
 
 def extract_urls(text: str) -> List[str]:
     """Extract URLs from text."""
-    url_pattern = r'https?://[^\s<>"\']+|www\.[^\s<>"\']+|\b[a-zA-Z0-9][-a-zA-Z0-9]*\.[a-zA-Z]{2,}(?:/[^\s]*)?'
-    urls = re.findall(url_pattern, text, re.IGNORECASE)
+    urls = []
+    
+    # First check if the entire input is a single URL/domain (common for URL mode)
+    text_stripped = text.strip()
+    if text_stripped and ' ' not in text_stripped and '\n' not in text_stripped:
+        # Single token - might be a URL or domain
+        if re.match(r'^(?:https?://)?(?:www\.)?[a-zA-Z0-9][-a-zA-Z0-9.]*\.[a-zA-Z]{2,}(?:/[^\s]*)?$', text_stripped, re.IGNORECASE):
+            url = text_stripped
+            if not url.startswith(('http://', 'https://')):
+                url = 'https://' + url
+            return [url]
+    
+    # For text with multiple tokens, use pattern matching
+    # Match URLs with protocol
+    url_with_protocol = r'https?://[^\s<>"\']+|www\.[^\s<>"\']+(?:\.[^\s<>"\']+)*'
+    
+    # For bare domains in text, match complete domains (word boundaries on both sides)
+    # This pattern matches: subdomain.subdomain.domain.tld
+    bare_domain = r'(?<![a-zA-Z0-9.\-])(?:[a-zA-Z0-9][-a-zA-Z0-9]*\.)+[a-zA-Z]{2,}(?:/[^\s]*)?(?![a-zA-Z0-9.\-])'
+    
+    # Extract URLs with protocol first
+    protocol_matches = re.findall(url_with_protocol, text, re.IGNORECASE)
+    urls.extend(protocol_matches)
+    
+    # Then extract bare domains from remaining text
+    remaining_text = text
+    for match in protocol_matches:
+        remaining_text = remaining_text.replace(match, ' ')
+    
+    bare_matches = re.findall(bare_domain, remaining_text, re.IGNORECASE)
+    urls.extend(bare_matches)
     
     cleaned = []
     for url in urls:
@@ -360,7 +389,15 @@ def extract_urls(text: str) -> List[str]:
                 url = 'https://' + url
             cleaned.append(url)
     
-    return list(set(cleaned))
+    # Deduplicate while preserving order
+    seen = set()
+    result = []
+    for url in cleaned:
+        if url not in seen:
+            seen.add(url)
+            result.append(url)
+    
+    return result
 
 
 def extract_domains(urls: List[str]) -> List[str]:

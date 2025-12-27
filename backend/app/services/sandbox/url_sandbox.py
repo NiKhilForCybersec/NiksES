@@ -130,7 +130,11 @@ class URLScanClient:
                         return None
                     else:
                         error = await response.text()
-                        logger.error(f"URLScan.io submit error: {response.status} - {error}")
+                        # DNS errors are expected for malicious/non-existent domains - log as INFO
+                        if "DNS Error" in error or "could not be resolved" in error:
+                            logger.info(f"URLScan.io: Domain doesn't resolve (likely malicious/takedown)")
+                        else:
+                            logger.error(f"URLScan.io submit error: {response.status} - {error}")
                         return None
         except Exception as e:
             logger.error(f"URLScan.io submit exception: {e}")
