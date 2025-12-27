@@ -1418,6 +1418,7 @@ function App() {
                     setFullAnalysisOpen(false);
                     setTextAnalysisResult(null);
                   }}
+                  onSOCTools={() => setSocToolsOpen(true)}
                 />
               </div>
             </div>

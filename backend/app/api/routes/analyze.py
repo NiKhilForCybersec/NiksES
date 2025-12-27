@@ -361,16 +361,17 @@ async def run_unified_analysis(
         except Exception as e:
             logger.warning(f"Failed to initialize IPQualityScore: {e}")
     
-    # Google Safe Browsing
-    gsb_key = getattr(settings, 'google_safebrowsing_api_key', None)
-    if gsb_key:
-        try:
-            from app.services.enrichment.google_safebrowsing import GoogleSafeBrowsingClient
-            gsb_provider = GoogleSafeBrowsingClient(gsb_key)
-            apis_configured.append("google_safebrowsing")
-            logger.info("Google Safe Browsing provider configured")
-        except Exception as e:
-            logger.warning(f"Failed to initialize Google Safe Browsing: {e}")
+    # Google Safe Browsing - DISABLED (slow, redundant with VirusTotal)
+    gsb_provider = None
+    # gsb_key = getattr(settings, 'google_safebrowsing_api_key', None)
+    # if gsb_key:
+    #     try:
+    #         from app.services.enrichment.google_safebrowsing import GoogleSafeBrowsingClient
+    #         gsb_provider = GoogleSafeBrowsingClient(gsb_key)
+    #         apis_configured.append("google_safebrowsing")
+    #         logger.info("Google Safe Browsing provider configured")
+    #     except Exception as e:
+    #         logger.warning(f"Failed to initialize Google Safe Browsing: {e}")
     
     # PhishTank (free)
     phishtank_key = getattr(settings, 'phishtank_api_key', None)

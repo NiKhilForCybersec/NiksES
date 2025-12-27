@@ -823,15 +823,22 @@ async def enrich_urls(urls: List[str]) -> List[URLEnrichmentResult]:
     Enrich URLs with threat intelligence from multiple sources.
     
     Sources (in order of reliability):
-    1. Google Safe Browsing - Google's threat database
-    2. IPQualityScore - Comprehensive URL scanning  
-    3. URLhaus - Free, no rate limits, malware database
-    4. PhishTank - Free, no rate limits, phishing database  
-    5. VirusTotal - Has rate limits (4/min free tier), reputation check
+    1. IPQualityScore - Comprehensive URL scanning  
+    2. URLhaus - Free, no rate limits, malware database
+    3. PhishTank - Free, no rate limits, phishing database  
+    4. VirusTotal - Has rate limits (4/min free tier), reputation check
+    
+    Note: Google Safe Browsing disabled (slow, redundant with IPQS)
     
     The function gracefully handles when any source fails or is unavailable.
     """
     results = []
+    
+    if not urls:
+        logger.info("No URLs to enrich")
+        return results
+    
+    logger.info(f"Starting URL enrichment for {len(urls)} URLs")
     
     # Try to import enrichment services
     try:
@@ -839,7 +846,6 @@ async def enrich_urls(urls: List[str]) -> List[URLEnrichmentResult]:
         from app.services.enrichment.phishtank import PhishTankProvider
         from app.services.enrichment.urlhaus import URLhausProvider
         from app.services.enrichment.ipqualityscore import IPQualityScoreClient
-        from app.services.enrichment.google_safebrowsing import GoogleSafeBrowsingClient
         from app.api.dependencies import get_settings
         
         settings = get_settings()
@@ -848,17 +854,27 @@ async def enrich_urls(urls: List[str]) -> List[URLEnrichmentResult]:
         pt = PhishTankProvider()
         uh = URLhausProvider()
         
-        # Initialize new providers
-        ipqs = IPQualityScoreClient(getattr(settings, 'ipqualityscore_api_key', '') or '')
-        gsb = GoogleSafeBrowsingClient(getattr(settings, 'google_safebrowsing_api_key', '') or '')
+        # Initialize IPQS provider
+        ipqs_key = getattr(settings, 'ipqualityscore_api_key', '') or ''
+        ipqs = IPQualityScoreClient(ipqs_key) if ipqs_key else None
+        
+        # Google Safe Browsing - DISABLED (slow, redundant with IPQS)
+        gsb = None
+        gsb_available = False
         
         # Log which services are available
         vt_available = vt.is_configured
-        ipqs_available = bool(ipqs.api_key)
-        gsb_available = bool(gsb.api_key)
-        logger.info(f"URL enrichment services: VT={vt_available}, PT=True, UH=True, IPQS={ipqs_available}, GSB={gsb_available}")
+        ipqs_available = ipqs is not None and bool(ipqs.api_key)
+        
+        logger.info(f"=== URL ENRICHMENT CONFIG ===")
+        logger.info(f"  VirusTotal: {'CONFIGURED' if vt_available else 'NO API KEY'}")
+        logger.info(f"  IPQualityScore: {'CONFIGURED' if ipqs_available else 'NO API KEY'}")
+        logger.info(f"  URLhaus: AVAILABLE (free)")
+        logger.info(f"  PhishTank: AVAILABLE (free)")
+        logger.info(f"  Google Safe Browsing: DISABLED")
         
         for url in urls[:5]:  # Limit to 5 URLs
+            logger.info(f"Enriching URL: {url}")
             try:
                 from urllib.parse import urlparse
                 domain = urlparse(url).netloc
@@ -869,26 +885,7 @@ async def enrich_urls(urls: List[str]) -> List[URLEnrichmentResult]:
                 )
                 
                 sources = []
-                
-                # Google Safe Browsing check FIRST (highly reliable)
-                if gsb_available:
-                    try:
-                        gsb_result = await gsb.check_url(url)
-                        if gsb_result and not gsb_result.get('error'):
-                            if gsb_result.get('is_malicious'):
-                                enrichment.is_malicious = True
-                                enrichment.threat_score = max(enrichment.threat_score, 95)
-                                enrichment.gsb_malicious = True
-                                sources.append("Google Safe Browsing")
-                                primary_threat = gsb_result.get('primary_threat', 'malicious')
-                                enrichment.categories.append(f"GSB: {primary_threat}")
-                                logger.info(f"Google Safe Browsing: {url} flagged as {primary_threat}")
-                            elif gsb_result.get('safe') is True:
-                                # Clean in GSB is a positive signal
-                                enrichment.gsb_malicious = False
-                                sources.append("Google Safe Browsing")
-                    except Exception as e:
-                        logger.debug(f"Google Safe Browsing check failed for {url}: {e}")
+                errors = []
                 
                 # IPQualityScore check (comprehensive)
                 if ipqs_available:
@@ -974,28 +971,41 @@ async def enrich_urls(urls: List[str]) -> List[URLEnrichmentResult]:
                 enrichment.sources = sources
                 
                 # Log final enrichment result
-                if sources:
-                    logger.info(f"URL {url}: enriched from {sources}, score={enrichment.threat_score}, malicious={enrichment.is_malicious}")
-                else:
-                    logger.debug(f"URL {url}: no threat intel found from any source")
+                logger.info(f"=== ENRICHMENT RESULT: {url} ===")
+                logger.info(f"  Sources checked: {sources if sources else 'none (APIs not configured)'}")
+                logger.info(f"  Threat score: {enrichment.threat_score}")
+                logger.info(f"  Is malicious: {enrichment.is_malicious}")
+                logger.info(f"  Categories: {enrichment.categories}")
                 
+                # Always return result even if no TI data found
                 results.append(enrichment)
                 
             except Exception as e:
-                logger.error(f"Error enriching URL {url}: {e}")
-                results.append(URLEnrichmentResult(url=url, domain="unknown"))
+                logger.error(f"Error enriching URL {url}: {e}", exc_info=True)
+                # Still return basic result
+                results.append(URLEnrichmentResult(url=url, domain=urlparse(url).netloc if url else "unknown"))
         
     except ImportError as e:
-        logger.warning(f"Enrichment services not available: {e}")
+        logger.error(f"Enrichment services import failed: {e}", exc_info=True)
         # Return basic results without enrichment
         for url in urls[:5]:
             try:
                 from urllib.parse import urlparse
                 domain = urlparse(url).netloc
-                results.append(URLEnrichmentResult(url=url, domain=domain))
+                results.append(URLEnrichmentResult(url=url, domain=domain, sources=["import_error"]))
             except:
-                results.append(URLEnrichmentResult(url=url, domain="unknown"))
+                results.append(URLEnrichmentResult(url=url, domain="unknown", sources=["import_error"]))
+    except Exception as e:
+        logger.error(f"Enrichment failed: {e}", exc_info=True)
+        for url in urls[:5]:
+            try:
+                from urllib.parse import urlparse
+                domain = urlparse(url).netloc
+                results.append(URLEnrichmentResult(url=url, domain=domain, sources=["error"]))
+            except:
+                results.append(URLEnrichmentResult(url=url, domain="unknown", sources=["error"]))
     
+    logger.info(f"URL enrichment complete: {len(results)} results")
     return results
 
 
@@ -1024,6 +1034,8 @@ async def get_ai_analysis(
         url_enrichment: TI results from VirusTotal, IPQS, GSB, etc.
         url_sandbox: Dynamic analysis results
     """
+    logger.info("=== AI ANALYSIS START ===")
+    
     try:
         from app.services.ai.openai_provider import OpenAIProvider
         from app.services.ai.anthropic_provider import AnthropicProvider
@@ -1036,15 +1048,24 @@ async def get_ai_analysis(
         openai_key = os.getenv("OPENAI_API_KEY")
         anthropic_key = os.getenv("ANTHROPIC_API_KEY")
         
+        logger.info(f"  OpenAI API Key: {'CONFIGURED' if openai_key else 'NOT SET'}")
+        logger.info(f"  Anthropic API Key: {'CONFIGURED' if anthropic_key else 'NOT SET'}")
+        
         if openai_key:
             provider = OpenAIProvider(api_key=openai_key)
             provider_name = "openai"
+            logger.info(f"  Using provider: OpenAI")
         elif anthropic_key:
             provider = AnthropicProvider(api_key=anthropic_key)
             provider_name = "anthropic"
+            logger.info(f"  Using provider: Anthropic")
         
         if not provider or not provider.is_configured():
-            return AIAnalysisResult(enabled=False, summary="AI analysis not configured")
+            logger.warning("  AI provider not configured - analysis disabled")
+            return AIAnalysisResult(
+                enabled=False, 
+                summary="AI analysis not configured. Set OPENAI_API_KEY or ANTHROPIC_API_KEY environment variable."
+            )
         
         # Build prompt with full context
         source_type = "URL" if source == TextSource.URL else f"{source.value.upper()} message"

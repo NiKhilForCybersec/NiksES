@@ -49,7 +49,8 @@ class Settings(BaseModel):
     analysis_timeout_seconds: int = 120
     
     class Config:
-        env_prefix = "NIKSES_"
+        # NO env_prefix - read directly from env vars like IPQUALITYSCORE_API_KEY
+        case_sensitive = False
         extra = "ignore"  # Ignore extra fields
 
 
@@ -57,18 +58,53 @@ class Settings(BaseModel):
 _settings: Optional[Settings] = None
 
 
+def _load_settings_from_env() -> Settings:
+    """Load settings directly from environment variables."""
+    import os
+    return Settings(
+        # Feature flags
+        enrichment_enabled=os.getenv("ENRICHMENT_ENABLED", "true").lower() == "true",
+        ai_enabled=os.getenv("AI_ENABLED", "true").lower() == "true",
+        ai_provider=os.getenv("AI_PROVIDER", "openai"),
+        
+        # AI Keys
+        anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"),
+        openai_api_key=os.getenv("OPENAI_API_KEY"),
+        
+        # TI Keys
+        virustotal_api_key=os.getenv("VIRUSTOTAL_API_KEY"),
+        abuseipdb_api_key=os.getenv("ABUSEIPDB_API_KEY"),
+        phishtank_api_key=os.getenv("PHISHTANK_API_KEY"),
+        mxtoolbox_api_key=os.getenv("MXTOOLBOX_API_KEY"),
+        ipqualityscore_api_key=os.getenv("IPQUALITYSCORE_API_KEY"),
+        google_safebrowsing_api_key=os.getenv("GOOGLE_SAFEBROWSING_API_KEY"),
+        
+        # Sandbox Keys
+        hybrid_analysis_api_key=os.getenv("HYBRID_ANALYSIS_API_KEY"),
+        urlscan_api_key=os.getenv("URLSCAN_API_KEY"),
+        
+        # Storage
+        storage_type=os.getenv("STORAGE_TYPE", "sqlite"),
+        database_url=os.getenv("DATABASE_URL"),
+    )
+
+
 def init_settings(**kwargs) -> Settings:
     """Initialize global settings."""
     global _settings
-    _settings = Settings(**kwargs)
+    _settings = _load_settings_from_env()
+    # Override with any provided kwargs
+    for key, value in kwargs.items():
+        if hasattr(_settings, key):
+            setattr(_settings, key, value)
     return _settings
 
 
 def get_settings() -> Settings:
-    """Get current settings."""
+    """Get current settings, loading from env if not initialized."""
     global _settings
     if _settings is None:
-        _settings = Settings()
+        _settings = _load_settings_from_env()
     return _settings
 
 

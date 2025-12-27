@@ -95,6 +95,7 @@ interface TextAnalysisResult {
 interface Props {
   result: TextAnalysisResult;
   onClose?: () => void;
+  onSOCTools?: () => void;
 }
 
 const getRiskColor = (level: string | undefined | null) => {
@@ -126,7 +127,7 @@ const getSourceIcon = (source: string | undefined | null) => {
   }
 };
 
-const TextAnalysisResults: React.FC<Props> = ({ result, onClose }) => {
+const TextAnalysisResults: React.FC<Props> = ({ result, onClose, onSOCTools }) => {
   // Normalize result with safe defaults to prevent crashes
   const safeResult = {
     analysis_id: result?.analysis_id || '',
@@ -182,6 +183,33 @@ const TextAnalysisResults: React.FC<Props> = ({ result, onClose }) => {
 
   return (
     <div className="space-y-4 md:space-y-6">
+      {/* Action Buttons */}
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl md:text-2xl font-bold flex items-center gap-2">
+          {getSourceIcon(safeResult.source)}
+          {isUrlMode ? 'URL Analysis' : `${(safeResult.source || 'TEXT').toUpperCase()} Analysis`}
+        </h1>
+        <div className="flex items-center gap-2">
+          {onSOCTools && (
+            <button
+              onClick={onSOCTools}
+              className="flex items-center gap-2 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors text-sm font-medium"
+            >
+              <Shield className="w-4 h-4" />
+              SOC Tools
+            </button>
+          )}
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="flex items-center gap-2 px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors text-sm"
+            >
+              ← Back
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* Header with Risk Score */}
       <div className={`p-4 md:p-6 rounded-xl border-2 ${getRiskColor(safeResult.overall_level)}`}>
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -196,14 +224,11 @@ const TextAnalysisResults: React.FC<Props> = ({ result, onClose }) => {
               )}
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                {getSourceIcon(safeResult.source)}
-                <h2 className="text-lg md:text-xl font-bold">
-                  {isUrlMode ? 'URL Analysis' : `${(safeResult.source || 'TEXT').toUpperCase()} Analysis`}
-                </h2>
-              </div>
-              <p className="text-xs md:text-sm text-slate-400 mt-1">
+              <h2 className="text-lg md:text-xl font-bold">
                 {(safeResult.classification || 'unknown').replace(/_/g, ' ').toUpperCase()}
+              </h2>
+              <p className="text-xs md:text-sm text-slate-400 mt-1">
+                {safeResult.is_threat ? '⚠️ Threat Detected' : '✓ No Immediate Threat'}
               </p>
             </div>
           </div>
@@ -262,76 +287,92 @@ const TextAnalysisResults: React.FC<Props> = ({ result, onClose }) => {
         </div>
       </div>
 
-      {/* AI Analysis */}
-      {safeResult.ai_analysis.enabled && (
-        <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
-          <button
-            onClick={() => toggleSection('ai')}
-            className="w-full p-4 flex items-center justify-between hover:bg-slate-700/50"
-          >
-            <div className="flex items-center gap-2">
-              <Brain className="w-5 h-5 text-purple-400" />
-              <h3 className="font-semibold">AI Analysis</h3>
-              {safeResult.ai_analysis.provider && (
-                <span className="text-xs bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded">
-                  {safeResult.ai_analysis.provider}
-                </span>
-              )}
-            </div>
-            {expandedSections.ai ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-          </button>
-          
-          {expandedSections.ai && (
-            <div className="p-4 pt-0 space-y-4">
-              {/* Summary */}
-              <div className="bg-slate-900 rounded-lg p-4">
-                <p className="text-slate-300">{safeResult.ai_analysis.summary}</p>
-              </div>
-
-              {/* Threat Assessment */}
-              {safeResult.ai_analysis.threat_assessment && (
-                <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full ${
-                  safeResult.ai_analysis.threat_assessment === 'MALICIOUS' ? 'bg-red-500/20 text-red-300' :
-                  safeResult.ai_analysis.threat_assessment === 'SUSPICIOUS' ? 'bg-orange-500/20 text-orange-300' :
-                  'bg-green-500/20 text-green-300'
-                }`}>
-                  <Shield className="w-4 h-4" />
-                  {safeResult.ai_analysis.threat_assessment}
+      {/* AI Analysis - Always show with status */}
+      <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
+        <button
+          onClick={() => toggleSection('ai')}
+          className="w-full p-4 flex items-center justify-between hover:bg-slate-700/50"
+        >
+          <div className="flex items-center gap-2">
+            <Brain className="w-5 h-5 text-purple-400" />
+            <h3 className="font-semibold">AI Analysis</h3>
+            {safeResult.ai_analysis.enabled ? (
+              <span className="text-xs bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded">
+                {safeResult.ai_analysis.provider || 'AI'}
+              </span>
+            ) : (
+              <span className="text-xs bg-slate-600/50 text-slate-400 px-2 py-0.5 rounded">
+                Not Configured
+              </span>
+            )}
+          </div>
+          {expandedSections.ai ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+        </button>
+        
+        {expandedSections.ai && (
+          <div className="p-4 pt-0 space-y-4">
+            {safeResult.ai_analysis.enabled ? (
+              <>
+                {/* Summary */}
+                <div className="bg-slate-900 rounded-lg p-4">
+                  <p className="text-slate-300">{safeResult.ai_analysis.summary}</p>
                 </div>
-              )}
 
-              {/* Key Findings */}
-              {safeResult.ai_analysis.key_findings.length > 0 && (
-                <div>
-                  <h4 className="text-sm font-medium text-slate-400 mb-2">Key Findings</h4>
-                  <ul className="space-y-1">
-                    {safeResult.ai_analysis.key_findings.map((finding, i) => (
-                      <li key={i} className="flex items-start gap-2 text-sm text-slate-300">
-                        <AlertCircle className="w-4 h-4 text-yellow-400 mt-0.5 flex-shrink-0" />
-                        {finding}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {/* Social Engineering Tactics */}
-              {safeResult.ai_analysis.social_engineering_tactics.length > 0 && (
-                <div>
-                  <h4 className="text-sm font-medium text-slate-400 mb-2">Social Engineering Tactics</h4>
-                  <div className="flex flex-wrap gap-2">
-                    {safeResult.ai_analysis.social_engineering_tactics.map((tactic, i) => (
-                      <span key={i} className="px-2 py-1 bg-orange-500/20 text-orange-300 rounded text-xs">
-                        {tactic}
-                      </span>
-                    ))}
+                {/* Threat Assessment */}
+                {safeResult.ai_analysis.threat_assessment && (
+                  <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full ${
+                    safeResult.ai_analysis.threat_assessment === 'MALICIOUS' ? 'bg-red-500/20 text-red-300' :
+                    safeResult.ai_analysis.threat_assessment === 'SUSPICIOUS' ? 'bg-orange-500/20 text-orange-300' :
+                    'bg-green-500/20 text-green-300'
+                  }`}>
+                    <Shield className="w-4 h-4" />
+                    {safeResult.ai_analysis.threat_assessment}
                   </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
+                )}
+
+                {/* Key Findings */}
+                {safeResult.ai_analysis.key_findings.length > 0 && (
+                  <div>
+                    <h4 className="text-sm font-medium text-slate-400 mb-2">Key Findings</h4>
+                    <ul className="space-y-1">
+                      {safeResult.ai_analysis.key_findings.map((finding, i) => (
+                        <li key={i} className="flex items-start gap-2 text-sm text-slate-300">
+                          <AlertCircle className="w-4 h-4 text-yellow-400 mt-0.5 flex-shrink-0" />
+                          {finding}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Social Engineering Tactics */}
+                {safeResult.ai_analysis.social_engineering_tactics.length > 0 && (
+                  <div>
+                    <h4 className="text-sm font-medium text-slate-400 mb-2">Social Engineering Tactics</h4>
+                    <div className="flex flex-wrap gap-2">
+                      {safeResult.ai_analysis.social_engineering_tactics.map((tactic, i) => (
+                        <span key={i} className="px-2 py-1 bg-orange-500/20 text-orange-300 rounded text-xs">
+                          {tactic}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="bg-slate-900 rounded-lg p-4 text-center">
+                <Info className="w-8 h-8 text-slate-500 mx-auto mb-2" />
+                <p className="text-slate-400 text-sm">
+                  {safeResult.ai_analysis.summary || 'AI analysis not available'}
+                </p>
+                <p className="text-slate-500 text-xs mt-2">
+                  Configure OPENAI_API_KEY or ANTHROPIC_API_KEY in settings
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Threat Indicators */}
       <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
@@ -488,19 +529,29 @@ const TextAnalysisResults: React.FC<Props> = ({ result, onClose }) => {
                   </div>
                 ))
               ) : (
-                safeResult.urls_found.map((url, i) => (
-                  <div key={i} className="bg-slate-900 rounded-lg p-3 flex items-center justify-between">
-                    <span className="text-sm text-slate-300 truncate">{url}</span>
-                    <a
-                      href={`https://www.virustotal.com/gui/url/${btoa(url)}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue-400 hover:text-blue-300 ml-2"
-                    >
-                      <ExternalLink className="w-4 h-4" />
-                    </a>
+                <>
+                  {/* Show URLs without enrichment + status message */}
+                  <div className="bg-slate-900/50 rounded-lg p-3 mb-3 border border-slate-700">
+                    <div className="flex items-center gap-2 text-slate-400 text-sm">
+                      <Info className="w-4 h-4" />
+                      <span>No threat intelligence data available. Configure API keys in settings for full analysis.</span>
+                    </div>
                   </div>
-                ))
+                  {safeResult.urls_found.map((url, i) => (
+                    <div key={i} className="bg-slate-900 rounded-lg p-3 flex items-center justify-between">
+                      <span className="text-sm text-slate-300 truncate">{url}</span>
+                      <a
+                        href={`https://www.virustotal.com/gui/url/${btoa(url)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-400 hover:text-blue-300 ml-2"
+                        title="Check on VirusTotal"
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                      </a>
+                    </div>
+                  ))}
+                </>
               )}
             </div>
           )}
@@ -698,6 +749,9 @@ const TextAnalysisResults: React.FC<Props> = ({ result, onClose }) => {
           <div className="flex items-center gap-2">
             <CheckCircle className="w-5 h-5 text-green-400" />
             <h3 className="font-semibold">Recommendations</h3>
+            <span className="text-xs bg-green-500/20 text-green-300 px-2 py-0.5 rounded">
+              {safeResult.recommendations.length || (safeResult.is_threat ? 3 : 1)}
+            </span>
           </div>
           {expandedSections.recommendations ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
         </button>
@@ -705,12 +759,34 @@ const TextAnalysisResults: React.FC<Props> = ({ result, onClose }) => {
         {expandedSections.recommendations && (
           <div className="p-4 pt-0">
             <ul className="space-y-2">
-              {safeResult.recommendations.map((rec, i) => (
-                <li key={i} className="flex items-start gap-2 text-sm text-slate-300">
-                  <span className="text-green-400 mt-0.5">→</span>
-                  {rec}
+              {safeResult.recommendations.length > 0 ? (
+                safeResult.recommendations.map((rec, i) => (
+                  <li key={i} className="flex items-start gap-2 text-sm text-slate-300">
+                    <span className="text-green-400 mt-0.5">→</span>
+                    {rec}
+                  </li>
+                ))
+              ) : safeResult.is_threat ? (
+                <>
+                  <li className="flex items-start gap-2 text-sm text-slate-300">
+                    <span className="text-red-400 mt-0.5">🚫</span>
+                    DO NOT click any links in this message
+                  </li>
+                  <li className="flex items-start gap-2 text-sm text-slate-300">
+                    <span className="text-red-400 mt-0.5">🚫</span>
+                    DO NOT provide any personal information
+                  </li>
+                  <li className="flex items-start gap-2 text-sm text-slate-300">
+                    <span className="text-orange-400 mt-0.5">📱</span>
+                    Block and report the sender
+                  </li>
+                </>
+              ) : (
+                <li className="flex items-start gap-2 text-sm text-slate-300">
+                  <span className="text-green-400 mt-0.5">✓</span>
+                  No immediate action required, but remain cautious
                 </li>
-              ))}
+              )}
             </ul>
           </div>
         )}
