@@ -1385,33 +1385,10 @@ function App() {
       {/* Full Analysis View - Email or URL/SMS from history */}
       {(fullAnalysisOpen && result) || textAnalysisResult ? (
         <div className="fixed inset-0 z-50 overflow-auto">
-          {/* Check if this is SMS/URL analysis */}
+          {/* SMS/URL analysis - TextAnalysisResults has its own header */}
           {textAnalysisResult ? (
             <div className="min-h-screen bg-slate-900 p-6">
               <div className="max-w-4xl mx-auto">
-                <div className="flex items-center justify-between mb-6">
-                  <h1 className="text-2xl font-bold text-white">
-                    {textAnalysisResult.analysis_type === 'url' ? '🔗 URL Analysis' : '📱 SMS/Message Analysis'}
-                  </h1>
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={() => setSocToolsOpen(true)}
-                      className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition flex items-center gap-2"
-                    >
-                      <Shield className="w-4 h-4" />
-                      SOC Tools
-                    </button>
-                    <button
-                      onClick={() => {
-                        setFullAnalysisOpen(false);
-                        setTextAnalysisResult(null);
-                      }}
-                      className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition"
-                    >
-                      ← Back
-                    </button>
-                  </div>
-                </div>
                 <TextAnalysisResults 
                   result={textAnalysisResult}
                   onClose={() => {
