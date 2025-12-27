@@ -39,10 +39,10 @@ GEOIP_RATE_LIMIT_PER_MINUTE: int = 45
 
 # TIMEOUTS (seconds)
 API_TIMEOUT_DEFAULT: int = 30
-API_TIMEOUT_ENRICHMENT: int = 10
+API_TIMEOUT_ENRICHMENT: int = 45  # Increased for VirusTotal which can be slow
 API_TIMEOUT_AI: int = 60
-WHOIS_TIMEOUT: int = 10
-DNS_TIMEOUT: int = 5
+WHOIS_TIMEOUT: int = 15
+DNS_TIMEOUT: int = 10
 
 # EXTERNAL API URLS
 VIRUSTOTAL_API_URL: str = "https://www.virustotal.com/api/v3"

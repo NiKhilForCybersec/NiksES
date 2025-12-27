@@ -1,131 +1,55 @@
-# NiksES v3.4.5 - Complete History View Fix
+# NiksES v3.4.6 - Increased API Timeouts
 
-## 🎯 What's Fixed
+## 🔧 Fixed: VirusTotal Timeout Issues
 
-### 1. Type-Specific History Buttons
-
-| Type | Icon | Hover Text | Color |
-|------|------|------------|-------|
-| Email | 👁️ Eye | "View Email Analysis" | Indigo |
-| URL | 🌐 Globe | "View URL Report" | Blue |
-| SMS | 💬 Message | "View SMS Report" | Green |
-
-### 2. Complete Null Safety in TextAnalysisResults
-
-Added `safeResult` normalization with ALL defaults:
-
-```typescript
-const safeResult = {
-  urls_found: result?.urls_found || [],
-  patterns_matched: result?.patterns_matched || [],
-  phone_numbers_found: result?.phone_numbers_found || [],
-  ai_analysis: result?.ai_analysis || {
-    enabled: false,
-    key_findings: [],
-    social_engineering_tactics: [],
-    recommendations: [],
-  },
-  url_enrichment: result?.url_enrichment || [],
-  url_sandbox: result?.url_sandbox || [],
-  mitre_techniques: result?.mitre_techniques || [],
-  // ... 20+ more fields
-};
+**Problem:** VirusTotal API calls timing out after 15 seconds, causing:
+```
+TI source virustotal: timeout - using other sources
 ```
 
-### 3. Nested Array Null Safety
+**Solution:** Increased all API timeouts from 10-15s to 45s
 
-Fixed crashes on nested array access:
+### Timeout Changes
 
-```typescript
-// BEFORE (crashes if undefined):
-{sandbox.contacted_domains.length > 0 && ...}
-{enrichment.sources.length > 0 && ...}
+| Setting | Before | After |
+|---------|--------|-------|
+| API_TIMEOUT_ENRICHMENT | 10s | 45s |
+| TI Fusion per-source | 15s | 45s |
+| Google Safe Browsing | 15s | 45s |
+| IPQualityScore | 15s | 45s |
+| WHOIS | 10s | 15s |
+| DNS | 5s | 10s |
 
-// AFTER (safe):
-{sandbox.contacted_domains?.length > 0 && ...}
-{enrichment.sources?.length > 0 && ...}
-```
+### Files Changed
 
-Fixed arrays:
-- `sandbox.contacted_domains`
-- `sandbox.contacted_ips`
-- `sandbox.redirects`
-- `sandbox.indicators`
-- `enrichment.sources`
-- `enrichment.categories`
+1. **app/utils/constants.py**
+   - `API_TIMEOUT_ENRICHMENT: 10 → 45`
+   - `WHOIS_TIMEOUT: 10 → 15`
+   - `DNS_TIMEOUT: 5 → 10`
+
+2. **app/services/enrichment/ti_fusion.py**
+   - `DEFAULT_TIMEOUT: 15.0 → 45.0`
+
+3. **app/services/enrichment/google_safebrowsing.py**
+   - `ClientTimeout(total=15) → ClientTimeout(total=45)`
+
+4. **app/services/enrichment/ipqualityscore.py**
+   - `ClientTimeout(total=15) → ClientTimeout(total=45)`
 
 ---
 
-## 📊 Data Flow Verification
+## 📊 Expected Behavior
 
-### URL/SMS Storage (Backend)
-```
-analyze_text.py → Creates pseudo-email:
-  - sender: "url@analysis.local" / "sms@analysis.local"
-  - subject: "URL Analysis: {classification}"
-  - body_text: original URL/SMS text
-  - urls: extracted URLs
-  - detection: rules_triggered, risk_score, etc.
-→ Saves to SQLite via analysis_store.save()
-```
-
-### URL/SMS Retrieval (Backend)
-```
-analyses.py → GET /analyses/{id}:
-  - Returns full AnalysisResult with:
-    - email.sender.email
-    - email.subject
-    - email.body_text
-    - email.urls
-    - detection.rules_triggered
-    - overall_score
-    - overall_level
-    - classification
-    - iocs (domains, ips, phone_numbers)
-```
-
-### URL/SMS Display (Frontend)
-```
-App.tsx → onViewAnalysis:
-  - Detects type from analysisType parameter
-  - Maps data to TextAnalysisResult format
-  - All fields have safe defaults
-  - Sets textAnalysisResult state
-
-TextAnalysisResults.tsx:
-  - Creates safeResult with all defaults
-  - Uses safeResult.* throughout
-  - All nested arrays use optional chaining
-```
+- Analysis may take 45-60 seconds for complex emails
+- VirusTotal checks will complete instead of timing out
+- More complete threat intelligence results
+- No more "timeout - using other sources" warnings
 
 ---
 
-## 📁 Files Changed
+## ✅ All Previous v3.4.x Features
 
-1. **frontend/src/components/history/HistoryPanel.tsx**
-   - Different icons/colors per analysis type
-   - Passes analysisType to onViewAnalysis
-
-2. **frontend/src/components/analysis/TextAnalysisResults.tsx**
-   - Complete safeResult normalization (20+ fields)
-   - Optional chaining on all nested arrays
-
-3. **frontend/src/App.tsx**
-   - Routes URL/SMS to TextAnalysisResults
-   - Routes Email to AdvancedAnalysisView
-   - Safe data mapping with all defaults
-
----
-
-## ✅ Verified Working
-
-- [x] URL analysis saved to history
-- [x] SMS analysis saved to history
-- [x] Email analysis saved to history
-- [x] History button shows correct icon
-- [x] History button shows correct hover text
-- [x] URL from history opens TextAnalysisResults
-- [x] SMS from history opens TextAnalysisResults
-- [x] Email from history opens AdvancedAnalysisView
-- [x] No null/undefined crashes
-- [x] All nested arrays have null safety
+- Type-specific history buttons (Email/URL/SMS)
+- Complete null safety in TextAnalysisResults
+- Gmail phishing content fix
+- Comprehensive scoring engine

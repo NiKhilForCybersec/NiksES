@@ -56,7 +56,7 @@ class GoogleSafeBrowsingClient:
     
     def __init__(self, api_key: str):
         self.api_key = api_key
-        self.timeout = aiohttp.ClientTimeout(total=15)
+        self.timeout = aiohttp.ClientTimeout(total=45)
         self._session: Optional[aiohttp.ClientSession] = None
     
     def is_configured(self) -> bool:

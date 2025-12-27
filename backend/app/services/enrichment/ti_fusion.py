@@ -147,8 +147,8 @@ class ThreatIntelFusion:
     - WHOIS (domain age)
     """
     
-    # Per-source timeout (seconds) - after this, move on
-    DEFAULT_TIMEOUT = 15.0
+    # Per-source timeout (seconds) - increased for slow APIs like VirusTotal
+    DEFAULT_TIMEOUT = 45.0
     
     def __init__(
         self,
