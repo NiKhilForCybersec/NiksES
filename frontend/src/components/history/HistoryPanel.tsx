@@ -10,10 +10,46 @@ import {
   ChevronLeft, ChevronRight, RefreshCw, Calendar,
   AlertTriangle, Shield, ShieldAlert, ShieldCheck, ShieldX,
   Mail, Paperclip, Link, Clock, X, Check,
-  SortAsc, SortDesc, Loader2, Database, AlertCircle
+  SortAsc, SortDesc, Loader2, Database, AlertCircle,
+  MessageSquare, Globe
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { apiClient } from '../../services/api';
+
+// Helper to detect analysis type from sender email
+const getAnalysisType = (senderEmail: string | null): 'email' | 'url' | 'sms' => {
+  if (senderEmail === 'url@analysis.local') return 'url';
+  if (senderEmail === 'sms@analysis.local') return 'sms';
+  return 'email';
+};
+
+// Helper to get type icon and color
+const getTypeDisplay = (senderEmail: string | null) => {
+  const type = getAnalysisType(senderEmail);
+  switch (type) {
+    case 'url':
+      return { 
+        icon: Globe, 
+        color: 'text-blue-500 bg-blue-100', 
+        label: 'URL',
+        title: 'URL Analysis'
+      };
+    case 'sms':
+      return { 
+        icon: MessageSquare, 
+        color: 'text-green-500 bg-green-100', 
+        label: 'SMS',
+        title: 'SMS/Text Analysis'
+      };
+    default:
+      return { 
+        icon: Mail, 
+        color: 'text-indigo-500 bg-indigo-100', 
+        label: 'Email',
+        title: 'Email Analysis'
+      };
+  }
+};
 
 interface AnalysisSummary {
   analysis_id: string;
@@ -337,7 +373,7 @@ const HistoryPanel: React.FC<HistoryPanelProps> = ({
                     </button>
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subject</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sender</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Source</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     <button
                       onClick={() => {
@@ -350,7 +386,7 @@ const HistoryPanel: React.FC<HistoryPanelProps> = ({
                       {sortBy === 'risk_score' && (sortOrder === 'desc' ? <SortDesc className="w-3 h-3" /> : <SortAsc className="w-3 h-3" />)}
                     </button>
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Classification</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Indicators</th>
                   <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                 </tr>
@@ -386,9 +422,18 @@ const HistoryPanel: React.FC<HistoryPanelProps> = ({
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      <div className="max-w-[150px] truncate text-sm text-gray-600">
-                        {analysis.sender_email || 'Unknown'}
-                      </div>
+                      {(() => {
+                        const typeInfo = getTypeDisplay(analysis.sender_email);
+                        const TypeIcon = typeInfo.icon;
+                        return (
+                          <div className="flex items-center gap-2" title={typeInfo.title}>
+                            <div className={`p-1.5 rounded ${typeInfo.color}`}>
+                              <TypeIcon className="w-3.5 h-3.5" />
+                            </div>
+                            <span className="text-xs font-medium text-gray-600">{typeInfo.label}</span>
+                          </div>
+                        );
+                      })()}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">

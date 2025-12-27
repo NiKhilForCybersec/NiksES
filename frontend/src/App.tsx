@@ -1457,9 +1457,61 @@ function App() {
         onViewAnalysis={async (analysisId: string) => {
           try {
             const response = await apiClient.get(`/analyses/${analysisId}`);
-            setResult(response.data);
+            const data = response.data;
+            
+            // Detect analysis type from sender email
+            // URL/SMS analyses are stored with sender: url@analysis.local or sms@analysis.local
+            const senderEmail = data?.email?.sender?.email || '';
+            const isUrlAnalysis = senderEmail === 'url@analysis.local';
+            const isSmsAnalysis = senderEmail === 'sms@analysis.local';
+            
             setHistoryOpen(false);
-            setFullAnalysisOpen(true);
+            
+            if (isUrlAnalysis || isSmsAnalysis) {
+              // Transform the pseudo-email back to TextAnalysisResults format
+              const textResult = {
+                analysis_id: data.analysis_id,
+                analyzed_at: data.analyzed_at,
+                analysis_type: isUrlAnalysis ? 'url' : 'sms',
+                original_text: data.email?.body_text || '',
+                urls_found: (data.email?.urls || []).map((u: any) => u.url || u),
+                domains_found: data.iocs?.domains || [],
+                ips_found: data.iocs?.ips || [],
+                phones_found: data.iocs?.phone_numbers || [],
+                overall_score: data.overall_score || data.detection?.risk_score || 0,
+                overall_level: data.overall_level || data.detection?.risk_level || 'unknown',
+                risk_score: data.overall_score || data.detection?.risk_score || 0,
+                risk_level: data.overall_level || data.detection?.risk_level || 'unknown',
+                classification: data.classification || 'unknown',
+                confidence: data.detection?.confidence || 0,
+                is_threat: (data.overall_score || 0) >= 50,
+                patterns_matched: (data.detection?.rules_triggered || []).map((r: any) => ({
+                  pattern_id: r.rule_id,
+                  name: r.rule_name,
+                  description: r.description,
+                  severity: r.severity,
+                  matched_text: r.evidence?.[0] || '',
+                  mitre_technique: r.mitre_technique,
+                })),
+                threat_indicators: (data.detection?.rules_triggered || []).map((r: any) => r.rule_name),
+                recommendations: data.ai_triage?.recommendations || [],
+                ai_analysis: data.ai_triage ? {
+                  enabled: true,
+                  provider: data.ai_triage.provider || 'ai',
+                  summary: data.ai_triage.summary,
+                  key_findings: data.ai_triage.key_findings || [],
+                  recommendations: data.ai_triage.recommendations || [],
+                } : undefined,
+                url_enrichment: data.enrichment?.urls || [],
+              };
+              
+              setTextAnalysisResult(textResult);
+              // Don't open fullAnalysisOpen - TextAnalysisResults shows inline
+            } else {
+              // Regular email analysis
+              setResult(data);
+              setFullAnalysisOpen(true);
+            }
           } catch (error) {
             toast.error('Failed to load analysis');
           }

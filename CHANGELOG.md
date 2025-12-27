@@ -1,46 +1,50 @@
-# NiksES v3.3.4 - Quota Warning Modal
+# NiksES v3.3.5 - History View Fix for URL/SMS
 
-## 🆕 New Feature: API Quota Warning
+## 🐛 Bug Fixed: History View Shows Wrong Analysis Type
 
-Users now see a friendly warning popup on first use explaining the free tier limitations.
+### The Problem
+When clicking "View" on a URL or SMS analysis from history, it always opened 
+the Email Analysis view instead of the URL/SMS Analysis view.
 
-### Warning Modal Features
+### The Fix
+The system now detects the analysis type from the stored data:
+- `url@analysis.local` → Opens URL Analysis view
+- `sms@analysis.local` → Opens SMS/Text Analysis view  
+- Other → Opens Email Analysis view
 
-![Quota Warning](quota-warning-preview.png)
+### New History Panel UI
 
-- **Shows once per session** (uses localStorage)
-- **"Don't show for 7 days"** checkbox option
-- **Clear quota information** for each API:
-  - VirusTotal: ~4/min, 500/day
-  - IPQualityScore: ~200/day
-  - AbuseIPDB: ~1000/day
-  - URLScan.io: ~50/day
-- **Smart usage tips** explaining auto-filtering
-- **Reassurance** that AI analysis has no limits
+The history panel now shows the analysis type with icons:
 
-### Modal Design
-- Dark theme matching the app
-- Yellow/orange warning gradient header
-- Clean grid showing API limits
-- Blue accent for positive information
-- Professional, non-alarming tone
+```
+┌─────────┬─────────────────┬────────┬──────┬────────────────┐
+│ Date    │ Subject         │ Source │ Risk │ Classification │
+├─────────┼─────────────────┼────────┼──────┼────────────────┤
+│ 12/27   │ Suspicious URL  │ 🔗 URL │  89  │ PHISHING       │
+│ 12/27   │ Prize Scam      │ 📱 SMS │  95  │ SMISHING       │
+│ 12/26   │ Invoice #1234   │ ✉️ Mail│  72  │ BEC            │
+└─────────┴─────────────────┴────────┴──────┴────────────────┘
+```
 
-### User Experience
-1. First visit → Modal appears
-2. User reads the warning
-3. Optional: Check "Don't show for 7 days"
-4. Click "I Understand" to dismiss
-5. Modal won't show again (or for 7 days)
+### Analysis Type Detection
 
-## 📁 New Files
-- `frontend/src/components/QuotaWarningModal.tsx`
+| Sender Email         | Type  | Icon | View Component        |
+|---------------------|-------|------|-----------------------|
+| `url@analysis.local`| URL   | 🔗   | TextAnalysisResults   |
+| `sms@analysis.local`| SMS   | 📱   | TextAnalysisResults   |
+| Other               | Email | ✉️   | AdvancedAnalysisView  |
 
-## 📦 All Features (v3.3.0 - v3.3.4)
+## 📁 Files Changed
+- `frontend/src/App.tsx` - Smart view selection based on type
+- `frontend/src/components/history/HistoryPanel.tsx` - Type icons & labels
+
+## 📦 All Features (v3.3.x)
 
 | Version | Feature |
 |---------|---------|
-| v3.3.0 | 100% dynamic TI thresholds |
+| v3.3.0 | Dynamic TI thresholds |
 | v3.3.1 | URL parsing fix |
 | v3.3.2 | Smart URL filtering |
 | v3.3.3 | 700+ detection rules |
-| **v3.3.4** | **Quota warning modal** |
+| v3.3.4 | Quota warning modal |
+| **v3.3.5** | **History view type fix** |
