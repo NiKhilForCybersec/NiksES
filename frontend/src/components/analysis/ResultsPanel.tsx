@@ -252,29 +252,29 @@ const ResultsPanel: React.FC<ResultsPanelProps> = ({ result, onExport, onViewFul
         </div>
 
         {/* Quick Stats */}
-        <div className="grid grid-cols-4 gap-3 p-4 bg-gray-900 border-b border-gray-700">
-          <div className="text-center p-3 bg-gray-800 rounded-lg border border-gray-700">
-            <div className="text-xl font-bold text-indigo-400">{rulesTriggered.length}</div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide">Rules</div>
+        <div className="grid grid-cols-4 gap-2 md:gap-3 p-3 md:p-4 bg-gray-900 border-b border-gray-700">
+          <div className="text-center p-2 md:p-3 bg-gray-800 rounded-lg border border-gray-700">
+            <div className="text-lg md:text-xl font-bold text-indigo-400">{rulesTriggered.length}</div>
+            <div className="text-[10px] md:text-xs text-gray-500 uppercase tracking-wide">Rules</div>
           </div>
-          <div className="text-center p-3 bg-gray-800 rounded-lg border border-gray-700">
-            <div className="text-xl font-bold text-purple-400">{urls.length}</div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide">URLs</div>
+          <div className="text-center p-2 md:p-3 bg-gray-800 rounded-lg border border-gray-700">
+            <div className="text-lg md:text-xl font-bold text-purple-400">{urls.length}</div>
+            <div className="text-[10px] md:text-xs text-gray-500 uppercase tracking-wide">URLs</div>
           </div>
-          <div className="text-center p-3 bg-gray-800 rounded-lg border border-gray-700">
-            <div className="text-xl font-bold text-blue-400">{attachments.length}</div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide">Files</div>
+          <div className="text-center p-2 md:p-3 bg-gray-800 rounded-lg border border-gray-700">
+            <div className="text-lg md:text-xl font-bold text-blue-400">{attachments.length}</div>
+            <div className="text-[10px] md:text-xs text-gray-500 uppercase tracking-wide">Files</div>
           </div>
-          <div className="text-center p-3 bg-gray-800 rounded-lg border border-gray-700">
-            <div className="text-xl font-bold text-orange-400">
+          <div className="text-center p-2 md:p-3 bg-gray-800 rounded-lg border border-gray-700">
+            <div className="text-lg md:text-xl font-bold text-orange-400">
               {(iocs.domains?.length || 0) + (iocs.ips?.length || 0) + (iocs.hashes?.length || 0)}
             </div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide">IOCs</div>
+            <div className="text-[10px] md:text-xs text-gray-500 uppercase tracking-wide">IOCs</div>
           </div>
         </div>
 
         {/* Sections */}
-        <div className="p-4 space-y-3 max-h-[500px] overflow-auto">
+        <div className="p-3 md:p-4 space-y-3 max-h-[400px] md:max-h-[500px] overflow-auto">
           {/* AI Analysis */}
           {aiAnalysis && (
             <Section

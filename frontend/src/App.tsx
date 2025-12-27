@@ -12,7 +12,8 @@ import {
   AlertCircle, CheckCircle, XCircle, Info,
   BookOpen, LayoutDashboard, Mail,
   Paperclip, Link, Key, Database,
-  Target, Brain, Zap, Smartphone, MessageSquare
+  Target, Brain, Zap, Smartphone, MessageSquare,
+  Menu, X, Home, History, FileText
 } from 'lucide-react';
 import { apiClient } from './services/api';
 import AdvancedRulesManager from './components/rules/AdvancedRulesManager';
@@ -137,6 +138,7 @@ function App() {
   const [dragActive, setDragActive] = useState(false);
   const [debugMode, setDebugMode] = useState(false);
   const [globalSettings, setGlobalSettings] = useState<SettingsState | null>(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // SMS/Text analysis state
   const [inputType, setInputType] = useState<'email' | 'sms'>('email');
@@ -736,22 +738,24 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 text-white">
+    <div className="min-h-screen bg-slate-900 text-white has-bottom-nav">
       <Toaster position="top-right" />
 
-      {/* Header */}
-      <header className="h-16 bg-slate-800 border-b border-slate-700 flex items-center justify-between px-6">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
-            <Shield className="w-6 h-6 text-white" />
+      {/* Header - Mobile Responsive */}
+      <header className="mobile-header h-14 md:h-16 bg-slate-800 border-b border-slate-700 flex items-center justify-between px-3 md:px-6">
+        {/* Logo */}
+        <div className="flex items-center gap-2 md:gap-3">
+          <div className="w-8 h-8 md:w-10 md:h-10 bg-blue-600 rounded-lg flex items-center justify-center">
+            <Shield className="w-5 h-5 md:w-6 md:h-6 text-white" />
           </div>
           <div>
-            <h1 className="text-xl font-bold">NiksES</h1>
-            <p className="text-xs text-slate-400">Email & SMS Security Analysis</p>
+            <h1 className="text-lg md:text-xl font-bold">NiksES</h1>
+            <p className="text-[10px] md:text-xs text-slate-400 hidden sm:block">Email & SMS Security</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          {/* API Status Indicator */}
+
+        {/* Desktop Navigation */}
+        <div className="hidden md:flex items-center gap-2">
           <APIStatusIndicator
             settings={globalSettings}
             onOpenSettings={() => setSettingsOpen(true)}
@@ -804,7 +808,111 @@ function App() {
             🐛
           </button>
         </div>
+
+        {/* Mobile Header Actions */}
+        <div className="flex md:hidden items-center gap-2">
+          {result && (
+            <button
+              onClick={() => setSocToolsOpen(true)}
+              className="p-2 bg-purple-600 rounded-lg animate-pulse"
+            >
+              <Target className="w-5 h-5" />
+            </button>
+          )}
+          <button
+            onClick={() => setSettingsOpen(true)}
+            className="p-2 hover:bg-slate-700 rounded-lg transition"
+          >
+            <Settings className="w-5 h-5 text-slate-400" />
+          </button>
+          <button
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className="p-2 hover:bg-slate-700 rounded-lg transition"
+          >
+            {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          </button>
+        </div>
       </header>
+
+      {/* Mobile Dropdown Menu */}
+      {mobileMenuOpen && (
+        <div className="md:hidden bg-slate-800 border-b border-slate-700 animate-fade-in">
+          <div className="p-3 space-y-2">
+            <button
+              onClick={() => { setDashboardOpen(true); setMobileMenuOpen(false); }}
+              className="w-full px-4 py-3 bg-indigo-600 hover:bg-indigo-700 rounded-lg transition flex items-center gap-3"
+            >
+              <LayoutDashboard className="w-5 h-5" />
+              <span>Dashboard</span>
+            </button>
+            <button
+              onClick={() => { setHistoryOpen(true); setMobileMenuOpen(false); }}
+              className="w-full px-4 py-3 bg-slate-700 hover:bg-slate-600 rounded-lg transition flex items-center gap-3"
+            >
+              <Database className="w-5 h-5 text-green-400" />
+              <span>History</span>
+            </button>
+            <button
+              onClick={() => { setRulesOpen(true); setMobileMenuOpen(false); }}
+              className="w-full px-4 py-3 bg-slate-700 hover:bg-slate-600 rounded-lg transition flex items-center gap-3"
+            >
+              <BookOpen className="w-5 h-5 text-blue-400" />
+              <span>Custom Rules</span>
+            </button>
+            {globalSettings && (
+              <div className="px-4 py-2 bg-slate-700/50 rounded-lg">
+                <div className="text-xs text-slate-400 mb-1">API Status</div>
+                <div className="flex items-center gap-2 text-sm">
+                  <span className={`w-2 h-2 rounded-full ${
+                    Object.values(globalSettings.api_keys_configured).filter(Boolean).length > 0 
+                      ? 'bg-green-500' 
+                      : 'bg-yellow-500'
+                  }`} />
+                  <span>
+                    {Object.values(globalSettings.api_keys_configured).filter(Boolean).length}/6 APIs configured
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Mobile Bottom Navigation */}
+      <nav className="mobile-bottom-nav">
+        <div className="flex items-center justify-around">
+          <button
+            onClick={() => { setDashboardOpen(false); setHistoryOpen(false); setFullAnalysisOpen(false); }}
+            className={`mobile-nav-item ${!dashboardOpen && !historyOpen && !fullAnalysisOpen ? 'active' : ''}`}
+          >
+            <Home className="w-5 h-5" />
+            <span>Analyze</span>
+          </button>
+          <button
+            onClick={() => setDashboardOpen(true)}
+            className={`mobile-nav-item ${dashboardOpen ? 'active' : ''}`}
+          >
+            <LayoutDashboard className="w-5 h-5" />
+            <span>Dashboard</span>
+          </button>
+          <button
+            onClick={() => setHistoryOpen(true)}
+            className={`mobile-nav-item ${historyOpen ? 'active' : ''}`}
+          >
+            <History className="w-5 h-5" />
+            <span>History</span>
+          </button>
+          {result && (
+            <button
+              onClick={() => setFullAnalysisOpen(true)}
+              className={`mobile-nav-item ${fullAnalysisOpen ? 'active' : ''}`}
+            >
+              <FileText className="w-5 h-5" />
+              <span>Results</span>
+            </button>
+          )}
+        </div>
+      </nav>
 
       {/* Debug Panel */}
       {debugMode && (
@@ -843,28 +951,28 @@ function App() {
       )}
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-6 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <main className="max-w-7xl mx-auto px-3 md:px-6 py-4 md:py-8">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
           {/* Left Panel - Upload & Progress */}
-          <div className="space-y-6">
+          <div className="space-y-4 md:space-y-6">
             {/* Input Area with Tabs */}
-            <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+            <div className="bg-slate-800 rounded-xl p-4 md:p-6 border border-slate-700">
               {/* Input Type Tabs */}
               <div className="flex gap-2 mb-4">
                 <button
                   onClick={() => setInputType('email')}
-                  className={`flex-1 py-2 px-4 rounded-lg font-medium transition flex items-center justify-center gap-2 ${
+                  className={`flex-1 py-2.5 md:py-2 px-3 md:px-4 rounded-lg font-medium transition flex items-center justify-center gap-2 ${
                     inputType === 'email'
                       ? 'bg-blue-600 text-white'
                       : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
                   }`}
                 >
                   <Mail className="w-4 h-4" />
-                  <span className="font-medium">Email</span>
+                  <span className="font-medium text-sm md:text-base">Email</span>
                 </button>
                 <button
                   onClick={() => setInputType('sms')}
-                  className={`flex-1 py-2 px-4 rounded-lg font-medium transition flex items-center justify-center gap-2 ${
+                  className={`flex-1 py-2.5 md:py-2 px-3 md:px-4 rounded-lg font-medium transition flex items-center justify-center gap-2 ${
                     inputType === 'sms'
                       ? 'bg-green-600 text-white'
                       : 'bg-slate-700 text-slate-300 hover:bg-slate-600'

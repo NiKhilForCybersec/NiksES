@@ -230,37 +230,37 @@ const SOCToolsPanel: React.FC<SOCToolsProps> = ({ analysisResult }) => {
     return (
       <div className="space-y-4">
         {/* Quick Stats */}
-        <div className="grid grid-cols-5 gap-3">
-          <div className="bg-blue-900/30 border border-blue-700/50 rounded-lg p-3 text-center">
-            <div className="text-2xl font-bold text-blue-400">{displayIOCs.counts?.domains || 0}</div>
-            <div className="text-xs text-gray-400">Domains</div>
+        <div className="grid grid-cols-3 md:grid-cols-5 gap-2 md:gap-3">
+          <div className="bg-blue-900/30 border border-blue-700/50 rounded-lg p-2 md:p-3 text-center">
+            <div className="text-lg md:text-2xl font-bold text-blue-400">{displayIOCs.counts?.domains || 0}</div>
+            <div className="text-[10px] md:text-xs text-gray-400">Domains</div>
           </div>
-          <div className="bg-purple-900/30 border border-purple-700/50 rounded-lg p-3 text-center">
-            <div className="text-2xl font-bold text-purple-400">{displayIOCs.counts?.urls || 0}</div>
-            <div className="text-xs text-gray-400">URLs</div>
+          <div className="bg-purple-900/30 border border-purple-700/50 rounded-lg p-2 md:p-3 text-center">
+            <div className="text-lg md:text-2xl font-bold text-purple-400">{displayIOCs.counts?.urls || 0}</div>
+            <div className="text-[10px] md:text-xs text-gray-400">URLs</div>
           </div>
-          <div className="bg-green-900/30 border border-green-700/50 rounded-lg p-3 text-center">
-            <div className="text-2xl font-bold text-green-400">{displayIOCs.counts?.ips || 0}</div>
-            <div className="text-xs text-gray-400">IPs</div>
+          <div className="bg-green-900/30 border border-green-700/50 rounded-lg p-2 md:p-3 text-center">
+            <div className="text-lg md:text-2xl font-bold text-green-400">{displayIOCs.counts?.ips || 0}</div>
+            <div className="text-[10px] md:text-xs text-gray-400">IPs</div>
           </div>
-          <div className="bg-orange-900/30 border border-orange-700/50 rounded-lg p-3 text-center">
-            <div className="text-2xl font-bold text-orange-400">{displayIOCs.counts?.hashes || 0}</div>
-            <div className="text-xs text-gray-400">Hashes</div>
+          <div className="bg-orange-900/30 border border-orange-700/50 rounded-lg p-2 md:p-3 text-center hidden md:block">
+            <div className="text-lg md:text-2xl font-bold text-orange-400">{displayIOCs.counts?.hashes || 0}</div>
+            <div className="text-[10px] md:text-xs text-gray-400">Hashes</div>
           </div>
-          <div className="bg-red-900/30 border border-red-700/50 rounded-lg p-3 text-center">
-            <div className="text-2xl font-bold text-red-400">{displayIOCs.counts?.total || 0}</div>
-            <div className="text-xs text-gray-400">Total</div>
+          <div className="bg-red-900/30 border border-red-700/50 rounded-lg p-2 md:p-3 text-center hidden md:block">
+            <div className="text-lg md:text-2xl font-bold text-red-400">{displayIOCs.counts?.total || 0}</div>
+            <div className="text-[10px] md:text-xs text-gray-400">Total</div>
           </div>
         </div>
 
         {/* Options */}
-        <div className="flex flex-wrap gap-4 p-3 bg-gray-800/50 rounded-lg border border-gray-700">
+        <div className="flex flex-col sm:flex-row flex-wrap gap-3 md:gap-4 p-3 bg-gray-800/50 rounded-lg border border-gray-700">
           <div className="flex items-center gap-2">
             <label className="text-sm text-gray-400">Defang:</label>
             <select
               value={defangMode}
               onChange={(e) => setDefangMode(e.target.value as any)}
-              className="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-sm text-gray-200"
+              className="bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-sm text-gray-200 flex-1 sm:flex-none"
             >
               <option value="none">None (raw)</option>
               <option value="brackets">Brackets [.]</option>
@@ -273,7 +273,7 @@ const SOCToolsPanel: React.FC<SOCToolsProps> = ({ analysisResult }) => {
             <select
               value={exportFormat}
               onChange={(e) => setExportFormat(e.target.value as any)}
-              className="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-sm text-gray-200"
+              className="bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-sm text-gray-200 flex-1 sm:flex-none"
             >
               <option value="text">Plain Text</option>
               <option value="csv">CSV</option>
@@ -354,23 +354,23 @@ const SOCToolsPanel: React.FC<SOCToolsProps> = ({ analysisResult }) => {
               {copySuccess === 'preview' ? 'Copied!' : 'Copy'}
             </button>
           </div>
-          <pre className="p-4 text-sm overflow-auto max-h-64 bg-gray-900 font-mono text-gray-300">
+          <pre className="p-3 md:p-4 text-xs md:text-sm overflow-auto max-h-48 md:max-h-64 bg-gray-900 font-mono text-gray-300">
             {getFormattedIOCs().slice(0, 2000)}
             {getFormattedIOCs().length > 2000 && '\n... (truncated)'}
           </pre>
         </div>
 
         {/* Individual IOC Lists */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
           {displayIOCs?.data?.domains?.length > 0 && (
             <div className="border border-gray-700 rounded-lg p-3 bg-gray-800/50">
-              <h4 className="font-medium mb-2 flex items-center gap-2 text-gray-200">
+              <h4 className="font-medium mb-2 flex items-center gap-2 text-gray-200 text-sm md:text-base">
                 <Globe className="w-4 h-4 text-blue-400" />
                 Domains ({displayIOCs.data.domains.length})
               </h4>
-              <ul className="text-sm space-y-1 max-h-32 overflow-auto">
+              <ul className="text-xs md:text-sm space-y-1 max-h-32 overflow-auto">
                 {displayIOCs.data.domains.map((d: string, i: number) => (
-                  <li key={i} className="font-mono text-gray-400 hover:text-gray-200 hover:bg-gray-700 px-2 py-1 rounded cursor-pointer"
+                  <li key={i} className="font-mono text-gray-400 hover:text-gray-200 hover:bg-gray-700 px-2 py-1.5 rounded cursor-pointer"
                       onClick={() => copyToClipboard(d, `domain-${i}`)}>
                     {d}
                   </li>
@@ -381,16 +381,16 @@ const SOCToolsPanel: React.FC<SOCToolsProps> = ({ analysisResult }) => {
           
           {displayIOCs?.data?.urls?.length > 0 && (
             <div className="border border-gray-700 rounded-lg p-3 bg-gray-800/50">
-              <h4 className="font-medium mb-2 flex items-center gap-2 text-gray-200">
+              <h4 className="font-medium mb-2 flex items-center gap-2 text-gray-200 text-sm md:text-base">
                 <Link2 className="w-4 h-4 text-purple-400" />
                 URLs ({displayIOCs.data.urls.length})
               </h4>
-              <ul className="text-sm space-y-1 max-h-32 overflow-auto">
+              <ul className="text-xs md:text-sm space-y-1 max-h-32 overflow-auto">
                 {displayIOCs.data.urls.slice(0, 10).map((u: string, i: number) => (
-                  <li key={i} className="font-mono text-gray-400 hover:text-gray-200 hover:bg-gray-700 px-2 py-1 rounded cursor-pointer truncate"
+                  <li key={i} className="font-mono text-gray-400 hover:text-gray-200 hover:bg-gray-700 px-2 py-1.5 rounded cursor-pointer truncate"
                       onClick={() => copyToClipboard(u, `url-${i}`)}
                       title={u}>
-                    {u.length > 60 ? u.slice(0, 60) + '...' : u}
+                    {u.length > 40 ? u.slice(0, 40) + '...' : u}
                   </li>
                 ))}
               </ul>

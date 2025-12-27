@@ -75,17 +75,22 @@ async def analyze_email(
         content = await file.read()
     except Exception as e:
         logger.error(f"Failed to read file: {e}")
-        raise HTTPException(status_code=400, detail=f"Failed to read file: {str(e)}")
+        raise HTTPException(status_code=400, detail="Failed to read uploaded file")
     
-    if len(content) > 50 * 1024 * 1024:  # 50MB limit
-        raise HTTPException(status_code=400, detail="File too large. Maximum size is 50MB.")
+    # File size validation (10MB for security, configurable)
+    max_file_size = 10 * 1024 * 1024  # 10MB default
+    if len(content) > max_file_size:
+        raise HTTPException(
+            status_code=413, 
+            detail=f"File too large. Maximum size is {max_file_size // (1024*1024)}MB"
+        )
     
     # Parse email
     try:
         parsed_email = await parse_email_file(content, file.filename)
     except Exception as e:
         logger.error(f"Failed to parse email: {e}")
-        raise HTTPException(status_code=400, detail=f"Failed to parse email: {str(e)}")
+        raise HTTPException(status_code=400, detail="Failed to parse email file. Please ensure it's a valid .eml or .msg file.")
     
     # Run unified analysis and build AnalysisResult
     try:
@@ -97,7 +102,7 @@ async def analyze_email(
         )
     except Exception as e:
         logger.error(f"Analysis failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Analysis error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Analysis failed. Please try again.")
     
     # Run sandbox analysis on attachments (non-blocking)
     sandbox_analysis = None

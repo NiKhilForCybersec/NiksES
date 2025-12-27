@@ -236,57 +236,55 @@ const AdvancedAnalysisView: React.FC<AdvancedAnalysisViewProps> = ({ result, onE
     return (
       <div className="min-h-screen bg-gray-900 text-gray-100">
       {/* Header */}
-      <div className="bg-gray-800 border-b border-gray-700 px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-4">
+      <div className="bg-gray-800 border-b border-gray-700 px-3 md:px-6 py-3 md:py-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div className="flex items-center space-x-3 md:space-x-4">
             <button
               onClick={onBack}
-              className="text-gray-400 hover:text-white transition-colors"
+              className="text-gray-400 hover:text-white transition-colors p-2 -ml-2"
             >
               ← Back
             </button>
-            <div>
-              <h1 className="text-xl font-bold flex items-center">
-                <ShieldAlert className="w-6 h-6 mr-2 text-orange-400" />
-                Email Threat Analysis
+            <div className="min-w-0">
+              <h1 className="text-lg md:text-xl font-bold flex items-center">
+                <ShieldAlert className="w-5 h-5 md:w-6 md:h-6 mr-2 text-orange-400" />
+                <span className="truncate">Email Threat Analysis</span>
               </h1>
-              <p className="text-sm text-gray-400">
-                ID: {result.analysis_id?.slice(0, 8) || 'N/A'} | 
-                Analyzed: {result.analyzed_at ? new Date(result.analyzed_at).toLocaleString() : 'N/A'} |
-                Duration: {result.analysis_duration_ms || 0}ms
+              <p className="text-xs md:text-sm text-gray-400 truncate">
+                ID: {result.analysis_id?.slice(0, 8) || 'N/A'} | {result.analysis_duration_ms || 0}ms
               </p>
             </div>
           </div>
           
-          {/* Export Buttons */}
-          <div className="flex items-center space-x-2">
+          {/* Export Buttons - Scrollable on mobile */}
+          <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar pb-1 -mx-3 px-3 md:mx-0 md:px-0">
             <button
               onClick={() => onExport('executive-pdf')}
-              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded text-sm flex items-center font-medium"
+              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded text-xs md:text-sm flex items-center font-medium whitespace-nowrap"
             >
-              <Download className="w-4 h-4 mr-1" /> Executive PDF
+              <Download className="w-4 h-4 mr-1" /> <span className="hidden sm:inline">Executive</span> PDF
             </button>
             <button
               onClick={() => onExport('pdf')}
-              className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm flex items-center"
+              className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-xs md:text-sm flex items-center whitespace-nowrap"
             >
-              <FileText className="w-4 h-4 mr-1" /> Technical PDF
+              <FileText className="w-4 h-4 mr-1" /> <span className="hidden sm:inline">Technical</span> PDF
             </button>
             <button
               onClick={() => onExport('json')}
-              className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm flex items-center"
+              className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-xs md:text-sm flex items-center whitespace-nowrap"
             >
               <Download className="w-4 h-4 mr-1" /> JSON
             </button>
             <button
               onClick={() => onExport('markdown')}
-              className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm flex items-center"
+              className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-xs md:text-sm flex items-center whitespace-nowrap hidden sm:flex"
             >
               <FileText className="w-4 h-4 mr-1" /> Report
             </button>
             <button
               onClick={() => onExport('stix')}
-              className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm flex items-center"
+              className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-xs md:text-sm flex items-center whitespace-nowrap hidden sm:flex"
             >
               <Database className="w-4 h-4 mr-1" /> STIX
             </button>
@@ -295,40 +293,40 @@ const AdvancedAnalysisView: React.FC<AdvancedAnalysisViewProps> = ({ result, onE
       </div>
 
       {/* Risk Score Banner */}
-      <div className={`px-6 py-4 ${getRiskColor(unifiedLevel)}`}>
+      <div className={`px-3 md:px-6 py-3 md:py-4 ${getRiskColor(unifiedLevel)}`}>
         <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-6">
+          <div className="flex items-center space-x-3 md:space-x-6">
             <div className="text-center">
-              <div className="text-4xl font-bold">{unifiedScore}</div>
-              <div className="text-xs uppercase tracking-wider opacity-80">Risk Score</div>
+              <div className="text-2xl md:text-4xl font-bold">{unifiedScore}</div>
+              <div className="text-[10px] md:text-xs uppercase tracking-wider opacity-80">Risk</div>
             </div>
-            <div className="h-12 w-px bg-current opacity-30" />
+            <div className="h-10 md:h-12 w-px bg-current opacity-30" />
             <div>
-              <div className="text-lg font-semibold uppercase">{unifiedLevel}</div>
-              <div className="text-sm opacity-80">{unifiedClassification.replace(/_/g, ' ')}</div>
+              <div className="text-sm md:text-lg font-semibold uppercase">{unifiedLevel}</div>
+              <div className="text-xs md:text-sm opacity-80 truncate max-w-[100px] md:max-w-none">{unifiedClassification.replace(/_/g, ' ')}</div>
             </div>
           </div>
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-3 md:space-x-4">
             <div className="text-center">
-              <div className="text-2xl font-bold">{result.detection?.rules_triggered?.length || 0}</div>
-              <div className="text-xs opacity-80">Rules Triggered</div>
+              <div className="text-lg md:text-2xl font-bold">{result.detection?.rules_triggered?.length || 0}</div>
+              <div className="text-[10px] md:text-xs opacity-80">Rules</div>
             </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold">{(result.iocs?.domains?.length || 0) + (result.iocs?.urls?.length || 0)}</div>
-              <div className="text-xs opacity-80">IOCs Found</div>
+            <div className="text-center hidden sm:block">
+              <div className="text-lg md:text-2xl font-bold">{(result.iocs?.domains?.length || 0) + (result.iocs?.urls?.length || 0)}</div>
+              <div className="text-[10px] md:text-xs opacity-80">IOCs</div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="bg-gray-800 border-b border-gray-700 px-6">
+      {/* Tabs - Scrollable on mobile */}
+      <div className="bg-gray-800 border-b border-gray-700 px-2 md:px-6 overflow-x-auto hide-scrollbar">
         <div className="flex space-x-1">
           {tabs.map(tab => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`px-4 py-3 flex items-center space-x-2 border-b-2 transition-colors ${
+              className={`px-3 md:px-4 py-2.5 md:py-3 flex items-center space-x-1.5 md:space-x-2 border-b-2 transition-colors whitespace-nowrap text-sm md:text-base ${
                 activeTab === tab.id
                   ? 'border-blue-500 text-blue-400'
                   : 'border-transparent text-gray-400 hover:text-white'
@@ -342,27 +340,27 @@ const AdvancedAnalysisView: React.FC<AdvancedAnalysisViewProps> = ({ result, onE
       </div>
 
       {/* Content */}
-      <div className="p-6">
+      <div className="p-3 md:p-6">
         {/* Overview Tab */}
         {activeTab === 'overview' && (
-          <div className="space-y-6">
+          <div className="space-y-4 md:space-y-6">
             {/* Email Summary */}
-            <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
-              <h2 className="text-lg font-semibold mb-4 flex items-center">
-                <Mail className="w-5 h-5 mr-2 text-blue-400" />
+            <div className="bg-gray-800 rounded-lg p-3 md:p-4 border border-gray-700">
+              <h2 className="text-base md:text-lg font-semibold mb-3 md:mb-4 flex items-center">
+                <Mail className="w-4 h-4 md:w-5 md:h-5 mr-2 text-blue-400" />
                 Email Summary
               </h2>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
                 <div>
-                  <label className="text-xs text-gray-500 uppercase">Subject</label>
-                  <p className="text-white font-medium">{result.email?.subject || 'No Subject'}</p>
+                  <label className="text-[10px] md:text-xs text-gray-500 uppercase">Subject</label>
+                  <p className="text-white font-medium text-sm md:text-base truncate">{result.email?.subject || 'No Subject'}</p>
                 </div>
                 <div>
-                  <label className="text-xs text-gray-500 uppercase">Date</label>
-                  <p className="text-white">{result.email?.date || 'Unknown'}</p>
+                  <label className="text-[10px] md:text-xs text-gray-500 uppercase">Date</label>
+                  <p className="text-white text-sm md:text-base">{result.email?.date || 'Unknown'}</p>
                 </div>
                 <div>
-                  <label className="text-xs text-gray-500 uppercase">From</label>
+                  <label className="text-[10px] md:text-xs text-gray-500 uppercase">From</label>
                   <p className="text-white font-mono text-sm">
                     {result.email?.sender?.display_name && (
                       <span className="text-gray-400">{result.email.sender.display_name} </span>

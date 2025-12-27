@@ -146,77 +146,77 @@ const TextAnalysisResults: React.FC<Props> = ({ result, onClose }) => {
   const isUrlMode = result.source === 'url';
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-6">
       {/* Header with Risk Score */}
-      <div className={`p-6 rounded-xl border-2 ${getRiskColor(result.overall_level)}`}>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className={`w-16 h-16 rounded-xl flex items-center justify-center ${
+      <div className={`p-4 md:p-6 rounded-xl border-2 ${getRiskColor(result.overall_level)}`}>
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3 md:gap-4">
+            <div className={`w-12 h-12 md:w-16 md:h-16 rounded-xl flex items-center justify-center ${
               result.is_threat ? 'bg-red-500/30' : 'bg-green-500/30'
             }`}>
               {result.is_threat ? (
-                <AlertTriangle className="w-8 h-8 text-red-400" />
+                <AlertTriangle className="w-6 h-6 md:w-8 md:h-8 text-red-400" />
               ) : (
-                <CheckCircle className="w-8 h-8 text-green-400" />
+                <CheckCircle className="w-6 h-6 md:w-8 md:h-8 text-green-400" />
               )}
             </div>
             <div>
               <div className="flex items-center gap-2">
                 {getSourceIcon(result.source)}
-                <h2 className="text-xl font-bold">
+                <h2 className="text-lg md:text-xl font-bold">
                   {isUrlMode ? 'URL Analysis' : `${result.source.toUpperCase()} Analysis`}
                 </h2>
               </div>
-              <p className="text-sm text-slate-400 mt-1">
+              <p className="text-xs md:text-sm text-slate-400 mt-1">
                 {result.classification.replace(/_/g, ' ').toUpperCase()}
               </p>
             </div>
           </div>
           
           {/* Risk Score Circle */}
-          <div className="text-center">
-            <div className={`w-20 h-20 rounded-full border-4 flex items-center justify-center ${
+          <div className="text-center self-end sm:self-auto">
+            <div className={`w-16 h-16 md:w-20 md:h-20 rounded-full border-4 flex items-center justify-center ${
               result.overall_score >= 70 ? 'border-red-500' :
               result.overall_score >= 40 ? 'border-orange-500' :
               result.overall_score >= 20 ? 'border-yellow-500' : 'border-green-500'
             }`}>
-              <span className="text-2xl font-bold">{result.overall_score}</span>
+              <span className="text-xl md:text-2xl font-bold">{result.overall_score}</span>
             </div>
-            <p className="text-xs text-slate-400 mt-1">Risk Score</p>
+            <p className="text-[10px] md:text-xs text-slate-400 mt-1">Risk Score</p>
           </div>
         </div>
 
         {/* Quick Stats */}
-        <div className="grid grid-cols-4 gap-4 mt-6">
-          <div className="bg-slate-800/50 rounded-lg p-3 text-center">
-            <p className="text-2xl font-bold text-blue-400">{result.urls_found.length}</p>
-            <p className="text-xs text-slate-400">URLs</p>
+        <div className="grid grid-cols-4 gap-2 md:gap-4 mt-4 md:mt-6">
+          <div className="bg-slate-800/50 rounded-lg p-2 md:p-3 text-center">
+            <p className="text-lg md:text-2xl font-bold text-blue-400">{result.urls_found.length}</p>
+            <p className="text-[10px] md:text-xs text-slate-400">URLs</p>
           </div>
-          <div className="bg-slate-800/50 rounded-lg p-3 text-center">
-            <p className="text-2xl font-bold text-purple-400">{result.patterns_matched.length}</p>
-            <p className="text-xs text-slate-400">Patterns</p>
+          <div className="bg-slate-800/50 rounded-lg p-2 md:p-3 text-center">
+            <p className="text-lg md:text-2xl font-bold text-purple-400">{result.patterns_matched.length}</p>
+            <p className="text-[10px] md:text-xs text-slate-400">Patterns</p>
           </div>
-          <div className="bg-slate-800/50 rounded-lg p-3 text-center">
-            <p className="text-2xl font-bold text-orange-400">{result.phone_numbers_found.length}</p>
-            <p className="text-xs text-slate-400">Phones</p>
+          <div className="bg-slate-800/50 rounded-lg p-2 md:p-3 text-center">
+            <p className="text-lg md:text-2xl font-bold text-orange-400">{result.phone_numbers_found.length}</p>
+            <p className="text-[10px] md:text-xs text-slate-400">Phones</p>
           </div>
-          <div className="bg-slate-800/50 rounded-lg p-3 text-center">
-            <p className="text-2xl font-bold text-green-400">{Math.round(result.confidence * 100)}%</p>
-            <p className="text-xs text-slate-400">Confidence</p>
+          <div className="bg-slate-800/50 rounded-lg p-2 md:p-3 text-center">
+            <p className="text-lg md:text-2xl font-bold text-green-400">{Math.round(result.confidence * 100)}%</p>
+            <p className="text-[10px] md:text-xs text-slate-400">Confidence</p>
           </div>
         </div>
       </div>
 
       {/* Original Content */}
-      <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
+      <div className="bg-slate-800 rounded-xl p-3 md:p-4 border border-slate-700">
         <h3 className="text-sm font-semibold text-slate-300 mb-2 flex items-center gap-2">
           <MessageSquare className="w-4 h-4" />
           Original Content
         </h3>
-        <div className="bg-slate-900 rounded-lg p-4 font-mono text-sm text-slate-300 whitespace-pre-wrap break-all max-h-40 overflow-y-auto">
+        <div className="bg-slate-900 rounded-lg p-3 md:p-4 font-mono text-xs md:text-sm text-slate-300 whitespace-pre-wrap break-all max-h-32 md:max-h-40 overflow-y-auto">
           {result.original_text}
         </div>
-        <div className="flex items-center justify-between mt-2 text-xs text-slate-500">
+        <div className="flex items-center justify-between mt-2 text-[10px] md:text-xs text-slate-500">
           <span>{result.message_length} characters</span>
           <button
             onClick={() => copyToClipboard(result.original_text)}

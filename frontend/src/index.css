@@ -2,10 +2,47 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ============================================
+   MOBILE-FIRST RESPONSIVE STYLES
+   ============================================ */
+
+/* Base mobile styles */
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+  
+  body {
+    @apply text-sm md:text-base;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  
+  /* Prevent zoom on input focus (iOS) */
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+  
+  @screen md {
+    input, select, textarea {
+      font-size: inherit !important;
+    }
+  }
+}
+
 /* Custom scrollbar */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
+}
+
+@media (min-width: 768px) {
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
 }
 
 ::-webkit-scrollbar-track {
@@ -21,11 +58,6 @@
   background: #64748b;
 }
 
-/* Smooth scrolling */
-html {
-  scroll-behavior: smooth;
-}
-
 /* Focus styles */
 *:focus-visible {
   outline: 2px solid #3b82f6;
@@ -37,6 +69,137 @@ html {
   background-color: #3b82f6;
   color: white;
 }
+
+/* ============================================
+   MOBILE NAVIGATION
+   ============================================ */
+@layer components {
+  /* Mobile menu button */
+  .mobile-menu-btn {
+    @apply p-2 rounded-lg hover:bg-slate-700 transition md:hidden;
+  }
+  
+  /* Mobile bottom navigation */
+  .mobile-bottom-nav {
+    @apply fixed bottom-0 left-0 right-0 bg-slate-800/95 backdrop-blur-lg border-t border-slate-700 z-40 md:hidden;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  
+  .mobile-nav-item {
+    @apply flex flex-col items-center justify-center py-2 px-1 text-slate-400 hover:text-white transition min-h-[60px];
+  }
+  
+  .mobile-nav-item.active {
+    @apply text-indigo-400;
+  }
+  
+  .mobile-nav-item svg {
+    @apply w-5 h-5 mb-1;
+  }
+  
+  .mobile-nav-item span {
+    @apply text-[10px] font-medium;
+  }
+  
+  /* Touch-friendly buttons */
+  .touch-btn {
+    @apply min-h-[44px] min-w-[44px] flex items-center justify-center;
+  }
+  
+  /* Mobile modal */
+  .mobile-modal {
+    @apply fixed inset-0 z-50 bg-slate-900;
+  }
+  
+  @screen md {
+    .mobile-modal {
+      @apply relative bg-transparent;
+    }
+  }
+  
+  /* Mobile card */
+  .mobile-card {
+    @apply bg-slate-800 rounded-xl p-4 md:p-6;
+  }
+  
+  /* Mobile header */
+  .mobile-header {
+    @apply sticky top-0 z-30 bg-slate-900/95 backdrop-blur-lg border-b border-slate-800;
+    padding-top: env(safe-area-inset-top);
+  }
+  
+  /* Safe area padding for iOS */
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  
+  .safe-area-top {
+    padding-top: env(safe-area-inset-top);
+  }
+}
+
+/* ============================================
+   RESPONSIVE UTILITIES
+   ============================================ */
+@layer utilities {
+  /* Hide on mobile */
+  .hide-mobile {
+    @apply hidden md:flex;
+  }
+  
+  /* Show only on mobile */
+  .show-mobile {
+    @apply flex md:hidden;
+  }
+  
+  /* Mobile full width */
+  .mobile-full {
+    @apply w-full md:w-auto;
+  }
+  
+  /* Mobile stack */
+  .mobile-stack {
+    @apply flex flex-col md:flex-row;
+  }
+  
+  /* Mobile text sizes */
+  .text-mobile-xs {
+    @apply text-xs md:text-sm;
+  }
+  
+  .text-mobile-sm {
+    @apply text-sm md:text-base;
+  }
+  
+  .text-mobile-base {
+    @apply text-base md:text-lg;
+  }
+  
+  /* Touch-friendly spacing */
+  .touch-spacing {
+    @apply space-y-3 md:space-y-2;
+  }
+  
+  /* Prevent text selection on buttons */
+  .no-select {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  
+  /* Hide scrollbar but keep functionality */
+  .hide-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  .hide-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* ============================================
+   ANIMATIONS
+   ============================================ */
 
 /* Drag and drop animation */
 .drag-active {
@@ -63,5 +226,82 @@ html {
   }
   to {
     transform: rotate(360deg);
+  }
+}
+
+/* Slide up animation for modals */
+@keyframes slideUp {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-up {
+  animation: slideUp 0.3s ease-out;
+}
+
+/* Fade in animation */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.2s ease-out;
+}
+
+/* ============================================
+   MOBILE-SPECIFIC FIXES
+   ============================================ */
+
+/* Prevent overscroll bounce */
+@supports (-webkit-touch-callout: none) {
+  body {
+    overscroll-behavior: none;
+  }
+}
+
+/* Fix for iOS input zoom */
+@supports (-webkit-touch-callout: none) {
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="url"],
+  textarea,
+  select {
+    font-size: 16px;
+  }
+}
+
+/* Mobile bottom padding for nav */
+.has-bottom-nav {
+  padding-bottom: calc(70px + env(safe-area-inset-bottom));
+}
+
+@media (min-width: 768px) {
+  .has-bottom-nav {
+    padding-bottom: 0;
+  }
+}
+
+/* Improved touch targets */
+@media (hover: none) and (pointer: coarse) {
+  button, a, [role="button"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  
+  .small-touch-ok {
+    min-height: auto;
+    min-width: auto;
   }
 }

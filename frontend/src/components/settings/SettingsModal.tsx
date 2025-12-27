@@ -248,17 +248,17 @@ export function SettingsModal({ isOpen, onClose, onSettingsChange }: SettingsMod
   const totalProviders = 6;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-      <div className="bg-slate-800 rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden border border-slate-700">
+    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/70 backdrop-blur-sm">
+      <div className="bg-slate-800 rounded-t-2xl md:rounded-xl shadow-2xl w-full md:max-w-4xl max-h-[95vh] md:max-h-[90vh] overflow-hidden border border-slate-700 animate-slide-up md:animate-fade-in">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700 bg-slate-900">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
-              <Settings className="w-5 h-5 text-white" />
+        <div className="flex items-center justify-between px-4 md:px-6 py-3 md:py-4 border-b border-slate-700 bg-slate-900">
+          <div className="flex items-center gap-2 md:gap-3">
+            <div className="w-8 h-8 md:w-10 md:h-10 bg-blue-600 rounded-lg flex items-center justify-center">
+              <Settings className="w-4 h-4 md:w-5 md:h-5 text-white" />
             </div>
             <div>
-              <h2 className="text-xl font-semibold text-white">Settings</h2>
-              <p className="text-sm text-slate-400">
+              <h2 className="text-lg md:text-xl font-semibold text-white">Settings</h2>
+              <p className="text-xs md:text-sm text-slate-400">
                 {configuredCount}/{totalProviders} services configured
               </p>
             </div>
@@ -271,44 +271,44 @@ export function SettingsModal({ isOpen, onClose, onSettingsChange }: SettingsMod
           </button>
         </div>
 
-        {/* Tabs */}
-        <div className="flex border-b border-slate-700 bg-slate-900/50">
+        {/* Tabs - Scrollable on mobile */}
+        <div className="flex border-b border-slate-700 bg-slate-900/50 overflow-x-auto hide-scrollbar">
           <button
             onClick={() => setActiveTab('threat-intel')}
-            className={`flex items-center gap-2 px-6 py-3 font-medium transition-colors ${
+            className={`flex items-center gap-1.5 md:gap-2 px-3 md:px-6 py-2.5 md:py-3 font-medium transition-colors whitespace-nowrap text-sm md:text-base ${
               activeTab === 'threat-intel'
                 ? 'text-blue-400 border-b-2 border-blue-400 bg-slate-800/50'
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
             <Shield className="w-4 h-4" />
-            Threat Intelligence
+            <span className="hidden sm:inline">Threat</span> Intel
           </button>
           <button
             onClick={() => setActiveTab('ai')}
-            className={`flex items-center gap-2 px-6 py-3 font-medium transition-colors ${
+            className={`flex items-center gap-1.5 md:gap-2 px-3 md:px-6 py-2.5 md:py-3 font-medium transition-colors whitespace-nowrap text-sm md:text-base ${
               activeTab === 'ai'
                 ? 'text-purple-400 border-b-2 border-purple-400 bg-slate-800/50'
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
             <Brain className="w-4 h-4" />
-            AI Analysis
+            AI
           </button>
           <button
             onClick={() => setActiveTab('detection')}
-            className={`flex items-center gap-2 px-6 py-3 font-medium transition-colors ${
+            className={`flex items-center gap-1.5 md:gap-2 px-3 md:px-6 py-2.5 md:py-3 font-medium transition-colors whitespace-nowrap text-sm md:text-base ${
               activeTab === 'detection'
                 ? 'text-green-400 border-b-2 border-green-400 bg-slate-800/50'
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
             <Zap className="w-4 h-4" />
-            Detection Engine
+            Detection
           </button>
           <button
             onClick={() => setActiveTab('advanced')}
-            className={`flex items-center gap-2 px-6 py-3 font-medium transition-colors ${
+            className={`flex items-center gap-1.5 md:gap-2 px-3 md:px-6 py-2.5 md:py-3 font-medium transition-colors whitespace-nowrap text-sm md:text-base ${
               activeTab === 'advanced'
                 ? 'text-orange-400 border-b-2 border-orange-400 bg-slate-800/50'
                 : 'text-slate-400 hover:text-slate-200'
@@ -320,7 +320,7 @@ export function SettingsModal({ isOpen, onClose, onSettingsChange }: SettingsMod
         </div>
 
         {/* Content */}
-        <div className="p-6 overflow-y-auto max-h-[60vh]">
+        <div className="p-4 md:p-6 overflow-y-auto max-h-[65vh] md:max-h-[60vh]">
           {loading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="w-8 h-8 animate-spin text-blue-500" />

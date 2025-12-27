@@ -1,0 +1,19 @@
+{
+  "name": "NiksES - Email Security Analyzer",
+  "short_name": "NiksES",
+  "description": "AI-Powered Email Investigation Copilot for SOC Analysts",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["security", "productivity", "utilities"]
+}

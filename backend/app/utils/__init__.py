@@ -70,6 +70,18 @@ from app.utils.encryption import (
     init_encryption_manager,
 )
 
+from app.utils.security import (
+    RateLimiter,
+    RateLimitMiddleware,
+    SecurityHeadersMiddleware,
+    sanitize_error_message,
+    safe_error_response,
+    validate_file_size,
+    validate_file_extension,
+    sanitize_search_query,
+    MAX_FILE_SIZE,
+)
+
 __all__ = [
     # Constants
     "APP_NAME",
@@ -126,4 +138,14 @@ __all__ = [
     "generate_secret_key",
     "get_encryption_manager",
     "init_encryption_manager",
+    # Security
+    "RateLimiter",
+    "RateLimitMiddleware",
+    "SecurityHeadersMiddleware",
+    "sanitize_error_message",
+    "safe_error_response",
+    "validate_file_size",
+    "validate_file_extension",
+    "sanitize_search_query",
+    "MAX_FILE_SIZE",
 ]

@@ -184,17 +184,17 @@ const HistoryPanel: React.FC<HistoryPanelProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-end md:items-center justify-center p-0 md:p-4">
+      <div className="bg-white rounded-t-2xl md:rounded-xl shadow-2xl w-full md:max-w-6xl max-h-[95vh] md:max-h-[90vh] flex flex-col animate-slide-up md:animate-fade-in">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b bg-gray-50 rounded-t-xl">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-indigo-100 rounded-lg">
-              <History className="w-5 h-5 text-indigo-600" />
+        <div className="flex items-center justify-between p-3 md:p-4 border-b bg-gray-50 rounded-t-2xl md:rounded-t-xl">
+          <div className="flex items-center gap-2 md:gap-3">
+            <div className="p-1.5 md:p-2 bg-indigo-100 rounded-lg">
+              <History className="w-4 h-4 md:w-5 md:h-5 text-indigo-600" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-gray-900">Analysis History</h2>
-              <p className="text-sm text-gray-500">{total} analyses stored</p>
+              <h2 className="text-base md:text-lg font-bold text-gray-900">Analysis History</h2>
+              <p className="text-xs md:text-sm text-gray-500">{total} analyses stored</p>
             </div>
           </div>
           <button
@@ -206,18 +206,18 @@ const HistoryPanel: React.FC<HistoryPanelProps> = ({
         </div>
 
         {/* Toolbar */}
-        <div className="p-4 border-b bg-white space-y-3">
+        <div className="p-3 md:p-4 border-b bg-white space-y-2 md:space-y-3">
           {/* Search and filters row */}
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-col sm:flex-row gap-2 md:gap-3">
             {/* Search */}
-            <div className="flex-grow min-w-[200px] relative">
+            <div className="flex-grow min-w-0 relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search by subject or sender..."
+                placeholder="Search..."
                 value={search}
                 onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-                className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                className="w-full pl-10 pr-4 py-2.5 md:py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
               />
             </div>
 
@@ -225,7 +225,7 @@ const HistoryPanel: React.FC<HistoryPanelProps> = ({
             <select
               value={riskFilter}
               onChange={(e) => { setRiskFilter(e.target.value); setPage(1); }}
-              className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+              className="px-3 py-2.5 md:py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
             >
               <option value="">All Risk Levels</option>
               <option value="critical">Critical</option>

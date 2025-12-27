@@ -160,6 +160,21 @@ app.add_middleware(
     allow_headers=["Content-Type", "Authorization", "X-API-Key"],
 )
 
+# Security middleware - Rate limiting and security headers
+try:
+    from app.utils.security import RateLimitMiddleware, SecurityHeadersMiddleware
+    
+    # Rate limiting: 120 requests per minute per IP (adjust as needed)
+    rate_limit_rpm = int(os.getenv("RATE_LIMIT_RPM", "120"))
+    app.add_middleware(RateLimitMiddleware, requests_per_minute=rate_limit_rpm)
+    
+    # Security headers
+    app.add_middleware(SecurityHeadersMiddleware)
+    
+    logger.info(f"Security middleware enabled (rate limit: {rate_limit_rpm} req/min)")
+except ImportError as e:
+    logger.warning(f"Security middleware not loaded: {e}")
+
 # Include API routes
 app.include_router(get_api_router())
 

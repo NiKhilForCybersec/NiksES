@@ -241,62 +241,62 @@ Analysis ID: ${analysisResult.analysis_id || 'N/A'}
         </p>
       </div>
 
-      <div className="p-6 space-y-6">
+      <div className="p-4 md:p-6 space-y-4 md:space-y-6">
         {/* Quick Summary Card */}
-        <div className={`p-4 rounded-lg border-2 ${
+        <div className={`p-3 md:p-4 rounded-lg border-2 ${
           impact.color === 'red' ? 'bg-red-900/30 border-red-700' :
           impact.color === 'orange' ? 'bg-orange-900/30 border-orange-700' :
           impact.color === 'yellow' ? 'bg-yellow-900/30 border-yellow-700' :
           'bg-green-900/30 border-green-700'
         }`}>
-          <div className="flex items-start gap-4">
-            <div className={`p-3 rounded-full ${
+          <div className="flex items-start gap-3 md:gap-4">
+            <div className={`p-2 md:p-3 rounded-full ${
               impact.color === 'red' ? 'bg-red-900/50' :
               impact.color === 'orange' ? 'bg-orange-900/50' :
               impact.color === 'yellow' ? 'bg-yellow-900/50' :
               'bg-green-900/50'
             }`}>
-              <AlertTriangle className={`w-6 h-6 ${
+              <AlertTriangle className={`w-5 h-5 md:w-6 md:h-6 ${
                 impact.color === 'red' ? 'text-red-400' :
                 impact.color === 'orange' ? 'text-orange-400' :
                 impact.color === 'yellow' ? 'text-yellow-400' :
                 'text-green-400'
               }`} />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="font-bold text-lg text-gray-100">{friendlyClassification}</h3>
-                <span className={`px-2 py-0.5 rounded text-sm font-medium ${
+            <div className="flex-1 min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="font-bold text-base md:text-lg text-gray-100">{friendlyClassification}</h3>
+                <span className={`px-2 py-0.5 rounded text-xs md:text-sm font-medium ${
                   impact.color === 'red' ? 'bg-red-900/50 text-red-400 border border-red-700' :
                   impact.color === 'orange' ? 'bg-orange-900/50 text-orange-400 border border-orange-700' :
                   impact.color === 'yellow' ? 'bg-yellow-900/50 text-yellow-400 border border-yellow-700' :
                   'bg-green-900/50 text-green-400 border border-green-700'
                 }`}>
-                  {impact.level} IMPACT
+                  {impact.level}
                 </span>
               </div>
-              <p className="text-gray-300 mt-1">{impact.description}</p>
+              <p className="text-sm md:text-base text-gray-300 mt-1">{impact.description}</p>
             </div>
           </div>
         </div>
 
         {/* Key Metrics */}
-        <div className="grid grid-cols-4 gap-4">
-          <div className="bg-gray-900 rounded-lg p-4 text-center border border-gray-700">
-            <div className="text-3xl font-bold text-gray-100">{riskScore}</div>
-            <div className="text-sm text-gray-400">Risk Score</div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4">
+          <div className="bg-gray-900 rounded-lg p-3 md:p-4 text-center border border-gray-700">
+            <div className="text-2xl md:text-3xl font-bold text-gray-100">{riskScore}</div>
+            <div className="text-xs md:text-sm text-gray-400">Risk Score</div>
           </div>
-          <div className="bg-gray-900 rounded-lg p-4 text-center border border-gray-700">
-            <div className="text-3xl font-bold text-gray-100">{recipientCount}</div>
-            <div className="text-sm text-gray-400">Users Targeted</div>
+          <div className="bg-gray-900 rounded-lg p-3 md:p-4 text-center border border-gray-700">
+            <div className="text-2xl md:text-3xl font-bold text-gray-100">{recipientCount}</div>
+            <div className="text-xs md:text-sm text-gray-400">Users Targeted</div>
           </div>
-          <div className="bg-gray-900 rounded-lg p-4 text-center border border-gray-700">
-            <div className="text-3xl font-bold text-gray-100">{email.urls?.length || 0}</div>
-            <div className="text-sm text-gray-400">Malicious URLs</div>
+          <div className="bg-gray-900 rounded-lg p-3 md:p-4 text-center border border-gray-700">
+            <div className="text-2xl md:text-3xl font-bold text-gray-100">{email.urls?.length || 0}</div>
+            <div className="text-xs md:text-sm text-gray-400">Malicious URLs</div>
           </div>
-          <div className="bg-gray-900 rounded-lg p-4 text-center border border-gray-700">
-            <div className="text-3xl font-bold text-gray-100">{email.attachments?.length || 0}</div>
-            <div className="text-sm text-gray-400">Attachments</div>
+          <div className="bg-gray-900 rounded-lg p-3 md:p-4 text-center border border-gray-700">
+            <div className="text-2xl md:text-3xl font-bold text-gray-100">{email.attachments?.length || 0}</div>
+            <div className="text-xs md:text-sm text-gray-400">Attachments</div>
           </div>
         </div>
 

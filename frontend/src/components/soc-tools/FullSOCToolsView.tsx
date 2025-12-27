@@ -65,27 +65,27 @@ const FullSOCToolsView: React.FC<FullSOCToolsViewProps> = ({
     <div className="fixed inset-0 z-50 flex">
       {/* Backdrop */}
       <div 
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/50 backdrop-blur-sm hidden md:block"
         onClick={onClose}
       />
       
-      {/* Panel */}
+      {/* Panel - Full screen on mobile, side panel on desktop */}
       <div 
-        className={`relative ml-auto bg-gray-800 h-full shadow-2xl transition-all duration-300 flex flex-col ${
-          collapsed ? 'w-16' : 'w-[90%] max-w-6xl'
+        className={`relative md:ml-auto bg-gray-800 h-full shadow-2xl transition-all duration-300 flex flex-col w-full md:w-[90%] md:max-w-6xl ${
+          collapsed ? 'md:w-16' : ''
         }`}
       >
-        {/* Collapse Toggle */}
+        {/* Collapse Toggle - Hidden on mobile */}
         <button
           onClick={() => setCollapsed(!collapsed)}
-          className="absolute -left-4 top-1/2 transform -translate-y-1/2 w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center text-white shadow-lg hover:bg-indigo-700 z-10"
+          className="absolute -left-4 top-1/2 transform -translate-y-1/2 w-8 h-8 bg-indigo-600 rounded-full items-center justify-center text-white shadow-lg hover:bg-indigo-700 z-10 hidden md:flex"
         >
           {collapsed ? <ChevronLeft className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
         </button>
 
         {collapsed ? (
-          /* Collapsed View - Just Icons */
-          <div className="flex flex-col items-center py-4 gap-4">
+          /* Collapsed View - Just Icons (Desktop only) */
+          <div className="hidden md:flex flex-col items-center py-4 gap-4">
             <button
               onClick={onClose}
               className="p-2 hover:bg-gray-700 rounded-lg"
@@ -114,13 +114,13 @@ const FullSOCToolsView: React.FC<FullSOCToolsViewProps> = ({
           /* Expanded View */
           <>
             {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b bg-gradient-to-r from-indigo-600 to-purple-600 text-white">
-              <div className="flex items-center gap-3">
-                <Shield className="w-6 h-6" />
+            <div className="flex items-center justify-between px-4 md:px-6 py-3 md:py-4 border-b bg-gradient-to-r from-indigo-600 to-purple-600 text-white">
+              <div className="flex items-center gap-2 md:gap-3">
+                <Shield className="w-5 h-5 md:w-6 md:h-6" />
                 <div>
-                  <h2 className="text-xl font-bold">SOC Analyst Toolkit</h2>
-                  <p className="text-sm text-indigo-200">
-                    Comprehensive tools for incident investigation and response
+                  <h2 className="text-lg md:text-xl font-bold">SOC Toolkit</h2>
+                  <p className="text-xs md:text-sm text-indigo-200 hidden sm:block">
+                    Incident investigation & response
                   </p>
                 </div>
               </div>
@@ -132,13 +132,13 @@ const FullSOCToolsView: React.FC<FullSOCToolsViewProps> = ({
               </button>
             </div>
 
-            {/* Tabs */}
-            <div className="flex border-b bg-gray-900 px-4">
+            {/* Tabs - Scrollable on mobile */}
+            <div className="flex border-b bg-gray-900 px-2 md:px-4 overflow-x-auto hide-scrollbar">
               {tabs.map((tab) => (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center gap-2 px-4 py-3 border-b-2 transition-colors ${
+                  className={`flex items-center gap-1.5 md:gap-2 px-3 md:px-4 py-2.5 md:py-3 border-b-2 transition-colors whitespace-nowrap text-sm md:text-base ${
                     activeTab === tab.id
                       ? 'border-indigo-600 text-indigo-600 bg-gray-800'
                       : 'border-transparent text-gray-400 hover:text-gray-200 hover:bg-gray-700'
@@ -151,7 +151,7 @@ const FullSOCToolsView: React.FC<FullSOCToolsViewProps> = ({
             </div>
 
             {/* Content */}
-            <div className="flex-1 overflow-auto p-6 bg-gray-900">
+            <div className="flex-1 overflow-auto p-3 md:p-6 bg-gray-900">
               {activeTab === 'tools' && (
                 <SOCToolsPanel analysisResult={analysisResult} />
               )}
@@ -167,12 +167,12 @@ const FullSOCToolsView: React.FC<FullSOCToolsViewProps> = ({
             </div>
 
             {/* Footer */}
-            <div className="px-6 py-3 border-t bg-gray-800 text-sm text-gray-400 flex items-center justify-between">
-              <span>
-                Analysis ID: {analysisResult?.analysis_id || 'N/A'}
+            <div className="px-3 md:px-6 py-2 md:py-3 border-t bg-gray-800 text-xs md:text-sm text-gray-400 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1">
+              <span className="truncate max-w-full">
+                ID: {analysisResult?.analysis_id?.slice(0, 8) || 'N/A'}...
               </span>
               <span>
-                Analyzed: {analysisResult?.analyzed_at 
+                {analysisResult?.analyzed_at 
                   ? new Date(analysisResult.analyzed_at).toLocaleString() 
                   : 'N/A'}
               </span>
