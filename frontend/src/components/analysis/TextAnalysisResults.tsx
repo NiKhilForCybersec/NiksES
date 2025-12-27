@@ -465,7 +465,7 @@ const TextAnalysisResults: React.FC<Props> = ({ result, onClose }) => {
                         </a>
                       </div>
                     </div>
-                    {enrichment.sources.length > 0 && (
+                    {enrichment.sources?.length > 0 && (
                       <div className="flex items-center gap-1 mt-2">
                         <span className="text-xs text-slate-500">Sources:</span>
                         {enrichment.sources.map((src, j) => (
@@ -475,7 +475,7 @@ const TextAnalysisResults: React.FC<Props> = ({ result, onClose }) => {
                         ))}
                       </div>
                     )}
-                    {enrichment.categories.length > 0 && (
+                    {enrichment.categories?.length > 0 && (
                       <div className="flex items-center gap-1 mt-1">
                         <span className="text-xs text-slate-500">Categories:</span>
                         {enrichment.categories.map((cat, j) => (
@@ -569,7 +569,7 @@ const TextAnalysisResults: React.FC<Props> = ({ result, onClose }) => {
                   )}
 
                   {/* Network Behavior */}
-                  {sandbox.contacted_domains.length > 0 && (
+                  {sandbox.contacted_domains?.length > 0 && (
                     <div>
                       <span className="text-slate-500">Contacted Domains:</span>
                       <div className="flex flex-wrap gap-1 mt-1">
@@ -584,7 +584,7 @@ const TextAnalysisResults: React.FC<Props> = ({ result, onClose }) => {
                       </div>
                     </div>
                   )}
-                  {sandbox.contacted_ips.length > 0 && (
+                  {sandbox.contacted_ips?.length > 0 && (
                     <div>
                       <span className="text-slate-500">Contacted IPs:</span>
                       <div className="flex flex-wrap gap-1 mt-1">
@@ -598,7 +598,7 @@ const TextAnalysisResults: React.FC<Props> = ({ result, onClose }) => {
                   )}
 
                   {/* Redirects */}
-                  {sandbox.redirects.length > 0 && (
+                  {sandbox.redirects?.length > 0 && (
                     <div className="col-span-2">
                       <span className="text-slate-500">Redirect Chain ({sandbox.redirects.length}):</span>
                       <div className="flex flex-wrap items-center gap-1 mt-1">
@@ -615,7 +615,7 @@ const TextAnalysisResults: React.FC<Props> = ({ result, onClose }) => {
                   )}
 
                   {/* Indicators */}
-                  {sandbox.indicators.length > 0 && (
+                  {sandbox.indicators?.length > 0 && (
                     <div className="col-span-2">
                       <span className="text-slate-500">Behavioral Indicators:</span>
                       <ul className="mt-1 space-y-1">
