@@ -1,44 +1,54 @@
-# NiksES v3.3.5 - History View Fix for URL/SMS
+# NiksES v3.3.6 - History View Fix v2
 
-## 🐛 Bug Fixed: History View Shows Wrong Analysis Type
+## 🐛 Fixed: History View Now Correctly Shows URL/SMS Analysis
 
 ### The Problem
-When clicking "View" on a URL or SMS analysis from history, it always opened 
-the Email Analysis view instead of the URL/SMS Analysis view.
+Clicking "View Analysis" on URL or SMS analysis from history was still 
+showing the Email Analysis view instead of URL/SMS view.
+
+### Root Cause
+The detection logic only checked `email.sender.email` field, but this 
+wasn't being matched correctly in all cases.
 
 ### The Fix
-The system now detects the analysis type from the stored data:
-- `url@analysis.local` → Opens URL Analysis view
-- `sms@analysis.local` → Opens SMS/Text Analysis view  
-- Other → Opens Email Analysis view
+Added multiple detection methods:
 
-### New History Panel UI
+1. **Sender Email Check**: `url@analysis.local` or `sms@analysis.local`
+2. **Subject Prefix Check**: `URL Analysis:` or `SMS Analysis:`
+3. **Subject Contains Check**: Fallback check for "URL Analysis" or "SMS Analysis"
 
-The history panel now shows the analysis type with icons:
+### Detection Logic
+```javascript
+const isUrlAnalysis = senderEmail === 'url@analysis.local' || 
+                      subject.startsWith('URL Analysis:') ||
+                      subject.includes('URL Analysis');
 
-```
-┌─────────┬─────────────────┬────────┬──────┬────────────────┐
-│ Date    │ Subject         │ Source │ Risk │ Classification │
-├─────────┼─────────────────┼────────┼──────┼────────────────┤
-│ 12/27   │ Suspicious URL  │ 🔗 URL │  89  │ PHISHING       │
-│ 12/27   │ Prize Scam      │ 📱 SMS │  95  │ SMISHING       │
-│ 12/26   │ Invoice #1234   │ ✉️ Mail│  72  │ BEC            │
-└─────────┴─────────────────┴────────┴──────┴────────────────┘
+const isSmsAnalysis = senderEmail === 'sms@analysis.local' || 
+                      subject.startsWith('SMS Analysis:') ||
+                      subject.includes('SMS Analysis');
 ```
 
-### Analysis Type Detection
+### Console Logging
+Added debug logging to help troubleshoot:
+```
+[History View] Analysis type detection: {
+  analysisId: "abc123",
+  senderEmail: "url@analysis.local",
+  subject: "URL Analysis: malicious_url",
+  isUrlAnalysis: true,
+  isSmsAnalysis: false
+}
+```
 
-| Sender Email         | Type  | Icon | View Component        |
-|---------------------|-------|------|-----------------------|
-| `url@analysis.local`| URL   | 🔗   | TextAnalysisResults   |
-| `sms@analysis.local`| SMS   | 📱   | TextAnalysisResults   |
-| Other               | Email | ✉️   | AdvancedAnalysisView  |
+### Behavior
+- **URL/SMS Analysis** → Opens `TextAnalysisResults` component
+- **Email Analysis** → Opens `AdvancedAnalysisView` component
 
 ## 📁 Files Changed
-- `frontend/src/App.tsx` - Smart view selection based on type
-- `frontend/src/components/history/HistoryPanel.tsx` - Type icons & labels
+- `frontend/src/App.tsx` - Improved detection with fallbacks + logging
+- `frontend/src/components/history/HistoryPanel.tsx` - Consistent type detection
 
-## 📦 All Features (v3.3.x)
+## 📦 v3.3.x Release Summary
 
 | Version | Feature |
 |---------|---------|
@@ -47,4 +57,5 @@ The history panel now shows the analysis type with icons:
 | v3.3.2 | Smart URL filtering |
 | v3.3.3 | 700+ detection rules |
 | v3.3.4 | Quota warning modal |
-| **v3.3.5** | **History view type fix** |
+| v3.3.5 | History view type fix v1 |
+| **v3.3.6** | **History view type fix v2** |

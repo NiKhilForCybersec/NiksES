@@ -1382,7 +1382,8 @@ function App() {
       />
 
       {/* Full Analysis View Modal */}
-      {fullAnalysisOpen && result && (
+      {/* Full Analysis View - Email or URL/SMS from history */}
+      {(fullAnalysisOpen && result) || textAnalysisResult ? (
         <div className="fixed inset-0 z-50 overflow-auto">
           {/* Check if this is SMS/URL analysis */}
           {textAnalysisResult ? (
@@ -1420,7 +1421,7 @@ function App() {
                 />
               </div>
             </div>
-          ) : (
+          ) : result ? (
             <AdvancedAnalysisView
               result={{
                 ...result,
@@ -1436,9 +1437,9 @@ function App() {
               onExport={exportResults}
               onBack={() => setFullAnalysisOpen(false)}
             />
-          )}
+          ) : null}
         </div>
-      )}
+      ) : null}
 
       {/* Settings Modal */}
       <SettingsModal 
@@ -1459,15 +1460,34 @@ function App() {
             const response = await apiClient.get(`/analyses/${analysisId}`);
             const data = response.data;
             
-            // Detect analysis type from sender email
-            // URL/SMS analyses are stored with sender: url@analysis.local or sms@analysis.local
+            // Detect analysis type from multiple sources
+            // 1. sender email: url@analysis.local or sms@analysis.local
+            // 2. subject prefix: "URL Analysis:" or "SMS Analysis:"
             const senderEmail = data?.email?.sender?.email || '';
-            const isUrlAnalysis = senderEmail === 'url@analysis.local';
-            const isSmsAnalysis = senderEmail === 'sms@analysis.local';
+            const subject = data?.email?.subject || '';
+            
+            const isUrlAnalysis = senderEmail === 'url@analysis.local' || 
+                                  subject.startsWith('URL Analysis:') ||
+                                  subject.includes('URL Analysis');
+            const isSmsAnalysis = senderEmail === 'sms@analysis.local' || 
+                                  subject.startsWith('SMS Analysis:') ||
+                                  subject.includes('SMS Analysis');
+            
+            console.log('[History View] Analysis type detection:', {
+              analysisId,
+              senderEmail,
+              subject,
+              isUrlAnalysis,
+              isSmsAnalysis
+            });
             
             setHistoryOpen(false);
             
             if (isUrlAnalysis || isSmsAnalysis) {
+              // Clear email analysis state first
+              setFullAnalysisOpen(false);
+              setResult(null);
+              
               // Transform the pseudo-email back to TextAnalysisResults format
               const textResult = {
                 analysis_id: data.analysis_id,
@@ -1505,10 +1525,14 @@ function App() {
                 url_enrichment: data.enrichment?.urls || [],
               };
               
+              // Set the text analysis result - this will show TextAnalysisResults inline
               setTextAnalysisResult(textResult);
-              // Don't open fullAnalysisOpen - TextAnalysisResults shows inline
+              
+              // Scroll to top to show results
+              window.scrollTo({ top: 0, behavior: 'smooth' });
             } else {
-              // Regular email analysis
+              // Regular email analysis - clear text state first
+              setTextAnalysisResult(null);
               setResult(data);
               setFullAnalysisOpen(true);
             }

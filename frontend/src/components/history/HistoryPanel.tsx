@@ -16,16 +16,16 @@ import {
 import { toast } from 'react-hot-toast';
 import { apiClient } from '../../services/api';
 
-// Helper to detect analysis type from sender email
-const getAnalysisType = (senderEmail: string | null): 'email' | 'url' | 'sms' => {
-  if (senderEmail === 'url@analysis.local') return 'url';
-  if (senderEmail === 'sms@analysis.local') return 'sms';
+// Helper to detect analysis type from sender email or subject
+const getAnalysisType = (senderEmail: string | null, subject: string | null): 'email' | 'url' | 'sms' => {
+  if (senderEmail === 'url@analysis.local' || subject?.includes('URL Analysis')) return 'url';
+  if (senderEmail === 'sms@analysis.local' || subject?.includes('SMS Analysis')) return 'sms';
   return 'email';
 };
 
 // Helper to get type icon and color
-const getTypeDisplay = (senderEmail: string | null) => {
-  const type = getAnalysisType(senderEmail);
+const getTypeDisplay = (senderEmail: string | null, subject: string | null = null) => {
+  const type = getAnalysisType(senderEmail, subject);
   switch (type) {
     case 'url':
       return { 
@@ -423,7 +423,7 @@ const HistoryPanel: React.FC<HistoryPanelProps> = ({
                     </td>
                     <td className="px-4 py-3">
                       {(() => {
-                        const typeInfo = getTypeDisplay(analysis.sender_email);
+                        const typeInfo = getTypeDisplay(analysis.sender_email, analysis.subject);
                         const TypeIcon = typeInfo.icon;
                         return (
                           <div className="flex items-center gap-2" title={typeInfo.title}>
