@@ -31,6 +31,7 @@ import { SettingsModal, APIStatusIndicator, APISetupBanner, SettingsState } from
 import HistoryPanel from './components/history/HistoryPanel';
 import { FullSOCToolsView } from './components/soc-tools';
 import { DetectionEngineViz } from './components/detection-viz';
+import QuotaWarningModal from './components/QuotaWarningModal';
 
 // Types
 interface AnalysisResult {
@@ -742,6 +743,9 @@ function App() {
   return (
     <div className="min-h-screen bg-slate-900 text-white has-bottom-nav">
       <Toaster position="top-right" />
+      
+      {/* API Quota Warning Modal - shows once per session */}
+      <QuotaWarningModal />
 
       {/* Header - Mobile Responsive */}
       <header className="mobile-header h-14 md:h-16 bg-slate-800 border-b border-slate-700 flex items-center justify-between px-3 md:px-6">

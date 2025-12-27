@@ -1,101 +1,46 @@
-# NiksES v3.3.3 - Advanced URL Intelligence Filter
+# NiksES v3.3.4 - Quota Warning Modal
 
-## 🧠 Enterprise-Grade URL Filtering
+## 🆕 New Feature: API Quota Warning
 
-Comprehensive URL filtering that saves API quota while catching ALL threats!
+Users now see a friendly warning popup on first use explaining the free tier limitations.
 
-### Filter Statistics
-| Category | Count |
-|----------|-------|
-| **Safe Domains** | 345+ |
-| **Suspicious Patterns** | 302+ |
-| **Tracking Patterns** | 53+ |
-| **Total Rules** | 700+ |
+### Warning Modal Features
 
-## 🎯 What It Detects
+![Quota Warning](quota-warning-preview.png)
 
-### Brand Impersonation (with typosquatting)
-```
-✓ paypa1-secure.com       (PayPal typosquat)
-✓ micros0ft-login.click   (Microsoft typosquat)
-✓ amaz0n.support.top      (Amazon typosquat)
-✓ g00gle-verify.ml        (Google typosquat)
-✓ faceb00k-security.xyz   (Facebook typosquat)
-```
+- **Shows once per session** (uses localStorage)
+- **"Don't show for 7 days"** checkbox option
+- **Clear quota information** for each API:
+  - VirusTotal: ~4/min, 500/day
+  - IPQualityScore: ~200/day
+  - AbuseIPDB: ~1000/day
+  - URLScan.io: ~50/day
+- **Smart usage tips** explaining auto-filtering
+- **Reassurance** that AI analysis has no limits
 
-### Suspicious TLDs
-```
-✓ .tk, .ml, .ga, .cf, .gq  (Freenom - commonly abused)
-✓ .xyz, .top, .club, .work, .click
-✓ .icu, .buzz, .fun, .space, .website
-✓ .zip, .mov  (New Google TLDs abused for phishing)
-```
+### Modal Design
+- Dark theme matching the app
+- Yellow/orange warning gradient header
+- Clean grid showing API limits
+- Blue accent for positive information
+- Professional, non-alarming tone
 
-### Attack Patterns
-```
-✓ Path traversal: /../../../etc/passwd
-✓ IP in URL: https://192.168.1.1/login
-✓ Credential URLs: https://user:pass@evil.com
-✓ Command injection: ?cmd=whoami
-✓ SQL injection: ?id=1' OR '1'='1
-✓ Executable downloads: .exe, .scr, .bat, .ps1
-✓ Base64/encoded payloads
-```
+### User Experience
+1. First visit → Modal appears
+2. User reads the warning
+3. Optional: Check "Don't show for 7 days"
+4. Click "I Understand" to dismiss
+5. Modal won't show again (or for 7 days)
 
-### Homograph/Lookalike Detection
-```
-✓ Cyrillic characters: аррӏе.com (fake apple.com)
-✓ Greek characters: αmazon.com (fake amazon.com)
-✓ l33t speak: g00gle, pay1, micr0soft
-✓ Visual tricks: rn→m, vv→w, cl→d
-```
+## 📁 New Files
+- `frontend/src/components/QuotaWarningModal.tsx`
 
-## 🚫 What It Skips (Saves API Quota)
+## 📦 All Features (v3.3.0 - v3.3.4)
 
-### 345+ Safe Domains
-- Tech giants: google, microsoft, apple, amazon, facebook
-- Email: gmail, outlook, yahoo, protonmail
-- SaaS: slack, zoom, dropbox, notion, salesforce
-- CDNs: cloudflare, akamai, fastly, cloudfront
-- Dev: github, npm, pypi, docker, vercel
-
-### Asset URLs
-- Images: .png, .jpg, .gif, .webp, .ico, .svg
-- Fonts: .woff, .woff2, .ttf, .eot
-- Styles: .css
-
-### 53+ Tracking Patterns
-- Pixels: /pixel, /beacon, /1x1.gif, /track
-- Analytics: /collect, /__utm, /analytics
-- Email tracking: sendgrid, mailchimp, hubspot
-
-## 📊 Priority Scoring (0-20)
-
-| Priority | Description | Example |
-|----------|-------------|---------|
-| 13+ | Critical threat | IP + payment keywords |
-| 10-12 | High threat | Typosquatting + suspicious TLD |
-| 7-9 | Medium threat | Free TLD + random domain |
-| 4-6 | Low threat | Executable download |
-| 1-3 | Minimal risk | URL shortener |
-| 0 | Unknown | Normal URL |
-| -1 | Skip | Safe domain/asset |
-
-## 💰 API Quota Savings
-
-Typical email with 50 URLs:
-```
-Before:  50 API calls (quota exhausted!)
-After:   5-10 API calls (only suspicious ones)
-Savings: 80-90% API quota!
-```
-
-## 📁 Files
-- `backend/app/services/enrichment/url_filter.py` (700+ rules)
-- `backend/app/services/analysis/orchestrator.py` (integration)
-
-## ✅ All Previous Fixes Included
-- Dynamic TI thresholds
-- URL parsing fix
-- Session leak fixes
-- Better logging
+| Version | Feature |
+|---------|---------|
+| v3.3.0 | 100% dynamic TI thresholds |
+| v3.3.1 | URL parsing fix |
+| v3.3.2 | Smart URL filtering |
+| v3.3.3 | 700+ detection rules |
+| **v3.3.4** | **Quota warning modal** |
