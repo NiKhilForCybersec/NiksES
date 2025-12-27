@@ -270,6 +270,12 @@ async def run_unified_analysis(
     from app.services.parser.header_analyzer import analyze_headers
     from app.services.ai.description_generator import generate_ai_description, generate_fallback_description
     
+    logger.info("=" * 60)
+    logger.info(f"ANALYSIS START: {analysis_id}")
+    logger.info(f"Subject: {email.subject[:50] if email.subject else 'N/A'}...")
+    logger.info(f"From: {email.sender.email if email.sender else 'N/A'}")
+    logger.info("=" * 60)
+    
     apis_configured = []
     apis_errors = []
     geoip_data = {}
@@ -277,13 +283,13 @@ async def run_unified_analysis(
     
     # 1. Initialize Detection Engine (always runs)
     detection_engine = DetectionEngine()
-    logger.info(f"Detection engine ready with {len(detection_engine.rules)} rules")
+    logger.info(f"[1/10] Detection engine ready with {len(detection_engine.rules)} rules")
     
     # 2. Run Header Analysis
     try:
         if email.raw_headers:
             header_analysis = analyze_headers(email.raw_headers)
-            logger.info(f"Header analysis complete: {len(header_analysis.get('anomalies', []))} anomalies found")
+            logger.info(f"[2/10] Header analysis: {len(header_analysis.get('anomalies', []))} anomalies")
     except Exception as e:
         logger.warning(f"Header analysis failed: {e}")
         apis_errors.append(f"Header analysis: {str(e)}")
@@ -408,11 +414,11 @@ async def run_unified_analysis(
         "timeout": 120.0,
     }
     
-    logger.info(f"Starting unified analysis: LLM={options['use_llm']}, TI={options['run_ti']}, Detection=True")
+    logger.info(f"[7/10] Running orchestrator: LLM={options['use_llm']}, TI={options['run_ti']}")
     
     result = await orchestrator.analyze_email(email, options)
     
-    logger.info(f"Analysis complete: score={result.overall_score}, level={result.overall_level}")
+    logger.info(f"[8/10] Orchestrator complete: score={result.overall_score}, level={result.overall_level}")
     
     # 10. Run Two-Pass AI Analysis (if OpenAI available)
     two_pass_result = None
@@ -420,6 +426,7 @@ async def run_unified_analysis(
         try:
             from app.services.ai.threat_analyzer import TwoPassThreatAnalyzer
             
+            logger.info("[9/10] Running Two-Pass AI Analysis...")
             threat_analyzer = TwoPassThreatAnalyzer(openai_client)
             
             # Prepare email content
@@ -554,6 +561,16 @@ async def run_unified_analysis(
         ai_description=ai_description,
         two_pass_result=two_pass_result,
     )
+    
+    # Final summary
+    logger.info("=" * 60)
+    logger.info(f"ANALYSIS COMPLETE: {analysis_id}")
+    logger.info(f"Score: {result.overall_score}/100 ({result.overall_level})")
+    logger.info(f"Classification: {result.classification}")
+    if two_pass_result:
+        logger.info(f"AI Assessment: threat={two_pass_result.ai_threat_score}, se={two_pass_result.ai_se_score}")
+    logger.info(f"Duration: {duration_ms}ms | APIs: {len(apis_configured)} configured")
+    logger.info("=" * 60)
     
     return analysis_result
 

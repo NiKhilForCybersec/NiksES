@@ -1,70 +1,54 @@
-# NiksES v3.2.7 - Critical Bug Fixes
+# NiksES v3.2.9 - Graceful VT Timeout Handling
 
-## 🐛 Bugs Fixed
+## 🔧 Improvements
 
-### 1. EmailAddress Attribute Error (CRITICAL)
-**Error**: `'EmailAddress' object has no attribute 'address'`
-**Impact**: Two-Pass AI analysis was completely failing
+### VirusTotal Timeouts Now Expected
+VT free tier has strict rate limits (4 requests/min). System now:
+- Logs timeouts as INFO not WARNING (less noise)
+- Clearly shows which sources were used vs skipped
+- Continues analysis with available sources
 
-**Fix**: Changed `email.sender.address` to `email.sender.email`
-```python
-# Before (broken)
-"sender": f"{email.sender.address}" if email.sender else ""
+### Better TI Fusion Logging
 
-# After (fixed)
-"sender": f"{email.sender.email}" if email.sender else ""
+**Before:**
+```
+WARNING - TI source virustotal: unavailable - Timeout
+INFO - TI fusion complete: 3/4 sources available, 0 flagged
 ```
 
-### 2. IPQualityScore Not Being Called (CRITICAL)
-**Error**: `cannot import name 'get_settings' from 'app.config'`
-**Impact**: IPQS was completely disabled in text/URL analysis!
-
-**Cause**: Python was importing from `app/config/` package instead of `app/config.py` module
-
-**Fix**: Changed import in analyze_text.py:
-```python
-# Before (broken)
-from app.config import get_settings
-
-# After (fixed)  
-from app.api.dependencies import get_settings
+**After:**
+```
+INFO - TI source virustotal: timeout - using other sources
+INFO - TI fusion: 3/4 sources (used: ipqualityscore, google_safebrowsing, urlhaus, skipped: virustotal)
 ```
 
-### 3. Dynamic Scoring Classification Error
-**Error**: `Dynamic scoring failed, using legacy: IMPERSONATION`
-**Impact**: Dynamic scoring was falling back to legacy scorer
+### How Scoring Works With Missing Sources
 
-**Cause**: Using non-existent enum `EmailClassification.IMPERSONATION`
+When VT times out:
+1. Other sources (IPQS, GSB, AbuseIPDB, URLhaus) still provide data
+2. Fused score calculated from available sources only
+3. Confidence adjusted: `available / checked` (e.g., 3/4 = 0.75)
+4. Analysis continues normally - never blocked by API failures
 
-**Fix**: Updated class_mapping in orchestrator.py:
-```python
-# Before (broken)
-"brand_impersonation": EmailClassification.IMPERSONATION,
-"suspicious": EmailClassification.SUSPICIOUS,
-
-# After (fixed)
-"brand_impersonation": EmailClassification.BRAND_IMPERSONATION,
-"impersonation": EmailClassification.BRAND_IMPERSONATION,
-"suspicious": EmailClassification.UNKNOWN,
+### Example Flow
+```
+TI checks: ['google_safebrowsing', 'ipqualityscore', 'virustotal', 'urlhaus']
+  ✓ google_safebrowsing: available, score=0, verdict=CLEAN
+  ✓ ipqualityscore: available, score=89, verdict=MALICIOUS  
+  ⏱ virustotal: timeout - using other sources
+  ✓ urlhaus: available, score=0, verdict=UNKNOWN
+TI fusion: 3/4 sources (used: ipqualityscore, google_safebrowsing, urlhaus, skipped: virustotal)
+Fused score: 89 (from IPQS)
+Confidence: 0.75
 ```
 
-## ✅ What Now Works
+## ✅ All Fixes Summary (v3.2.7 - v3.2.9)
 
-After these fixes:
-- ✅ Two-Pass AI Analysis runs correctly
-- ✅ IPQualityScore is called for URL analysis
-- ✅ Dynamic scoring completes without fallback
-- ✅ All classification mappings are valid
-
-## 📋 Logs You Should Now See
-
-```
-IPQualityScore: Scanning URL https://example.com with strictness=2
-IPQualityScore: URL https://example.com -> risk_score=89, phishing=True
-Two-Pass AI complete: threat=75, se=60
-Dynamic score: 72 (high) confidence=0.85 chains=2
-```
+| Version | Fix |
+|---------|-----|
+| v3.2.7 | EmailAddress.email, get_settings import, BRAND_IMPERSONATION |
+| v3.2.8 | Unclosed aiohttp sessions, better logging structure |
+| v3.2.9 | VT timeout handling, cleaner TI fusion logs |
 
 ## 📦 Package
-- 281 files
-- 1.6MB compressed
+- 281 files, 1.6MB compressed

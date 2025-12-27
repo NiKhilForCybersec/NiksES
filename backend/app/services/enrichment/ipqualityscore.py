@@ -72,8 +72,6 @@ class IPQualityScoreClient:
             return {"error": "No API key configured", "success": False}
         
         try:
-            session = await self._get_session()
-            
             # URL encode the target URL
             encoded_url = quote_plus(url)
             
@@ -87,21 +85,23 @@ class IPQualityScoreClient:
             
             logger.info(f"IPQualityScore: Scanning URL {url} with strictness={strictness}")
             
-            async with session.get(request_url, params=params) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    result = self._process_response(data, url)
-                    logger.info(f"IPQualityScore: URL {url} -> risk_score={result.get('risk_score')}, phishing={result.get('is_phishing')}, malware={result.get('is_malware')}")
-                    return result
-                elif response.status == 402:
-                    logger.error("IPQualityScore: API quota exceeded")
-                    return {"error": "API quota exceeded", "success": False}
-                elif response.status == 403:
-                    logger.error("IPQualityScore: Invalid API key")
-                    return {"error": "Invalid API key", "success": False}
-                else:
-                    logger.error(f"IPQualityScore: API error {response.status}")
-                    return {"error": f"API error: {response.status}", "success": False}
+            # Use context manager to ensure session is closed
+            async with aiohttp.ClientSession(timeout=self.timeout) as session:
+                async with session.get(request_url, params=params) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        result = self._process_response(data, url)
+                        logger.info(f"IPQualityScore: URL {url} -> risk_score={result.get('risk_score')}, phishing={result.get('is_phishing')}, malware={result.get('is_malware')}")
+                        return result
+                    elif response.status == 402:
+                        logger.error("IPQualityScore: API quota exceeded")
+                        return {"error": "API quota exceeded", "success": False}
+                    elif response.status == 403:
+                        logger.error("IPQualityScore: Invalid API key")
+                        return {"error": "Invalid API key", "success": False}
+                    else:
+                        logger.error(f"IPQualityScore: API error {response.status}")
+                        return {"error": f"API error: {response.status}", "success": False}
         
         except asyncio.TimeoutError:
             logger.warning(f"IPQualityScore timeout for URL: {url}")
@@ -235,8 +235,6 @@ class IPQualityScoreClient:
             return {"error": "No API key configured", "success": False}
         
         try:
-            session = await self._get_session()
-            
             # IP reputation endpoint
             request_url = f"https://www.ipqualityscore.com/api/json/ip/{self.api_key}/{ip_address}"
             
@@ -245,12 +243,14 @@ class IPQualityScoreClient:
                 "allow_public_access_points": "true",
             }
             
-            async with session.get(request_url, params=params) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    return self._process_ip_response(data, ip_address)
-                else:
-                    return {"error": f"API error: {response.status}", "success": False}
+            # Use context manager to ensure session is closed
+            async with aiohttp.ClientSession(timeout=self.timeout) as session:
+                async with session.get(request_url, params=params) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        return self._process_ip_response(data, ip_address)
+                    else:
+                        return {"error": f"API error: {response.status}", "success": False}
         
         except Exception as e:
             logger.error(f"IPQualityScore IP check error: {e}")

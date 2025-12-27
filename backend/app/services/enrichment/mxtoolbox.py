@@ -77,23 +77,25 @@ class MXToolboxProvider:
             return {"error": "MXToolbox API key not configured"}
         
         try:
-            session = await self._get_session()
             url = f"{self.API_BASE}/{endpoint}/{command}/{argument}"
+            timeout = aiohttp.ClientTimeout(total=self.timeout)
             
-            async with session.get(url, headers=self._get_headers()) as response:
-                if response.status == 401:
-                    logger.error("MXToolbox API: Invalid API key")
-                    return {"error": "Invalid API key"}
-                
-                if response.status == 429:
-                    logger.warning("MXToolbox API: Rate limit exceeded")
-                    return {"error": "Rate limit exceeded"}
-                
-                if response.status != 200:
-                    logger.warning(f"MXToolbox API error: {response.status}")
-                    return {"error": f"API error: {response.status}"}
-                
-                return await response.json()
+            # Use context manager to ensure session is closed
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.get(url, headers=self._get_headers()) as response:
+                    if response.status == 401:
+                        logger.error("MXToolbox API: Invalid API key")
+                        return {"error": "Invalid API key"}
+                    
+                    if response.status == 429:
+                        logger.warning("MXToolbox API: Rate limit exceeded")
+                        return {"error": "Rate limit exceeded"}
+                    
+                    if response.status != 200:
+                        logger.warning(f"MXToolbox API error: {response.status}")
+                        return {"error": f"API error: {response.status}"}
+                    
+                    return await response.json()
                 
         except aiohttp.ClientTimeout:
             logger.warning(f"MXToolbox timeout for {argument}")

@@ -318,14 +318,25 @@ class ThreatIntelFusion:
                     result.api_status[source] = "OK"
                 else:
                     if source_result.was_rate_limited:
-                        self.logger.warning(f"TI source {source}: rate limited after {source_result.attempts} attempts")
+                        # Rate limits expected on free tiers - log as INFO not WARNING
+                        self.logger.info(f"TI source {source}: rate limited (attempt {source_result.attempts}) - using other sources")
                         result.api_status[source] = f"Rate limited (tried {source_result.attempts}x)"
+                    elif source_result.error == "Timeout":
+                        # Timeouts expected on free tier APIs like VT - log as INFO
+                        self.logger.info(f"TI source {source}: timeout - using other sources")
+                        result.api_status[source] = "Timeout (free tier)"
                     else:
                         self.logger.warning(f"TI source {source}: unavailable - {source_result.error}")
                         result.api_status[source] = f"Unavailable: {source_result.error}"
         
-        # Log summary
-        self.logger.info(f"TI fusion complete: {result.sources_available}/{result.sources_checked} sources available, {result.sources_flagged} flagged")
+        # Log summary with source details
+        available_sources = [s for s, r in result.sources.items() if r.available]
+        unavailable_sources = [s for s, r in result.sources.items() if not r.available]
+        
+        if unavailable_sources:
+            self.logger.info(f"TI fusion: {result.sources_available}/{result.sources_checked} sources (used: {', '.join(available_sources) or 'none'}, skipped: {', '.join(unavailable_sources)})")
+        else:
+            self.logger.info(f"TI fusion: {result.sources_available}/{result.sources_checked} sources available, {result.sources_flagged} flagged")
         
         # Fuse scores from available sources
         result = self._fuse_scores(result)

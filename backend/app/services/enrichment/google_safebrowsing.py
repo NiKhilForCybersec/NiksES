@@ -107,8 +107,6 @@ class GoogleSafeBrowsingClient:
         urls = urls[:500]
         
         try:
-            session = await self._get_session()
-            
             # Build request payload
             payload = {
                 "client": {
@@ -125,18 +123,20 @@ class GoogleSafeBrowsingClient:
             
             request_url = f"{self.BASE_URL}?key={self.api_key}"
             
-            async with session.post(request_url, json=payload) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    return self._process_response(data, urls)
-                elif response.status == 400:
-                    error_data = await response.json()
-                    error_msg = error_data.get("error", {}).get("message", "Bad request")
-                    return [{"url": url, "error": error_msg, "safe": None} for url in urls]
-                elif response.status == 403:
-                    return [{"url": url, "error": "Invalid API key or quota exceeded", "safe": None} for url in urls]
-                else:
-                    return [{"url": url, "error": f"API error: {response.status}", "safe": None} for url in urls]
+            # Use context manager to ensure session is closed
+            async with aiohttp.ClientSession(timeout=self.timeout) as session:
+                async with session.post(request_url, json=payload) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        return self._process_response(data, urls)
+                    elif response.status == 400:
+                        error_data = await response.json()
+                        error_msg = error_data.get("error", {}).get("message", "Bad request")
+                        return [{"url": url, "error": error_msg, "safe": None} for url in urls]
+                    elif response.status == 403:
+                        return [{"url": url, "error": "Invalid API key or quota exceeded", "safe": None} for url in urls]
+                    else:
+                        return [{"url": url, "error": f"API error: {response.status}", "safe": None} for url in urls]
         
         except asyncio.TimeoutError:
             logger.warning("Google Safe Browsing timeout")
