@@ -364,22 +364,11 @@ const ScoringBreakdown: React.FC<ScoringBreakdownProps> = ({
             )}
           </div>
 
-          {/* Key Principles Footer */}
+          {/* Detection Engine Info Footer */}
           <div className="mt-4 pt-4 border-t border-slate-700/30">
-            <div className="flex flex-wrap gap-2">
-              {[
-                { icon: '🔍', label: 'TI is King' },
-                { icon: '🔗', label: 'Correlation Matters' },
-                { icon: '⚖️', label: 'Quality > Quantity' },
-                { icon: '🎯', label: 'Zero Hardcoding' },
-              ].map((p) => (
-                <span 
-                  key={p.label}
-                  className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-slate-800/50 border border-slate-700/50 text-xs text-slate-400"
-                >
-                  {p.icon} {p.label}
-                </span>
-              ))}
+            <div className="flex items-center justify-between text-xs text-slate-500">
+              <span>NiksES Detection Engine v3.2</span>
+              <span>68 rules • 7 TI sources • Dynamic scoring</span>
             </div>
           </div>
         </div>

@@ -647,6 +647,15 @@ def build_analysis_result(
 def build_se_analysis(orchestrator_result, two_pass_result=None) -> Optional[SocialEngineeringAnalysis]:
     """Build SocialEngineeringAnalysis from orchestrator result and two-pass AI."""
     
+    # Get dynamic thresholds
+    try:
+        from app.config.scoring import get_scoring_config
+        config = get_scoring_config()
+        se_th = config.se_thresholds
+        critical_th, high_th, medium_th, technique_th = se_th.critical, se_th.high, se_th.medium, se_th.technique_significant
+    except ImportError:
+        critical_th, high_th, medium_th, technique_th = 70, 50, 30, 30
+    
     # If we have two-pass results, use AI-derived SE scores
     if two_pass_result and two_pass_result.first_pass:
         fp = two_pass_result.first_pass
@@ -655,13 +664,13 @@ def build_se_analysis(orchestrator_result, two_pass_result=None) -> Optional[Soc
         # Map intent to string
         intent_str = fp.intent.value if hasattr(fp.intent, 'value') else str(fp.intent)
         
-        # Determine SE level based on overall score
+        # Determine SE level based on overall score using dynamic thresholds
         overall_se = fp.se_scores.overall_score
-        if overall_se >= 70:
+        if overall_se >= critical_th:
             se_level = "critical"
-        elif overall_se >= 50:
+        elif overall_se >= high_th:
             se_level = "high"
-        elif overall_se >= 30:
+        elif overall_se >= medium_th:
             se_level = "medium"
         else:
             se_level = "low"
@@ -672,7 +681,7 @@ def build_se_analysis(orchestrator_result, two_pass_result=None) -> Optional[Soc
             confidence=fp.intent_confidence,
             primary_intent=intent_str,
             secondary_intents=[],
-            techniques=[k for k, v in se_scores.items() if v >= 30],
+            techniques=[k for k, v in se_scores.items() if v >= technique_th],
             technique_scores=se_scores,
             heuristic_breakdown=se_scores,  # Same as technique_scores from AI
             explanation=fp.language_analysis,
@@ -1232,18 +1241,27 @@ def build_ai_triage_result(
         if security.get('x_spam_status'):
             key_findings.append(f"Spam status: {security.get('x_spam_status')}")
     
-    # Build recommendations based on risk
+    # Build recommendations based on risk using dynamic thresholds
     score = result.overall_score or 0
     recommended_actions = []
     
-    if score >= 70:
+    # Get dynamic thresholds
+    try:
+        from app.config.scoring import get_scoring_config
+        config = get_scoring_config()
+        critical_th = config.thresholds.critical
+        medium_th = config.thresholds.medium
+    except ImportError:
+        critical_th, medium_th = 70, 40
+    
+    if score >= critical_th:
         recommended_actions = [
             RecommendedAction(action="quarantine", priority=1, description="Quarantine immediately", automated=True),
             RecommendedAction(action="block_sender", priority=2, description="Block sender domain", automated=True),
             RecommendedAction(action="alert", priority=3, description="Alert security team", automated=False),
         ]
         recommendations = ["Quarantine immediately", "Block sender", "Investigate sender domain"]
-    elif score >= 40:
+    elif score >= medium_th:
         recommended_actions = [
             RecommendedAction(action="review", priority=1, description="Manual review recommended", automated=False),
             RecommendedAction(action="warn_user", priority=2, description="Warn user before interaction", automated=True),

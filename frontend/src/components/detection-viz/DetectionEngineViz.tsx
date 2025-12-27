@@ -547,29 +547,33 @@ const DetectionEngineViz: React.FC<DetectionVizProps> = ({
             </div>
           )}
 
-          {/* Key Principles */}
+          {/* About Detection Engine - Informational Only */}
           <div 
             className={`
-              mt-4 grid grid-cols-2 md:grid-cols-4 gap-3
+              mt-4 p-4 rounded-xl bg-slate-800/30 border border-slate-700/30
               transition-all duration-500 delay-200
               ${animationPhase >= 3 || !hasRealData ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}
             `}
           >
-            {[
-              { icon: '🔍', title: 'TI is King', desc: 'External validation heavily weighted' },
-              { icon: '🔗', title: 'Correlation', desc: 'Multiple sources = higher confidence' },
-              { icon: '⚖️', title: 'Quality > Quantity', desc: '3 strong evidence > 10 weak' },
-              { icon: '🎯', title: 'Zero Hardcoding', desc: 'All values calculated dynamically' },
-            ].map((principle) => (
-              <div
-                key={principle.title}
-                className="p-3 rounded-lg bg-slate-800/30 border border-slate-700/30 hover:border-slate-600 transition-colors"
-              >
-                <div className="text-xl mb-1">{principle.icon}</div>
-                <div className="text-sm font-medium text-slate-200">{principle.title}</div>
-                <div className="text-xs text-slate-500">{principle.desc}</div>
+            <div className="text-sm font-medium text-slate-300 mb-3">About NiksES Detection Engine</div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs text-slate-400">
+              <div>
+                <span className="text-slate-500">• </span>
+                <span className="text-slate-300">68+ detection rules</span> across 7 categories with MITRE ATT&CK mapping
               </div>
-            ))}
+              <div>
+                <span className="text-slate-500">• </span>
+                <span className="text-slate-300">7 threat intelligence sources</span> for external validation
+              </div>
+              <div>
+                <span className="text-slate-500">• </span>
+                <span className="text-slate-300">Two-pass AI analysis</span> for intent and correlation
+              </div>
+              <div>
+                <span className="text-slate-500">• </span>
+                <span className="text-slate-300">Dynamic scoring</span> with configurable thresholds
+              </div>
+            </div>
           </div>
         </div>
 
@@ -577,9 +581,9 @@ const DetectionEngineViz: React.FC<DetectionVizProps> = ({
         <div className="relative px-6 py-3 border-t border-slate-700/50 bg-slate-800/30">
           <div className="flex items-center justify-between text-xs text-slate-500">
             <span>
-              {evidence.length} Evidence • {attackChains.length} Chains • {dimensions.length} Dimensions
+              {evidence.length > 0 ? `${evidence.length} Evidence • ` : ''}{attackChains.length > 0 ? `${attackChains.length} Chains • ` : ''}{dimensions.length > 0 ? `${dimensions.length} Dimensions` : 'No analysis data'}
             </span>
-            <span>NiksES Detection Engine v3.0</span>
+            <span>NiksES Detection Engine v3.2</span>
           </div>
         </div>
       </div>

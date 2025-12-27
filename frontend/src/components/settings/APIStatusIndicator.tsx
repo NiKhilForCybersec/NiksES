@@ -60,6 +60,7 @@ export function APIStatusIndicator({ settings, onOpenSettings }: APIStatusIndica
   }
 
   const configuredCount = Object.values(settings.api_keys_configured).filter(Boolean).length;
+  const totalCount = Object.keys(settings.api_keys_configured).length;
   const threatIntelConfigured = settings.api_keys_configured?.virustotal || settings.api_keys_configured?.abuseipdb;
   const aiConfigured = settings.api_keys_configured?.anthropic || settings.api_keys_configured?.openai;
   
@@ -122,7 +123,7 @@ export function APIStatusIndicator({ settings, onOpenSettings }: APIStatusIndica
       >
         <div className="flex items-center gap-1.5">
           <div className={`w-2 h-2 rounded-full ${getStatusColor()}`} />
-          <span className="text-slate-300">{configuredCount}/6 APIs</span>
+          <span className="text-slate-300">{configuredCount}/{totalCount} APIs</span>
         </div>
         <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>

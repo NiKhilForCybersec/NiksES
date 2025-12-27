@@ -879,7 +879,7 @@ function App() {
                       : 'bg-yellow-500'
                   }`} />
                   <span>
-                    {Object.values(globalSettings.api_keys_configured).filter(Boolean).length}/6 APIs configured
+                    {Object.values(globalSettings.api_keys_configured).filter(Boolean).length}/{Object.keys(globalSettings.api_keys_configured).length} APIs
                   </span>
                 </div>
               </div>
