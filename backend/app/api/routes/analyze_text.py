@@ -78,6 +78,12 @@ class URLEnrichmentResult(BaseModel):
     redirect_chain: List[str] = []
     final_url: Optional[str] = None
     screenshot_url: Optional[str] = None
+    # Detailed source scores
+    ipqs_score: Optional[int] = None
+    ipqs_phishing: Optional[bool] = None
+    ipqs_malware: Optional[bool] = None
+    vt_malicious: Optional[int] = None
+    gsb_malicious: Optional[bool] = None
 
 
 class URLSandboxResult(BaseModel):
@@ -797,7 +803,7 @@ async def enrich_urls(urls: List[str]) -> List[URLEnrichmentResult]:
         from app.services.enrichment.urlhaus import URLhausProvider
         from app.services.enrichment.ipqualityscore import IPQualityScoreClient
         from app.services.enrichment.google_safebrowsing import GoogleSafeBrowsingClient
-        from app.config import get_settings
+        from app.api.dependencies import get_settings
         
         settings = get_settings()
         
@@ -835,12 +841,14 @@ async def enrich_urls(urls: List[str]) -> List[URLEnrichmentResult]:
                             if gsb_result.get('is_malicious'):
                                 enrichment.is_malicious = True
                                 enrichment.threat_score = max(enrichment.threat_score, 95)
+                                enrichment.gsb_malicious = True
                                 sources.append("Google Safe Browsing")
                                 primary_threat = gsb_result.get('primary_threat', 'malicious')
                                 enrichment.categories.append(f"GSB: {primary_threat}")
                                 logger.info(f"Google Safe Browsing: {url} flagged as {primary_threat}")
                             elif gsb_result.get('safe') is True:
                                 # Clean in GSB is a positive signal
+                                enrichment.gsb_malicious = False
                                 sources.append("Google Safe Browsing")
                     except Exception as e:
                         logger.debug(f"Google Safe Browsing check failed for {url}: {e}")
@@ -851,27 +859,39 @@ async def enrich_urls(urls: List[str]) -> List[URLEnrichmentResult]:
                         ipqs_result = await ipqs.scan_url(url)
                         if ipqs_result and ipqs_result.get('success'):
                             risk_score = ipqs_result.get('risk_score', 0)
+                            
+                            # Store IPQS-specific data
+                            enrichment.ipqs_score = risk_score
+                            enrichment.ipqs_phishing = ipqs_result.get('is_phishing', False)
+                            enrichment.ipqs_malware = ipqs_result.get('is_malware', False)
+                            
+                            # Always use IPQS risk_score as the threat_score if it's higher
+                            if risk_score > enrichment.threat_score:
+                                enrichment.threat_score = risk_score
+                            
                             if ipqs_result.get('is_phishing') or ipqs_result.get('is_malware'):
                                 enrichment.is_malicious = True
-                                enrichment.threat_score = max(enrichment.threat_score, 90)
                                 sources.append("IPQualityScore")
                                 if ipqs_result.get('is_phishing'):
                                     enrichment.categories.append("IPQS: phishing")
                                 if ipqs_result.get('is_malware'):
                                     enrichment.categories.append("IPQS: malware")
-                                logger.info(f"IPQualityScore: {url} flagged (risk: {risk_score})")
+                                logger.info(f"IPQualityScore: {url} flagged - risk={risk_score}, phishing={ipqs_result.get('is_phishing')}, malware={ipqs_result.get('is_malware')}")
                             elif risk_score >= 75:
                                 enrichment.is_malicious = True
-                                enrichment.threat_score = max(enrichment.threat_score, risk_score)
                                 sources.append("IPQualityScore")
                                 logger.info(f"IPQualityScore: {url} high risk ({risk_score})")
                             elif risk_score >= 50:
-                                enrichment.threat_score = max(enrichment.threat_score, risk_score)
                                 sources.append("IPQualityScore")
+                                logger.info(f"IPQualityScore: {url} medium risk ({risk_score})")
                             else:
                                 sources.append("IPQualityScore")
+                                logger.debug(f"IPQualityScore: {url} low risk ({risk_score})")
+                        else:
+                            error = ipqs_result.get('error', 'Unknown error') if ipqs_result else 'No response'
+                            logger.warning(f"IPQualityScore: {url} check failed - {error}")
                     except Exception as e:
-                        logger.debug(f"IPQualityScore check failed for {url}: {e}")
+                        logger.warning(f"IPQualityScore check failed for {url}: {e}")
                 
                 # URLhaus check (free, no limits, most reliable for malware)
                 try:
@@ -897,11 +917,13 @@ async def enrich_urls(urls: List[str]) -> List[URLEnrichmentResult]:
                     logger.debug(f"PhishTank check failed for {url}: {e}")
                 
                 # VirusTotal check LAST (has rate limits, may fail)
+                # VirusTotal check LAST (has rate limits, may fail)
                 if vt_available:
                     try:
                         vt_result = await vt.check_url(url)
                         if vt_result:
                             malicious_count = vt_result.get('malicious', 0)
+                            enrichment.vt_malicious = malicious_count
                             if malicious_count > 0:
                                 enrichment.is_malicious = True
                                 enrichment.threat_score = max(enrichment.threat_score, min(100, malicious_count * 10))
@@ -1258,6 +1280,12 @@ async def analyze_text(
             "threat_score": e.threat_score,
             "sources": e.sources,
             "categories": e.categories,
+            # IPQS-specific fields
+            "ipqs_score": e.ipqs_score,
+            "ipqs_phishing": e.ipqs_phishing,
+            "ipqs_malware": e.ipqs_malware,
+            "vt_malicious": e.vt_malicious,
+            "gsb_malicious": e.gsb_malicious,
         }
         for e in url_enrichment
     ] if url_enrichment else []

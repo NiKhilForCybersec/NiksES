@@ -426,7 +426,7 @@ async def run_unified_analysis(
             email_content = {
                 "subject": email.subject or "",
                 "body": email.body_text or "",
-                "sender": f"{email.sender.address}" if email.sender else "",
+                "sender": f"{email.sender.email}" if email.sender else "",
             }
             
             # Prepare TI results for AI

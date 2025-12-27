@@ -55,18 +55,20 @@ class IPQualityScoreClient:
         if self._session and not self._session.closed:
             await self._session.close()
     
-    async def scan_url(self, url: str, strictness: int = 1) -> Dict[str, Any]:
+    async def scan_url(self, url: str, strictness: int = 2) -> Dict[str, Any]:
         """
         Scan a URL for threats.
         
         Args:
             url: The URL to scan
             strictness: 0-2 (0=low, 1=medium, 2=high sensitivity)
+                       Default is 2 (high) for maximum phishing detection
         
         Returns:
             Dict with scan results including risk_score, phishing, malware, etc.
         """
         if not self.api_key:
+            logger.warning("IPQualityScore: No API key configured")
             return {"error": "No API key configured", "success": False}
         
         try:
@@ -83,15 +85,22 @@ class IPQualityScoreClient:
                 "fast": "false",  # Full scan for better accuracy
             }
             
+            logger.info(f"IPQualityScore: Scanning URL {url} with strictness={strictness}")
+            
             async with session.get(request_url, params=params) as response:
                 if response.status == 200:
                     data = await response.json()
-                    return self._process_response(data, url)
+                    result = self._process_response(data, url)
+                    logger.info(f"IPQualityScore: URL {url} -> risk_score={result.get('risk_score')}, phishing={result.get('is_phishing')}, malware={result.get('is_malware')}")
+                    return result
                 elif response.status == 402:
+                    logger.error("IPQualityScore: API quota exceeded")
                     return {"error": "API quota exceeded", "success": False}
                 elif response.status == 403:
+                    logger.error("IPQualityScore: Invalid API key")
                     return {"error": "Invalid API key", "success": False}
                 else:
+                    logger.error(f"IPQualityScore: API error {response.status}")
                     return {"error": f"API error: {response.status}", "success": False}
         
         except asyncio.TimeoutError:

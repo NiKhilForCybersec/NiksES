@@ -544,13 +544,16 @@ class AnalysisOrchestrator:
                 "bec": EmailClassification.BEC,
                 "malware_delivery": EmailClassification.MALWARE_DELIVERY,
                 "spam": EmailClassification.SPAM,
-                "brand_impersonation": EmailClassification.IMPERSONATION,
+                "brand_impersonation": EmailClassification.BRAND_IMPERSONATION,
+                "impersonation": EmailClassification.BRAND_IMPERSONATION,
                 "credential_phishing": EmailClassification.PHISHING,
-                "account_takeover": EmailClassification.PHISHING,
-                "callback_phishing": EmailClassification.PHISHING,
+                "credential_harvesting": EmailClassification.CREDENTIAL_HARVESTING,
+                "account_takeover": EmailClassification.ACCOUNT_TAKEOVER,
+                "callback_phishing": EmailClassification.CALLBACK_PHISHING,
                 "smishing": EmailClassification.PHISHING,
-                "suspicious": EmailClassification.SUSPICIOUS,
+                "suspicious": EmailClassification.UNKNOWN,
                 "unknown": EmailClassification.UNKNOWN,
+                "benign": EmailClassification.BENIGN,
             }
             
             result.risk_score = UnifiedRiskScore()
