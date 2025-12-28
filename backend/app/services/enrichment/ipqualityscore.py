@@ -35,6 +35,9 @@ class IPQualityScoreClient:
     
     BASE_URL = "https://www.ipqualityscore.com/api/json/url"
     
+    # Class-level quota tracking to avoid repeated failed requests
+    _quota_exceeded_until: Optional[datetime] = None
+    
     def __init__(self, api_key: str):
         self.api_key = api_key
         self.timeout = aiohttp.ClientTimeout(total=45)
@@ -43,6 +46,22 @@ class IPQualityScoreClient:
     def is_configured(self) -> bool:
         """Check if API key is configured."""
         return bool(self.api_key)
+    
+    @classmethod
+    def _check_quota_status(cls) -> bool:
+        """Check if we should skip due to quota exhaustion."""
+        if cls._quota_exceeded_until:
+            if datetime.utcnow() < cls._quota_exceeded_until:
+                return False  # Still in cooldown
+            cls._quota_exceeded_until = None  # Reset after cooldown
+        return True
+    
+    @classmethod  
+    def _mark_quota_exceeded(cls):
+        """Mark quota as exceeded - skip for 1 hour."""
+        from datetime import timedelta
+        cls._quota_exceeded_until = datetime.utcnow() + timedelta(hours=1)
+        logger.warning("IPQualityScore: Quota exceeded - skipping for 1 hour")
     
     async def _get_session(self) -> aiohttp.ClientSession:
         """Get or create aiohttp session."""
@@ -71,6 +90,11 @@ class IPQualityScoreClient:
             logger.warning("IPQualityScore: No API key configured")
             return {"error": "No API key configured", "success": False}
         
+        # Check if we're in quota cooldown
+        if not self._check_quota_status():
+            logger.info("IPQualityScore: Skipping - quota exceeded cooldown active")
+            return {"error": "Daily quota exceeded - in cooldown", "success": False, "quota_exceeded": True}
+        
         try:
             # URL encode the target URL
             encoded_url = quote_plus(url)
@@ -90,18 +114,53 @@ class IPQualityScoreClient:
                 async with session.get(request_url, params=params) as response:
                     if response.status == 200:
                         data = await response.json()
+                        
+                        # Check for quota exceeded in response body
+                        if not data.get("success", True):
+                            error_msg = data.get("message", "Unknown error")
+                            if "quota" in error_msg.lower() or "exceeded" in error_msg.lower():
+                                logger.warning(f"IPQualityScore: Daily quota exceeded - {error_msg}")
+                                self._mark_quota_exceeded()
+                                return {"error": error_msg, "success": False, "quota_exceeded": True}
+                            logger.warning(f"IPQualityScore: API returned error - {error_msg}")
+                            return {"error": error_msg, "success": False}
+                        
                         result = self._process_response(data, url)
-                        logger.info(f"IPQualityScore: URL {url} -> risk_score={result.get('risk_score')}, phishing={result.get('is_phishing')}, malware={result.get('is_malware')}")
+                        logger.info(f"IPQualityScore: URL {url} -> risk_score={result.get('risk_score')}, phishing={result.get('phishing')}, malware={result.get('malware')}")
                         return result
                     elif response.status == 402:
-                        logger.error("IPQualityScore: API quota exceeded")
-                        return {"error": "API quota exceeded", "success": False}
+                        logger.error("IPQualityScore: Payment required - quota exceeded")
+                        self._mark_quota_exceeded()
+                        return {"error": "API quota exceeded (payment required)", "success": False, "quota_exceeded": True}
                     elif response.status == 403:
                         logger.error("IPQualityScore: Invalid API key")
                         return {"error": "Invalid API key", "success": False}
+                    elif response.status == 404:
+                        # 404 can mean invalid key format or quota issues
+                        try:
+                            error_data = await response.json()
+                            error_msg = error_data.get("message", "Not found")
+                            if "quota" in error_msg.lower():
+                                logger.warning(f"IPQualityScore: Quota exceeded (404) - {error_msg}")
+                                self._mark_quota_exceeded()
+                                return {"error": error_msg, "success": False, "quota_exceeded": True}
+                        except:
+                            error_msg = "API endpoint not found - check API key format"
+                        logger.error(f"IPQualityScore: 404 error - {error_msg}")
+                        return {"error": error_msg, "success": False}
+                    elif response.status == 429:
+                        logger.warning("IPQualityScore: Rate limited (429)")
+                        self._mark_quota_exceeded()  # Also skip on rate limit
+                        return {"error": "Rate limited - too many requests", "success": False, "rate_limited": True}
                     else:
-                        logger.error(f"IPQualityScore: API error {response.status}")
-                        return {"error": f"API error: {response.status}", "success": False}
+                        # Try to get error message from response
+                        try:
+                            error_data = await response.json()
+                            error_msg = error_data.get("message", f"HTTP {response.status}")
+                        except:
+                            error_msg = f"HTTP {response.status}"
+                        logger.error(f"IPQualityScore: API error {response.status} - {error_msg}")
+                        return {"error": error_msg, "success": False}
         
         except asyncio.TimeoutError:
             logger.warning(f"IPQualityScore timeout for URL: {url}")
