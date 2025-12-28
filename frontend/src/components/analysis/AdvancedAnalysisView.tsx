@@ -213,22 +213,22 @@ const AdvancedAnalysisView: React.FC<AdvancedAnalysisViewProps> = ({ result, onE
   const urlEnrichments = enrichment.urls || [];  // Fixed: backend uses 'urls' not 'url_enrichments'
   const attachmentEnrichments = enrichment.attachments || [];  // Fixed: backend uses 'attachments'
 
-  // Tabs
+  // Tabs - with short labels for mobile
   const tabs = [
-    { id: 'overview', label: 'Overview', icon: Eye },
-    { id: 'insights', label: 'Advanced Insights', icon: TrendingUp },
-    { id: 'headers', label: 'Headers', icon: FileText },
-    { id: 'threatintel', label: 'Threat Intel', icon: Database },
-    { id: 'iocs', label: 'IOCs', icon: Target },
-    { id: 'rules', label: 'Detection', icon: Shield },
-    { id: 'ai', label: 'AI Analysis', icon: Brain },
+    { id: 'overview', label: 'Overview', shortLabel: 'Info', icon: Eye },
+    { id: 'insights', label: 'Advanced Insights', shortLabel: 'Score', icon: TrendingUp },
+    { id: 'headers', label: 'Headers', shortLabel: 'Hdrs', icon: FileText },
+    { id: 'threatintel', label: 'Threat Intel', shortLabel: 'TI', icon: Database },
+    { id: 'iocs', label: 'IOCs', shortLabel: 'IOC', icon: Target },
+    { id: 'rules', label: 'Detection', shortLabel: 'Rules', icon: Shield },
+    { id: 'ai', label: 'AI Analysis', shortLabel: 'AI', icon: Brain },
     // Add Sandbox tab if sandbox analysis available or attachments present
     ...(result.sandbox_analysis || (result.email?.attachments?.length > 0)
-      ? [{ id: 'sandbox', label: 'Sandbox', icon: Bug }] 
+      ? [{ id: 'sandbox', label: 'Sandbox', shortLabel: 'Box', icon: Bug }] 
       : []),
     // Add Enhanced tab if enhanced results available
     ...(result.se_analysis || result.content_analysis || result.lookalike_analysis 
-      ? [{ id: 'enhanced', label: 'Enhanced', icon: Zap }] 
+      ? [{ id: 'enhanced', label: 'Enhanced', shortLabel: '+', icon: Zap }] 
       : []),
   ];
 
@@ -320,20 +320,35 @@ const AdvancedAnalysisView: React.FC<AdvancedAnalysisViewProps> = ({ result, onE
       </div>
 
       {/* Tabs - Scrollable on mobile */}
-      <div className="bg-gray-800 border-b border-gray-700 px-2 md:px-6 overflow-x-auto hide-scrollbar">
-        <div className="flex space-x-1">
+      <div 
+        className="bg-gray-800 border-b border-gray-700 overflow-x-auto hide-scrollbar" 
+        style={{ WebkitOverflowScrolling: 'touch', overflowX: 'auto' }}
+      >
+        <div 
+          className="flex px-2 md:px-6" 
+          style={{ minWidth: 'max-content', gap: '4px' }}
+        >
           {tabs.map(tab => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`px-3 md:px-4 py-2.5 md:py-3 flex items-center space-x-1.5 md:space-x-2 border-b-2 transition-colors whitespace-nowrap text-sm md:text-base ${
+              className={`flex items-center border-b-2 transition-colors ${
                 activeTab === tab.id
-                  ? 'border-blue-500 text-blue-400'
-                  : 'border-transparent text-gray-400 hover:text-white'
+                  ? 'border-blue-500 text-blue-400 bg-blue-500/10'
+                  : 'border-transparent text-gray-400 hover:text-white hover:bg-gray-700/50'
               }`}
+              style={{ 
+                whiteSpace: 'nowrap', 
+                flexShrink: 0,
+                padding: '8px 10px',
+                fontSize: '11px',
+                gap: '4px',
+              }}
             >
-              <tab.icon className="w-4 h-4" />
-              <span>{tab.label}</span>
+              <tab.icon style={{ width: '14px', height: '14px', flexShrink: 0 }} />
+              {/* Show short label on mobile, full label on larger screens */}
+              <span className="sm:hidden">{tab.shortLabel || tab.label}</span>
+              <span className="hidden sm:inline">{tab.label}</span>
             </button>
           ))}
         </div>
