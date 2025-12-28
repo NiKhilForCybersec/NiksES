@@ -168,3 +168,51 @@ async def get_capabilities(
     }
     
     return capabilities
+
+
+@router.get("/debug/keys")
+async def debug_api_keys(
+    settings = Depends(get_settings),
+):
+    """
+    Debug endpoint to check which API keys are loaded.
+    Shows first 4 chars of each key (for verification) or 'NOT SET'.
+    
+    Returns:
+        Status of all API keys
+    """
+    import os
+    
+    def key_status(key_value):
+        if key_value and len(key_value) > 4:
+            return f"SET ({key_value[:4]}...)"
+        elif key_value:
+            return "SET (short)"
+        return "NOT SET"
+    
+    # Check both settings object AND direct env vars
+    return {
+        "source": "settings_and_env",
+        "settings_loaded": settings is not None,
+        "keys_from_settings": {
+            "openai": key_status(getattr(settings, 'openai_api_key', None) if settings else None),
+            "anthropic": key_status(getattr(settings, 'anthropic_api_key', None) if settings else None),
+            "virustotal": key_status(getattr(settings, 'virustotal_api_key', None) if settings else None),
+            "ipqualityscore": key_status(getattr(settings, 'ipqualityscore_api_key', None) if settings else None),
+            "abuseipdb": key_status(getattr(settings, 'abuseipdb_api_key', None) if settings else None),
+        },
+        "keys_from_env": {
+            "OPENAI_API_KEY": key_status(os.getenv("OPENAI_API_KEY")),
+            "ANTHROPIC_API_KEY": key_status(os.getenv("ANTHROPIC_API_KEY")),
+            "VIRUSTOTAL_API_KEY": key_status(os.getenv("VIRUSTOTAL_API_KEY")),
+            "IPQUALITYSCORE_API_KEY": key_status(os.getenv("IPQUALITYSCORE_API_KEY")),
+            "ABUSEIPDB_API_KEY": key_status(os.getenv("ABUSEIPDB_API_KEY")),
+            "AI_ENABLED": os.getenv("AI_ENABLED", "not set"),
+            "AI_PROVIDER": os.getenv("AI_PROVIDER", "not set"),
+        },
+        "config": {
+            "ai_enabled": settings.ai_enabled if settings else None,
+            "ai_provider": settings.ai_provider if settings else None,
+            "enrichment_enabled": settings.enrichment_enabled if settings else None,
+        }
+    }

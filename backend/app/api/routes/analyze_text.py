@@ -847,18 +847,19 @@ async def enrich_urls(urls: List[str]) -> List[URLEnrichmentResult]:
         from app.services.enrichment.urlhaus import URLhausProvider
         from app.services.enrichment.ipqualityscore import IPQualityScoreClient
         from app.api.dependencies import get_settings
+        import os
         
         settings = get_settings()
         
-        # Initialize providers WITH API keys from settings
-        vt_key = getattr(settings, 'virustotal_api_key', None)
+        # Initialize providers WITH API keys from settings OR env vars
+        vt_key = getattr(settings, 'virustotal_api_key', None) or os.getenv('VIRUSTOTAL_API_KEY')
         vt = VirusTotalProvider(vt_key) if vt_key else None
         
         pt = PhishTankProvider()  # Free, no key needed
         uh = URLhausProvider()   # Free, no key needed
         
-        # Initialize IPQS provider
-        ipqs_key = getattr(settings, 'ipqualityscore_api_key', '') or ''
+        # Initialize IPQS provider - try settings then env var
+        ipqs_key = getattr(settings, 'ipqualityscore_api_key', None) or os.getenv('IPQUALITYSCORE_API_KEY')
         ipqs = IPQualityScoreClient(ipqs_key) if ipqs_key else None
         
         # Google Safe Browsing - DISABLED (slow, redundant with IPQS)
@@ -1050,29 +1051,50 @@ async def get_ai_analysis(
     try:
         from app.services.ai.openai_provider import OpenAIProvider
         from app.services.ai.anthropic_provider import AnthropicProvider
+        from app.api.dependencies import get_settings
         import os
         
+        # Try to get settings for fallback
+        settings = None
+        try:
+            settings = get_settings()
+        except Exception as e:
+            logger.warning(f"  Could not load settings: {e}")
+        
         # Try OpenAI first, then Anthropic
+        # Check BOTH environment variables AND settings object
         provider = None
         provider_name = None
         
+        # Try env vars first, then settings as fallback
         openai_key = os.getenv("OPENAI_API_KEY")
-        anthropic_key = os.getenv("ANTHROPIC_API_KEY")
+        if not openai_key and settings:
+            openai_key = getattr(settings, 'openai_api_key', None)
+            if openai_key:
+                logger.info("  OpenAI key loaded from settings (not env)")
         
-        logger.info(f"  OpenAI API Key: {'CONFIGURED' if openai_key else 'NOT SET'}")
-        logger.info(f"  Anthropic API Key: {'CONFIGURED' if anthropic_key else 'NOT SET'}")
+        anthropic_key = os.getenv("ANTHROPIC_API_KEY")
+        if not anthropic_key and settings:
+            anthropic_key = getattr(settings, 'anthropic_api_key', None)
+            if anthropic_key:
+                logger.info("  Anthropic key loaded from settings (not env)")
+        
+        # Log key status (show first 4 chars for debugging)
+        logger.info(f"  OpenAI API Key: {'SET (' + openai_key[:4] + '...)' if openai_key else 'NOT SET'}")
+        logger.info(f"  Anthropic API Key: {'SET (' + anthropic_key[:4] + '...)' if anthropic_key else 'NOT SET'}")
         
         if openai_key:
             provider = OpenAIProvider(api_key=openai_key)
             provider_name = "openai"
-            logger.info(f"  Using provider: OpenAI")
+            logger.info(f"  Using provider: OpenAI (is_configured={provider.is_configured()})")
         elif anthropic_key:
             provider = AnthropicProvider(api_key=anthropic_key)
             provider_name = "anthropic"
-            logger.info(f"  Using provider: Anthropic")
+            logger.info(f"  Using provider: Anthropic (is_configured={provider.is_configured()})")
         
         if not provider or not provider.is_configured():
             logger.warning("  AI provider not configured - analysis disabled")
+            logger.warning(f"  Debug: openai_key={bool(openai_key)}, anthropic_key={bool(anthropic_key)}")
             return AIAnalysisResult(
                 enabled=False, 
                 summary="AI analysis not configured. Set OPENAI_API_KEY or ANTHROPIC_API_KEY environment variable."

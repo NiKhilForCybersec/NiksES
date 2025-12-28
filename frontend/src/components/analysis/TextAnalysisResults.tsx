@@ -182,27 +182,27 @@ const TextAnalysisResults: React.FC<Props> = ({ result, onClose, onSOCTools }) =
   const isUrlMode = safeResult.source === 'url';
 
   return (
-    <div className="space-y-4 md:space-y-6">
+    <div className="space-y-3 md:space-y-6">
       {/* Action Buttons */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl md:text-2xl font-bold flex items-center gap-2">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0">
+        <h1 className="text-lg sm:text-xl md:text-2xl font-bold flex items-center gap-2">
           {getSourceIcon(safeResult.source)}
-          {isUrlMode ? 'URL Analysis' : `${(safeResult.source || 'TEXT').toUpperCase()} Analysis`}
+          <span className="truncate">{isUrlMode ? 'URL Analysis' : `${(safeResult.source || 'TEXT').toUpperCase()} Analysis`}</span>
         </h1>
         <div className="flex items-center gap-2">
           {onSOCTools && (
             <button
               onClick={onSOCTools}
-              className="flex items-center gap-2 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors text-sm font-medium"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors text-xs sm:text-sm font-medium"
             >
-              <Shield className="w-4 h-4" />
-              SOC Tools
+              <Shield className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span className="hidden xs:inline">SOC</span> Tools
             </button>
           )}
           {onClose && (
             <button
               onClick={onClose}
-              className="flex items-center gap-2 px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors text-sm"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors text-xs sm:text-sm"
             >
               ← Back
             </button>
@@ -211,8 +211,8 @@ const TextAnalysisResults: React.FC<Props> = ({ result, onClose, onSOCTools }) =
       </div>
 
       {/* Header with Risk Score */}
-      <div className={`p-4 md:p-6 rounded-xl border-2 ${getRiskColor(safeResult.overall_level)}`}>
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      <div className={`p-3 sm:p-4 md:p-6 rounded-xl border-2 ${getRiskColor(safeResult.overall_level)}`}>
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
           <div className="flex items-center gap-3 md:gap-4">
             <div className={`w-12 h-12 md:w-16 md:h-16 rounded-xl flex items-center justify-center ${
               safeResult.is_threat ? 'bg-red-500/30' : 'bg-green-500/30'
