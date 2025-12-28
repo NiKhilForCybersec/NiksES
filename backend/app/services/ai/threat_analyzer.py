@@ -312,7 +312,19 @@ Score each SE technique 0-100 based on how strongly it's used:
                 messages=[
                     {
                         "role": "system",
-                        "content": "You are an expert email security analyst specializing in phishing and social engineering detection. Analyze emails objectively and return only valid JSON."
+                        "content": """You are an elite email security analyst with expertise in:
+• Phishing campaign identification (credential harvesting, malware delivery, BEC)
+• Social engineering tactics detection (urgency, fear, authority, reward)
+• Brand impersonation analysis (Microsoft 365, Google, banks, shipping)
+• Attack chain reconstruction (initial access → execution → impact)
+
+ANALYSIS APPROACH:
+1. Identify the attacker's intent (what do they want the victim to do?)
+2. Score social engineering techniques (0-100 each)
+3. Flag red flags (suspicious URLs, mismatched sender, grammar issues)
+4. Determine if any brand is being impersonated
+
+You are objective and evidence-based. Return only valid JSON."""
                     },
                     {"role": "user", "content": prompt}
                 ],
@@ -401,24 +413,37 @@ FIRST PASS ANALYSIS:
         subject = email_content.get("subject", "")
         sender = email_content.get("sender", "")
         
-        prompt = f"""You are a senior SOC analyst performing final threat assessment.
+        prompt = f"""🔍 FINAL THREAT ASSESSMENT REQUEST
 
-EMAIL:
+═══════════════════════════════════════════════════════════════
+📧 EMAIL UNDER INVESTIGATION
+═══════════════════════════════════════════════════════════════
 - Sender: {sender}
 - Subject: {subject}
 
+═══════════════════════════════════════════════════════════════
+🧠 AI CONTENT ANALYSIS (First Pass)
+═══════════════════════════════════════════════════════════════
 {first_pass_summary}
 
-THREAT INTELLIGENCE RESULTS:
+═══════════════════════════════════════════════════════════════
+🛡️ THREAT INTELLIGENCE FINDINGS
+═══════════════════════════════════════════════════════════════
 {ti_summary}
 
-DETECTION RULE RESULTS:
+═══════════════════════════════════════════════════════════════
+🔎 DETECTION ENGINE RESULTS
+═══════════════════════════════════════════════════════════════
 {detection_summary}
 
-SENDER AUTHENTICATION:
+═══════════════════════════════════════════════════════════════
+✉️ SENDER AUTHENTICATION (SPF/DKIM/DMARC)
+═══════════════════════════════════════════════════════════════
 {json.dumps(sender_info, indent=2) if sender_info else "Not available"}
 
-Based on ALL available data, provide final threat assessment as JSON:
+═══════════════════════════════════════════════════════════════
+📋 REQUIRED OUTPUT (JSON)
+═══════════════════════════════════════════════════════════════
 {{
     "threat_score": 0-100,
     "threat_level": "clean|low|medium|high|critical",
@@ -426,12 +451,22 @@ Based on ALL available data, provide final threat assessment as JSON:
     "primary_threat": "main threat type or 'none'",
     "attack_chain": ["step1", "step2"],
     "mitre_tactics": ["TA0001", "TA0043"],
-    "summary": "2-3 sentence executive summary",
-    "key_findings": ["finding1", "finding2", "finding3"],
-    "ti_correlation": "how TI data supports or contradicts the threat assessment",
+    "summary": "2-3 sentence executive summary for management",
+    "key_findings": [
+        "Finding 1 - cite specific evidence",
+        "Finding 2 - reference TI if applicable",
+        "Finding 3 - note authentication issues"
+    ],
+    "ti_correlation": "How TI data supports/contradicts the assessment",
     "recommended_action": "allow|quarantine|block|escalate",
     "action_priority": "low|medium|high|critical",
-    "response_steps": ["step1", "step2"],
+    "response_steps": [
+        "🚫 IMMEDIATE: First action to take",
+        "🔍 INVESTIGATE: What to check in logs",
+        "📢 NOTIFY: Who needs to know",
+        "🛡️ PREVENT: Block future similar attacks"
+    ],
+    "iocs_to_block": ["malicious-domain.com", "1.2.3.4"],
     "escalation_reason": "reason if escalation needed or null"
 }}
 
@@ -440,13 +475,13 @@ SCORING GUIDELINES:
 - 21-40: Low risk (spam, marketing)
 - 41-60: Medium risk (suspicious, needs review)
 - 61-80: High risk (likely malicious)
-- 81-100: Critical (confirmed threat)
+- 81-100: Critical (confirmed threat, TI positive)
 
-Consider:
-1. Does TI data confirm or contradict the content analysis?
-2. Are there mismatches between claimed sender and actual infrastructure?
-3. What's the realistic impact if this is malicious?
-4. Weight confirmed malicious indicators heavily."""
+⚠️ CRITICAL RULES:
+1. If TI flagged ANY URL/domain as malicious → minimum 70 score
+2. Authentication failures (SPF fail, no DKIM) → add 15-20 points
+3. Brand impersonation detected → add 20-30 points
+4. Response steps must be SPECIFIC and ACTIONABLE"""
 
         try:
             response = await self.openai_client.chat.completions.create(
@@ -454,7 +489,28 @@ Consider:
                 messages=[
                     {
                         "role": "system",
-                        "content": "You are a senior SOC analyst. Synthesize all available threat data into actionable intelligence. Return only valid JSON."
+                        "content": """You are a Senior SOC Analyst Team Lead with 10+ years in incident response.
+
+YOUR ROLE: Make the final threat determination by synthesizing ALL evidence:
+• First-pass content analysis (intent, social engineering)
+• Threat intelligence (VirusTotal, IPQualityScore, PhishTank, URLhaus)
+• Detection rules triggered
+• Sender authentication (SPF, DKIM, DMARC)
+
+DECISION FRAMEWORK:
+🔴 CRITICAL (81-100): Confirmed malicious - TI positive hits, known bad actors
+🟠 HIGH (61-80): Likely malicious - Strong indicators, needs immediate action
+🟡 MEDIUM (41-60): Suspicious - Warrants investigation, don't ignore
+🟢 LOW (21-40): Probably spam/marketing - Low risk but flag
+✅ CLEAN (0-20): Legitimate - No concerning indicators
+
+YOUR RECOMMENDATIONS MUST BE ACTIONABLE:
+❌ BAD: "Be careful"
+✅ GOOD: "Block sender domain at email gateway"
+✅ GOOD: "Check SIEM for other recipients of this campaign"
+✅ GOOD: "Submit hash to VirusTotal, add to EDR blocklist"
+
+You think like an incident responder. Return only valid JSON."""
                     },
                     {"role": "user", "content": prompt}
                 ],

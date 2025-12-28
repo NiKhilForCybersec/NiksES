@@ -1464,7 +1464,27 @@ function App() {
                 domains_found: data.iocs?.domains || [],
                 ips_found: data.iocs?.ips || [],
                 phone_numbers_found: data.iocs?.phone_numbers || [],
-                url_enrichment: data.enrichment?.urls || [],
+                // Transform URLEnrichment model to TextAnalysisResults format
+                url_enrichment: (data.enrichment?.urls || []).map((u: any) => ({
+                  url: u.url || '',
+                  domain: u.domain || '',
+                  is_malicious: (u.virustotal_positives && u.virustotal_positives > 0) || 
+                               u.phishtank_in_database || 
+                               (u.ipqs_risk_score && u.ipqs_risk_score >= 85) ||
+                               u.ipqs_is_phishing || u.ipqs_is_malware,
+                  threat_score: u.ipqs_risk_score || (u.virustotal_positives ? u.virustotal_positives * 10 : 0),
+                  sources: [
+                    u.virustotal_positives !== null ? 'VirusTotal' : null,
+                    u.phishtank_verified ? 'PhishTank' : null,
+                    u.urlhaus_status ? 'URLhaus' : null,
+                    u.ipqs_risk_score !== null ? 'IPQualityScore' : null,
+                  ].filter(Boolean),
+                  categories: u.virustotal_categories || [],
+                  ipqs_score: u.ipqs_risk_score,
+                  ipqs_phishing: u.ipqs_is_phishing,
+                  ipqs_malware: u.ipqs_is_malware,
+                  vt_malicious: u.virustotal_positives,
+                })),
                 url_sandbox: data.sandbox_results || [],
                 patterns_matched: (data.detection?.rules_triggered || []).map((r: any) => ({
                   pattern_id: r.rule_id || 'unknown',
@@ -1477,16 +1497,20 @@ function App() {
                 threat_indicators: (data.detection?.rules_triggered || []).map((r: any) => r.rule_name || r.name || ''),
                 ai_analysis: {
                   enabled: !!data.ai_triage,
-                  provider: data.ai_triage?.provider || 'ai',
-                  summary: data.ai_triage?.summary || '',
-                  threat_assessment: data.ai_triage?.threat_assessment || '',
+                  provider: data.ai_triage?.model_used || data.ai_triage?.provider || 'ai',
+                  summary: data.ai_triage?.summary || data.ai_triage?.detailed_analysis || '',
+                  threat_assessment: data.ai_triage?.classification_reasoning || data.ai_triage?.threat_assessment || '',
                   key_findings: data.ai_triage?.key_findings || [],
-                  social_engineering_tactics: data.ai_triage?.social_engineering_tactics || [],
-                  recommendations: data.ai_triage?.recommendations || [],
-                  confidence: data.ai_triage?.confidence ?? 0,
+                  social_engineering_tactics: data.ai_triage?.mitre_tactics || data.ai_triage?.social_engineering_tactics || [],
+                  recommendations: (data.ai_triage?.recommended_actions || []).map((a: any) => 
+                    typeof a === 'string' ? a : (a.description || a.action || '')
+                  ),
+                  confidence: data.ai_triage?.confidence ?? parseFloat(data.ai_triage?.risk_reasoning?.match(/(\d+)/)?.[1] || '0') / 100,
                 },
-                recommendations: data.ai_triage?.recommendations || data.recommendations || [],
-                mitre_techniques: data.detection?.mitre_techniques || [],
+                recommendations: (data.ai_triage?.recommended_actions || []).map((a: any) => 
+                  typeof a === 'string' ? a : (a.description || a.action || '')
+                ) || data.recommendations || [],
+                mitre_techniques: data.ai_triage?.mitre_techniques || data.detection?.mitre_techniques || [],
               };
               
               setTextAnalysisResult(textResult);

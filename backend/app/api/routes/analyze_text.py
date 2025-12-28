@@ -1140,43 +1140,128 @@ async def get_ai_analysis(
         
         sandbox_text = "\n".join(sandbox_findings) if sandbox_findings else "No sandbox analysis performed"
         
-        prompt = f"""Analyze this {source_type} for security threats. Use ALL the intelligence data provided.
+        prompt = f"""🔍 INCIDENT ANALYSIS REQUEST
 
-=== CONTENT ===
+You are investigating a potential {source_type} threat. Analyze ALL evidence below.
+
+═══════════════════════════════════════════════════════════════
+📧 CONTENT UNDER INVESTIGATION
+═══════════════════════════════════════════════════════════════
 {text[:1500]}
 
-=== DETECTED PATTERNS ===
+═══════════════════════════════════════════════════════════════
+🔎 DETECTION ENGINE FINDINGS
+═══════════════════════════════════════════════════════════════
 {patterns_text}
 
-=== URLs FOUND ===
+═══════════════════════════════════════════════════════════════
+🔗 URLs EXTRACTED
+═══════════════════════════════════════════════════════════════
 {urls_text}
 
-=== THREAT INTELLIGENCE FINDINGS ===
+═══════════════════════════════════════════════════════════════
+🛡️ THREAT INTELLIGENCE REPORT
+═══════════════════════════════════════════════════════════════
 {ti_text}
 
-=== SANDBOX ANALYSIS ===
+═══════════════════════════════════════════════════════════════
+💣 DYNAMIC SANDBOX ANALYSIS
+═══════════════════════════════════════════════════════════════
 {sandbox_text}
 
-=== CURRENT RISK SCORE ===
-{score}/100
+═══════════════════════════════════════════════════════════════
+📊 PRELIMINARY RISK SCORE: {score}/100
+═══════════════════════════════════════════════════════════════
 
-Based on ALL the above intelligence, provide:
-1. SUMMARY: 2-3 sentence assessment incorporating TI findings
-2. THREAT_ASSESSMENT: One of [MALICIOUS, SUSPICIOUS, LIKELY_SAFE, SAFE]
-3. KEY_FINDINGS: 3-5 bullet points (reference specific TI sources if they found threats)
-4. INTENT: What is the attacker trying to achieve? (credential theft, malware delivery, financial fraud, etc.)
-5. SOCIAL_ENGINEERING: Tactics used (urgency, fear, authority, etc.)
-6. RECOMMENDATIONS: 3-5 actionable steps for SOC analyst
+🎯 YOUR ANALYSIS TASK:
 
-IMPORTANT: If threat intelligence APIs flagged URLs as malicious, this should heavily influence your threat assessment.
+Provide your expert assessment in JSON format with these fields:
 
-Format response as valid JSON."""
+{{
+  "SUMMARY": "2-3 sentence executive summary. State the verdict clearly upfront.",
+  
+  "THREAT_ASSESSMENT": "MALICIOUS | SUSPICIOUS | LIKELY_SAFE | SAFE",
+  
+  "KEY_FINDINGS": [
+    "Finding 1 - cite specific evidence",
+    "Finding 2 - reference TI source if applicable",
+    "Finding 3 - note any red flags"
+  ],
+  
+  "INTENT": "Attacker's goal: credential_theft | malware_delivery | financial_fraud | reconnaissance | spam | unknown",
+  
+  "SOCIAL_ENGINEERING": [
+    "Tactic 1 (e.g., urgency, fear, authority)",
+    "Tactic 2"
+  ],
+  
+  "RECOMMENDATIONS": [
+    "🚫 IMMEDIATE: Block/quarantine action",
+    "🔍 INVESTIGATE: What to check in logs/SIEM", 
+    "📢 NOTIFY: Who to alert (users, IT, management)",
+    "🛡️ PREVENT: Rule/policy to prevent future attacks",
+    "📝 DOCUMENT: IOCs to add to blocklists"
+  ]
+}}
 
-        system_prompt = """You are a senior SOC analyst specializing in SMS smishing, phishing URLs, and social engineering attacks.
-You have access to threat intelligence from multiple sources: VirusTotal, IPQualityScore, Google Safe Browsing, PhishTank, URLhaus.
-Analyze the content AND the threat intelligence findings to provide accurate threat assessment.
-Always weight confirmed TI findings heavily in your assessment.
-Respond in valid JSON format only."""
+⚠️ CRITICAL RULES:
+1. If ANY TI source flagged URL as malicious → THREAT_ASSESSMENT must be MALICIOUS
+2. Newly registered domains (<30 days) → Automatically SUSPICIOUS minimum
+3. Recommendations must be SPECIFIC and ACTIONABLE (no generic advice)
+4. Always mention IOCs that should be blocked (domains, IPs, URLs)
+5. If clean, still provide security awareness recommendation"""
+
+        system_prompt = """You are an elite Senior SOC Analyst with 10+ years of experience in threat detection, incident response, and threat intelligence. You specialize in:
+
+[EXPERTISE]
+- Phishing, smishing, and social engineering attack analysis
+- Malware delivery chain identification
+- Brand impersonation and credential harvesting campaigns
+- Business Email Compromise (BEC) detection
+- Threat actor TTPs (Tactics, Techniques, and Procedures)
+
+[ANALYSIS METHODOLOGY]
+When analyzing content, you ALWAYS:
+1. Examine URLs for suspicious patterns (lookalike domains, URL shorteners, suspicious TLDs)
+2. Cross-reference with threat intelligence from VirusTotal, PhishTank, URLhaus, IPQualityScore
+3. Identify social engineering tactics (urgency, fear, authority, scarcity)
+4. Map findings to MITRE ATT&CK framework where applicable
+5. Consider the attack lifecycle (initial access -> execution -> impact)
+
+[THREAT INDICATORS YOU WATCH FOR]
+- Domain age < 30 days (newly registered = high risk)
+- Free hosting/URL shorteners (bit.ly, tinyurl, etc.)
+- Homoglyph attacks (paypa1.com vs paypal.com)
+- Suspicious TLDs (.xyz, .top, .buzz, .click)
+- Missing HTTPS on login pages
+- Grammar/spelling errors in official-looking messages
+- Requests for sensitive data (credentials, SSN, payment info)
+- Urgency language ("account suspended", "action required")
+
+[RECOMMENDATIONS STYLE]
+Your recommendations are ACTIONABLE and SPECIFIC:
+- BAD: "Be careful with links"
+- GOOD: "Block domain fake-bank.xyz at email gateway and add to DNS blackhole"
+- GOOD: "Submit URL to VirusTotal for community analysis and flag in SIEM"
+- GOOD: "Check if any employees clicked link in proxy logs (last 24 hours)"
+- GOOD: "Create detection rule for similar domains targeting this brand"
+
+[KNOWLEDGE BASE]
+You stay current on:
+- Active phishing campaigns (FIN7, Scattered Spider, etc.)
+- Recent CVEs used in phishing lures
+- Trending attack vectors (QR code phishing, callback phishing)
+- Brand impersonation trends (Microsoft, Amazon, banks, shipping)
+
+[CONFIDENCE CALIBRATION]
+- If TI sources confirm malicious -> High confidence MALICIOUS
+- If no TI data but patterns are suspicious -> SUSPICIOUS with caveats
+- Domain is legitimate but content is unusual -> Investigate further
+- Clean TI + no patterns -> LIKELY_SAFE (never say 100% safe)
+
+Always think step-by-step like investigating a real incident. Your analysis helps SOC teams make quick, accurate decisions.
+
+Respond ONLY with valid JSON format."""
 
         response = await provider.generate(
             prompt=prompt,
@@ -1665,13 +1750,42 @@ async def analyze_text(
                 secondary_classifications=[],
             )
             
+            # Convert url_enrichment to URLEnrichment model format for storage
+            from app.models.enrichment import URLEnrichment, ThreatIntelVerdict
+            
+            url_enrichment_models = []
+            if url_enrichment:
+                for e in url_enrichment:
+                    url_enrichment_models.append(URLEnrichment(
+                        url=e.url,
+                        domain=e.domain,
+                        virustotal_positives=e.vt_malicious,
+                        virustotal_total=None,
+                        virustotal_verdict=ThreatIntelVerdict.MALICIOUS if e.vt_malicious and e.vt_malicious > 0 else ThreatIntelVerdict.UNKNOWN,
+                        virustotal_categories=e.categories if e.categories else [],
+                        urlhaus_status="online" if e.is_malicious else None,
+                        urlhaus_threat=e.categories[0] if e.categories else None,
+                        urlhaus_tags=[],
+                        phishtank_in_database="PhishTank" in (e.sources or []) and e.is_malicious,
+                        phishtank_verified="PhishTank" in (e.sources or []),
+                        phishtank_verified_at=None,
+                        ipqs_risk_score=e.ipqs_score,
+                        ipqs_is_phishing=e.ipqs_phishing,
+                        ipqs_is_malware=e.ipqs_malware,
+                        ipqs_is_suspicious=e.ipqs_score and e.ipqs_score > 50,
+                        ipqs_domain_age=None,
+                        ipqs_threat_level="high" if e.ipqs_score and e.ipqs_score >= 85 else "medium" if e.ipqs_score and e.ipqs_score >= 50 else "low" if e.ipqs_score else None,
+                        gsb_is_safe=not e.gsb_malicious if e.gsb_malicious is not None else None,
+                        gsb_threats=[],
+                    ))
+            
             enrichment_results = EnrichmentResults(
                 sender_domain=None,
                 reply_to_domain=None,
                 url_domains=[],
                 originating_ip=None,
                 all_ips=[],
-                urls=[],
+                urls=url_enrichment_models,
                 attachments=[],
             )
             
@@ -1685,6 +1799,36 @@ async def analyze_text(
                 phone_numbers=phones,
             )
             
+            # Convert AIAnalysisResult to AITriageResult for storage
+            ai_triage_result = None
+            if ai_result and ai_result.enabled:
+                from app.models.analysis import AITriageResult, RecommendedAction
+                
+                # Convert recommendations to RecommendedAction objects
+                rec_actions = []
+                for i, rec in enumerate(ai_result.recommendations[:5] if ai_result.recommendations else []):
+                    rec_text = rec if isinstance(rec, str) else str(rec)
+                    rec_actions.append(RecommendedAction(
+                        action=rec_text[:50],  # Short action name
+                        priority=i + 1,
+                        description=rec_text,
+                        automated=False
+                    ))
+                
+                ai_triage_result = AITriageResult(
+                    summary=ai_result.summary or "AI analysis completed",
+                    detailed_analysis=ai_result.summary or "",
+                    classification_reasoning=ai_result.threat_assessment or "Based on pattern analysis",
+                    risk_reasoning=f"Confidence: {ai_result.confidence:.0%}",
+                    recommended_actions=rec_actions,
+                    key_findings=ai_result.key_findings or [],
+                    mitre_tactics=ai_result.social_engineering_tactics or [],
+                    mitre_techniques=mitre if mitre else [],
+                    model_used=ai_result.provider or "unknown",
+                    tokens_used=0,
+                    analysis_timestamp=datetime.utcnow(),
+                )
+            
             # Convert to AnalysisResult for storage compatibility
             pseudo_result = AnalysisResult(
                 analysis_id=analysis_id,
@@ -1697,7 +1841,7 @@ async def analyze_text(
                 overall_score=score,
                 overall_level=level,
                 classification=classification.value,
-                ai_triage=None,
+                ai_triage=ai_triage_result,
             )
             
             await analysis_store.save(pseudo_result)
