@@ -322,31 +322,21 @@ const AdvancedAnalysisView: React.FC<AdvancedAnalysisViewProps> = ({ result, onE
       {/* Tabs - Scrollable on mobile */}
       <div 
         className="bg-gray-800 border-b border-gray-700 overflow-x-auto hide-scrollbar" 
-        style={{ WebkitOverflowScrolling: 'touch', overflowX: 'auto' }}
+        style={{ WebkitOverflowScrolling: 'touch' }}
       >
-        <div 
-          className="flex px-2 md:px-6" 
-          style={{ minWidth: 'max-content', gap: '4px' }}
-        >
+        <div className="flex gap-1 sm:gap-2 px-2 md:px-6" style={{ minWidth: 'max-content' }}>
           {tabs.map(tab => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center border-b-2 transition-colors ${
+              className={`flex items-center gap-1 sm:gap-1.5 md:gap-2 px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 border-b-2 transition-colors whitespace-nowrap flex-shrink-0 text-[11px] sm:text-xs md:text-sm ${
                 activeTab === tab.id
                   ? 'border-blue-500 text-blue-400 bg-blue-500/10'
                   : 'border-transparent text-gray-400 hover:text-white hover:bg-gray-700/50'
               }`}
-              style={{ 
-                whiteSpace: 'nowrap', 
-                flexShrink: 0,
-                padding: '8px 10px',
-                fontSize: '11px',
-                gap: '4px',
-              }}
             >
-              <tab.icon style={{ width: '14px', height: '14px', flexShrink: 0 }} />
-              {/* Show short label on mobile, full label on larger screens */}
+              <tab.icon className="w-3 h-3 sm:w-3.5 sm:h-3.5 md:w-4 md:h-4 flex-shrink-0" />
+              {/* Show short label on mobile (<640px), full label on sm+ screens */}
               <span className="sm:hidden">{tab.shortLabel || tab.label}</span>
               <span className="hidden sm:inline">{tab.label}</span>
             </button>
