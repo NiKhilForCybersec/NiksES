@@ -334,11 +334,20 @@ class TwoPassThreatAnalyzer:
 • Brand impersonation analysis (Microsoft 365, Google, banks, shipping)
 • Attack chain reconstruction (initial access → execution → impact)
 
+CRITICAL AUTHENTICATION RULE:
+Email authentication (SPF, DKIM, DMARC) is the GROUND TRUTH for sender identity.
+- If SPF=pass AND DKIM=pass AND DMARC=pass → the sender IS who they claim to be
+- If sender domain is a known brand (google.com, paypal.com, microsoft.com, apple.com,
+  amazon.com, etc.) AND authentication passes → classify as "legitimate"
+- Do NOT flag legitimate brand emails as phishing just because they mention
+  security alerts, password resets, or payment notifications — these are normal
+- Only flag as impersonation if authentication FAILS or sender domain is NOT the real brand
+
 ANALYSIS APPROACH:
-1. Identify the attacker's intent (what do they want the victim to do?)
-2. Score social engineering techniques (0-100 each)
-3. Flag red flags (suspicious URLs, mismatched sender, grammar issues)
-4. Determine if any brand is being impersonated
+1. FIRST check sender authentication — if all pass + known brand domain → likely legitimate
+2. If auth fails or unknown domain → analyze for attacker intent
+3. Score social engineering techniques (0-100 each) — score 0 for legitimate brand emails
+4. Flag red flags only if they contradict authentication evidence
 
 You are objective and evidence-based. Return only valid JSON."""
 
@@ -544,18 +553,27 @@ YOUR ROLE: Make the final threat determination by synthesizing ALL evidence:
 • Detection rules triggered
 • Sender authentication (SPF, DKIM, DMARC)
 
+⚠️ AUTHENTICATION IS GROUND TRUTH:
+If SPF=pass, DKIM=pass, DMARC=pass AND sender domain is a known legitimate brand
+(google.com, paypal.com, microsoft.com, apple.com, amazon.com, etc.):
+→ The email IS from that brand. Score 0-15 (CLEAN/LOW).
+→ Do NOT classify as phishing or impersonation.
+→ Security alerts, password resets, and payment notifications from real brands are LEGITIMATE.
+→ Only override this if TI flagged URLs/domains as malicious (compromised brand account).
+
 DECISION FRAMEWORK:
-🔴 CRITICAL (81-100): Confirmed malicious - TI positive hits, known bad actors
-🟠 HIGH (61-80): Likely malicious - Strong indicators, needs immediate action
-🟡 MEDIUM (41-60): Suspicious - Warrants investigation, don't ignore
-🟢 LOW (21-40): Probably spam/marketing - Low risk but flag
-✅ CLEAN (0-20): Legitimate - No concerning indicators
+🔴 CRITICAL (81-100): Confirmed malicious - TI positive, auth fails, known bad actors
+🟠 HIGH (61-80): Likely malicious - Strong indicators, auth fails or suspicious domain
+🟡 MEDIUM (41-60): Suspicious - Mixed signals, needs investigation
+🟢 LOW (21-40): Low risk - Spam/marketing or minor concerns
+✅ CLEAN (0-15): Legitimate - Auth passes, known brand, no TI hits
 
 YOUR RECOMMENDATIONS MUST BE ACTIONABLE:
 ❌ BAD: "Be careful"
 ✅ GOOD: "Block sender domain at email gateway"
 ✅ GOOD: "Check SIEM for other recipients of this campaign"
 ✅ GOOD: "Submit hash to VirusTotal, add to EDR blocklist"
+✅ GOOD: "No action needed - legitimate email from verified sender"
 
 You think like an incident responder. Return only valid JSON."""
 
