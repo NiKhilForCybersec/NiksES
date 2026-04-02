@@ -68,14 +68,19 @@ class UrgencyRule(DetectionRule):
         if not body_text:
             return None
         
+        # Skip if sender is a legitimate brand (real security alerts use urgency too)
+        if self.is_sender_legitimate_brand(email):
+            return None
+
         found = []
         for keyword in URGENCY_KEYWORDS:
             if keyword.lower() in body_text:
                 found.append(keyword)
-        
-        if len(found) >= 2:
-            severity = RiskLevel.HIGH if len(found) >= 4 else RiskLevel.MEDIUM
-            
+
+        # Require 3+ keywords to reduce false positives on legitimate business emails
+        if len(found) >= 3:
+            severity = RiskLevel.HIGH if len(found) >= 5 else RiskLevel.MEDIUM
+
             return self.create_match(
                 evidence=[
                     "Urgency tactics detected:",
@@ -87,7 +92,7 @@ class UrgencyRule(DetectionRule):
                 }],
                 severity_override=severity,
             )
-        
+
         return None
 
 
@@ -112,14 +117,19 @@ class FearRule(DetectionRule):
         if not body_text:
             return None
         
+        # Skip if sender is a legitimate brand (real breach notifications use fear language)
+        if self.is_sender_legitimate_brand(email):
+            return None
+
         found = []
         for keyword in FEAR_KEYWORDS:
             if keyword.lower() in body_text:
                 found.append(keyword)
-        
-        if len(found) >= 2:
-            severity = RiskLevel.HIGH if len(found) >= 3 else RiskLevel.MEDIUM
-            
+
+        # Require 3+ keywords to reduce false positives
+        if len(found) >= 3:
+            severity = RiskLevel.HIGH if len(found) >= 4 else RiskLevel.MEDIUM
+
             return self.create_match(
                 evidence=[
                     "Fear-inducing language detected:",
@@ -131,7 +141,7 @@ class FearRule(DetectionRule):
                 }],
                 severity_override=severity,
             )
-        
+
         return None
 
 
@@ -259,12 +269,17 @@ class ScarcityRule(DetectionRule):
         if not body_text:
             return None
         
+        # Skip legitimate brands (marketing emails use scarcity legitimately)
+        if self.is_sender_legitimate_brand(email):
+            return None
+
         found = []
         for keyword in SCARCITY_KEYWORDS:
             if keyword.lower() in body_text:
                 found.append(keyword)
-        
-        if len(found) >= 2:
+
+        # Require 3+ keywords to reduce false positives on marketing emails
+        if len(found) >= 3:
             return self.create_match(
                 evidence=[
                     "Scarcity/limited time tactics detected:",

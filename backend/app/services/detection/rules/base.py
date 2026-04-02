@@ -146,6 +146,26 @@ class DetectionRule(ABC):
             return email.reply_to[0].domain.lower()
         return None
 
+    def is_sender_legitimate_brand(self, email: ParsedEmail) -> bool:
+        """Check if sender domain belongs to a known legitimate brand.
+
+        This prevents false positives on real Microsoft, Google, PayPal, etc. emails
+        that naturally contain phishing-like language (security alerts, password resets).
+        """
+        sender_domain = self.get_sender_domain(email)
+        if not sender_domain:
+            return False
+        try:
+            from app.utils.constants import BRAND_TARGETS
+            for brand_id, brand_info in BRAND_TARGETS.items():
+                for legit in brand_info.get("legitimate_domains", []):
+                    legit_lower = legit.lower()
+                    if sender_domain == legit_lower or sender_domain.endswith(f".{legit_lower}"):
+                        return True
+        except ImportError:
+            pass
+        return False
+
 
 class RuleRegistry:
     """Registry of all detection rules."""

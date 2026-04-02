@@ -15,24 +15,39 @@ from app.utils.constants import SHORTENER_DOMAINS, SUSPICIOUS_TLDS, FREEMAIL_DOM
 from .base import DetectionRule, RuleMatch, register_rule
 
 
-# Phishing-related keywords
+# Phishing-related keywords — focused on phrases that are STRONG phishing indicators
+# (removed generic business terms that cause false positives like "action required", "security alert")
 PHISHING_KEYWORDS = [
-    'verify your account', 'confirm your identity', 'update your information',
-    'click here immediately', 'your account has been compromised',
-    'unusual activity', 'suspicious activity', 'unauthorized access',
-    'reset your password', 'confirm your password', 'verify your password',
-    'update payment', 'payment information', 'billing information',
-    'action required', 'immediate action', 'urgent action',
-    'account suspended', 'account will be closed', 'account terminated',
-    'security alert', 'security warning', 'security notice',
-    'verify within 24 hours', 'expires in 24 hours', 'limited time',
+    # Account compromise language (strong indicators)
+    'your account has been compromised', 'your account has been hacked',
+    'unauthorized login attempt', 'unauthorized sign-in',
+    'account will be permanently disabled', 'account will be terminated',
+    'account will be closed permanently',
+    # Credential harvesting (strong indicators)
+    'click here immediately', 'click the link below to verify',
+    'verify your account within', 'confirm your identity within',
+    'verify within 24 hours', 'expires in 24 hours',
+    'failure to verify will result', 'failure to respond will result',
+    # Fake urgency + threat combos (strong indicators)
+    'your account has been suspended', 'your account has been locked',
+    'unusual sign-in activity', 'suspicious login attempt',
+    'we detected unusual activity on your account',
+    # Payment/financial lures (strong indicators)
+    'update your payment method immediately', 'payment has been declined',
+    'billing information is outdated', 'verify your payment details',
 ]
 
 CREDENTIAL_KEYWORDS = [
-    'enter your password', 'provide your credentials', 'login details',
-    'sign in to verify', 'log in to confirm', 'enter your username',
-    'social security', 'ssn', 'credit card number', 'bank account',
-    'pin number', 'security code', 'cvv', 'routing number',
+    # Direct credential requests (strong indicators)
+    'enter your password', 'provide your credentials', 'confirm your password',
+    'sign in to verify', 'log in to confirm', 'enter your username and password',
+    'provide your login details', 'verify your login credentials',
+    # Financial data requests (strong in email context)
+    'social security number', 'credit card number', 'bank account number',
+    'pin number', 'security code', 'cvv number', 'routing number',
+    # SSO/MFA lures
+    'enter the code we sent', 'provide your verification code',
+    'enter your one-time password',
 ]
 
 
@@ -236,18 +251,23 @@ class PhishingKeywordsRule(DetectionRule):
         enrichment: Optional[EnrichmentResults] = None
     ) -> Optional[RuleMatch]:
         body_text = self.get_body_text(email)
-        
+
         if not body_text:
             return None
-        
+
+        # Skip if sender is a legitimate brand (e.g., real Microsoft security alerts)
+        if self.is_sender_legitimate_brand(email):
+            return None
+
         found_keywords = []
         for keyword in PHISHING_KEYWORDS:
             if keyword.lower() in body_text:
                 found_keywords.append(keyword)
-        
-        if len(found_keywords) >= 2:  # Require multiple keywords
-            severity = RiskLevel.HIGH if len(found_keywords) >= 4 else RiskLevel.MEDIUM
-            
+
+        # Require 3+ keywords to reduce false positives on legitimate business emails
+        if len(found_keywords) >= 3:
+            severity = RiskLevel.HIGH if len(found_keywords) >= 5 else RiskLevel.MEDIUM
+
             return self.create_match(
                 evidence=[
                     f"Found {len(found_keywords)} phishing indicators:",
@@ -258,7 +278,7 @@ class PhishingKeywordsRule(DetectionRule):
                 } for kw in found_keywords],
                 severity_override=severity,
             )
-        
+
         return None
 
 
@@ -294,7 +314,12 @@ class CredentialHarvestingRule(DetectionRule):
             html_lower = email.body_html.lower()
             has_form = '<form' in html_lower or '<input type="password"' in html_lower
         
-        if len(found_keywords) >= 1 or (has_form and len(found_keywords) >= 1):
+        # Skip if sender is a legitimate brand
+        if self.is_sender_legitimate_brand(email):
+            return None
+
+        # Require 2+ keywords, or 1 keyword + HTML form with password field
+        if len(found_keywords) >= 2 or (has_form and len(found_keywords) >= 1):
             severity = RiskLevel.CRITICAL if has_form else RiskLevel.HIGH
             
             evidence = [f"Credential harvesting indicators detected:"]
