@@ -1358,7 +1358,15 @@ Provide your expert assessment in JSON format with these fields:
 2. Newly registered domains (<30 days) → Automatically SUSPICIOUS minimum
 3. Recommendations must be SPECIFIC and ACTIONABLE (no generic advice)
 4. Always mention IOCs that should be blocked (domains, IPs, URLs)
-5. If clean, still provide security awareness recommendation"""
+5. If clean, still provide security awareness recommendation
+
+🚫 ANTI-HALLUCINATION RULES (MANDATORY):
+- NEVER say TI sources returned "clean" if TI data shows "No threat intelligence data available" or is empty
+- "No data" means "NOT CHECKED or UNAVAILABLE" — it does NOT mean clean/safe
+- NEVER fabricate TI verdicts. Only cite results that are explicitly present above
+- If TI/sandbox data is missing, say "No TI data was available for this analysis"
+- If API returned errors or rate limits, say "TI enrichment was unavailable due to API limitations"
+- Base your assessment ONLY on evidence actually provided above"""
 
         system_prompt = """You are an elite Senior SOC Analyst with 10+ years of experience in threat detection, incident response, and threat intelligence. You specialize in:
 
@@ -1462,13 +1470,36 @@ Respond ONLY with valid JSON format."""
                 intent=intent,
             )
         except json.JSONDecodeError:
-            # Return raw response if JSON parsing fails
-            return AIAnalysisResult(
-                enabled=True,
-                provider=provider_name,
-                summary=response.content[:500],
-                confidence=0.6,
-            )
+            # Strip markdown fences from raw response before returning
+            raw = response.content.strip()
+            if raw.startswith("```json"):
+                raw = raw[7:]
+            elif raw.startswith("```"):
+                raw = raw[3:]
+            if raw.endswith("```"):
+                raw = raw[:-3]
+            raw = raw.strip()
+
+            # Try parsing again after cleanup
+            try:
+                data = json.loads(raw)
+                return AIAnalysisResult(
+                    enabled=True,
+                    provider=provider_name,
+                    summary=str(data.get("SUMMARY", data.get("summary", raw[:500])))[:1000],
+                    threat_assessment=str(data.get("THREAT_ASSESSMENT", data.get("threat_assessment", "UNKNOWN"))),
+                    key_findings=_ensure_list(data.get("KEY_FINDINGS", data.get("key_findings"))),
+                    social_engineering_tactics=_ensure_list(data.get("SOCIAL_ENGINEERING", data.get("social_engineering"))),
+                    recommendations=_ensure_list(data.get("RECOMMENDATIONS", data.get("recommendations"))),
+                    confidence=0.6,
+                )
+            except json.JSONDecodeError:
+                return AIAnalysisResult(
+                    enabled=True,
+                    provider=provider_name,
+                    summary=raw[:500],
+                    confidence=0.5,
+                )
     
     except Exception as e:
         logger.error(f"AI analysis failed: {e}")

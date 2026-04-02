@@ -486,7 +486,7 @@ BRAND_DOMAINS = {
 HOMOGLYPHS = {
     'a': ['а', 'ạ', 'ą', 'à', 'á', 'â', 'ã', 'ä', 'å', 'ā', '@'],
     'e': ['е', 'ẹ', 'ę', 'è', 'é', 'ê', 'ë', 'ē', '3'],
-    'i': ['і', 'ị', 'ì', 'í', 'î', 'ï', 'ī', '1', 'l', '|'],
+    'i': ['і', 'ị', 'ì', 'í', 'î', 'ï', 'ī'],
     'o': ['о', 'ọ', 'ø', 'ò', 'ó', 'ô', 'õ', 'ö', 'ō', '0'],
     'u': ['υ', 'ụ', 'ù', 'ú', 'û', 'ü', 'ū'],
     'l': ['1', 'I', '|', 'ł'],
@@ -609,7 +609,12 @@ class SMSEvidenceCollector:
     
     def _collect_url_evidence(self, urls: List[str]):
         """Analyze URLs for risk indicators."""
+        # Deduplicate URLs to prevent duplicate evidence
+        seen_urls = set()
         for url in urls:
+            if url in seen_urls:
+                continue
+            seen_urls.add(url)
             try:
                 parsed = urlparse(url)
                 domain = parsed.netloc.lower()
