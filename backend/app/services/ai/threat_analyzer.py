@@ -349,6 +349,13 @@ ANALYSIS APPROACH:
 3. Score social engineering techniques (0-100 each) — score 0 for legitimate brand emails
 4. Flag red flags only if they contradict authentication evidence
 
+🚫 ANTI-HALLUCINATION RULES:
+- NEVER say TI sources returned "clean" or "no malicious indicators" unless the data explicitly says so
+- If TI data is missing, empty, or shows "UNKNOWN" → say "No TI data available" NOT "TI returned clean"
+- "Not found in database" means NO DATA, not SAFE
+- "UNKNOWN" verdict means INCONCLUSIVE, not CLEAN
+- Only state facts from the actual data provided. Never infer or assume results that aren't there.
+
 You are objective and evidence-based. Return only valid JSON."""
 
         user_prompt = f"""Analyze this email for social engineering tactics and malicious intent.
@@ -574,6 +581,15 @@ YOUR RECOMMENDATIONS MUST BE ACTIONABLE:
 ✅ GOOD: "Check SIEM for other recipients of this campaign"
 ✅ GOOD: "Submit hash to VirusTotal, add to EDR blocklist"
 ✅ GOOD: "No action needed - legitimate email from verified sender"
+
+🚫 ANTI-HALLUCINATION RULES — STRICTLY FOLLOW:
+- NEVER claim TI sources returned "clean" unless the TI data explicitly shows "clean" or "benign"
+- If TI data says "UNKNOWN", "not found", or is empty → say "No TI data available for this indicator"
+- "Not found in threat database" = NO DATA, NOT "confirmed safe"
+- "UNKNOWN" verdict = INCONCLUSIVE, NOT "clean"
+- If sandbox analysis shows "UNKNOWN" with score 0 → say "Sandbox returned no verdict" NOT "Sandbox confirmed safe"
+- Only reference data that is ACTUALLY present in the evidence below. Never fabricate or assume results.
+- If you cannot determine something from the data, say "Insufficient data" — never guess.
 
 You think like an incident responder. Return only valid JSON."""
 
