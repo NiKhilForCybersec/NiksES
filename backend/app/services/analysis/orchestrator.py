@@ -527,120 +527,10 @@ class AnalysisOrchestrator:
         if email and email.sender and email.sender.domain:
             sender_domain = email.sender.domain
         
-        # Try Dynamic Intelligent Detection Architecture first
+        # Use enterprise adaptive MultiDimensionalScorer as PRIMARY scorer
+        # (confidence-weighted dimensions, meta-rule compounding, floor logic)
+        # Dynamic scorer kept as fallback only
         try:
-            from app.services.detection.dynamic_scorer import calculate_dynamic_score
-            
-            dynamic_result = calculate_dynamic_score(
-                detection_results=detection_results,
-                se_analysis=se_analysis,
-                content_analysis=content_analysis,
-                lookalike_results=lookalike_results,
-                ti_results=ti_results,
-                header_analysis=result.header_analysis,
-                ai_analysis=None,  # Can be added if AI analysis is available
-            )
-            
-            # Convert dynamic result to UnifiedRiskScore for backwards compatibility
-            from app.services.detection.multi_scorer import UnifiedRiskScore, RiskLevel, EmailClassification
-            
-            # Map level to RiskLevel
-            level_mapping = {
-                "critical": RiskLevel.CRITICAL,
-                "high": RiskLevel.HIGH,
-                "medium": RiskLevel.MEDIUM,
-                "low": RiskLevel.LOW,
-                "informational": RiskLevel.INFORMATIONAL,
-            }
-            
-            # Map classification
-            class_mapping = {
-                "phishing": EmailClassification.PHISHING,
-                "bec": EmailClassification.BEC,
-                "malware_delivery": EmailClassification.MALWARE_DELIVERY,
-                "spam": EmailClassification.SPAM,
-                "brand_impersonation": EmailClassification.BRAND_IMPERSONATION,
-                "impersonation": EmailClassification.BRAND_IMPERSONATION,
-                "credential_phishing": EmailClassification.PHISHING,
-                "credential_harvesting": EmailClassification.CREDENTIAL_HARVESTING,
-                "account_takeover": EmailClassification.ACCOUNT_TAKEOVER,
-                "callback_phishing": EmailClassification.CALLBACK_PHISHING,
-                "smishing": EmailClassification.PHISHING,
-                "suspicious": EmailClassification.UNKNOWN,
-                "unknown": EmailClassification.UNKNOWN,
-                "benign": EmailClassification.BENIGN,
-            }
-            
-            result.risk_score = UnifiedRiskScore()
-            result.risk_score.overall_score = dynamic_result.value
-            result.risk_score.overall_level = dynamic_result.level
-            result.risk_score.primary_classification = class_mapping.get(
-                dynamic_result.classification.lower(),
-                EmailClassification.UNKNOWN
-            )
-            result.risk_score.confidence = dynamic_result.confidence
-            
-            # Store breakdown for detailed analysis
-            if hasattr(result.risk_score, 'explanation'):
-                result.risk_score.explanation = dynamic_result.explanation
-            
-            # Store MITRE techniques
-            if hasattr(result.risk_score, 'mitre_techniques'):
-                result.risk_score.mitre_techniques = dynamic_result.mitre_techniques
-            
-            # Store attack chains
-            if hasattr(result.risk_score, 'attack_chains'):
-                result.risk_score.attack_chains = [c.to_dict() for c in dynamic_result.attack_chains]
-            
-            # Store detailed breakdown in dimensions
-            if dynamic_result.breakdown and dynamic_result.breakdown.dimensions:
-                from app.services.detection.multi_scorer import DimensionScore, RiskDimension
-                for dim_name, dim_score in dynamic_result.breakdown.dimensions.items():
-                    try:
-                        dim_enum = RiskDimension(dim_name)
-                    except ValueError:
-                        dim_enum = None
-                    result.risk_score.dimensions[dim_name] = DimensionScore(
-                        dimension=dim_enum or RiskDimension.TECHNICAL,
-                        score=getattr(dim_score, 'score', 0),
-                        weight=getattr(dim_score, 'weight', 0),
-                        confidence=getattr(dim_score, 'confidence', 0.5),
-                        level=getattr(dim_score, 'level', 'low'),
-                        indicators=getattr(dim_score, 'indicators', []),
-                        details=getattr(dim_score, 'details', {}),
-                    )
-
-            # If dynamic scorer didn't produce dimensions, run MultiDimensionalScorer for dimensions only
-            if not result.risk_score.dimensions:
-                try:
-                    from app.services.detection.multi_scorer import MultiDimensionalScorer
-                    dim_scorer = MultiDimensionalScorer()
-                    dim_result = dim_scorer.calculate_unified_score(
-                        detection_results=detection_results,
-                        se_analysis=se_analysis,
-                        content_analysis=content_analysis,
-                        lookalike_results=lookalike_results,
-                        ti_results=ti_results,
-                        header_analysis=result.header_analysis,
-                        sender_domain=sender_domain,
-                    )
-                    if dim_result and dim_result.dimensions:
-                        result.risk_score.dimensions = dim_result.dimensions
-                        result.risk_score.scoring_metadata = dim_result.scoring_metadata
-                        result.risk_score.recommended_actions = dim_result.recommended_actions
-                        result.risk_score.top_indicators = dim_result.top_indicators
-                except Exception as dim_err:
-                    self.logger.warning(f"Dimension scoring failed: {dim_err}")
-            
-            self.logger.info(
-                f"Dynamic score: {dynamic_result.value} ({dynamic_result.level}) "
-                f"confidence={dynamic_result.confidence:.2f} "
-                f"chains={len(dynamic_result.attack_chains)}"
-            )
-            
-        except Exception as e:
-            # Fallback to legacy scoring
-            self.logger.warning(f"Dynamic scoring failed, using legacy: {e}")
             result.risk_score = self.scorer.calculate_unified_score(
                 detection_results=detection_results,
                 se_analysis=se_analysis,
@@ -650,6 +540,52 @@ class AnalysisOrchestrator:
                 header_analysis=result.header_analysis,
                 sender_domain=sender_domain,
             )
+            self.logger.info(
+                f"Adaptive score: {result.risk_score.overall_score} ({result.risk_score.overall_level}) "
+                f"confidence={result.risk_score.confidence:.2f} "
+                f"dimensions={len(result.risk_score.dimensions)}"
+            )
+
+        except Exception as adaptive_err:
+            self.logger.warning(f"Adaptive scoring failed, trying dynamic: {adaptive_err}")
+
+            # Fallback to Dynamic Intelligent Detection Architecture
+            # Dynamic scorer as fallback
+            try:
+                from app.services.detection.dynamic_scorer import calculate_dynamic_score
+                dynamic_result = calculate_dynamic_score(
+                    detection_results=detection_results,
+                    se_analysis=se_analysis,
+                    content_analysis=content_analysis,
+                    lookalike_results=lookalike_results,
+                    ti_results=ti_results,
+                    header_analysis=result.header_analysis,
+                    ai_analysis=None,
+                )
+                from app.services.detection.multi_scorer import UnifiedRiskScore, EmailClassification
+                class_mapping = {
+                    "phishing": EmailClassification.PHISHING,
+                    "bec": EmailClassification.BEC,
+                    "malware_delivery": EmailClassification.MALWARE_DELIVERY,
+                    "spam": EmailClassification.SPAM,
+                    "brand_impersonation": EmailClassification.BRAND_IMPERSONATION,
+                    "credential_harvesting": EmailClassification.CREDENTIAL_HARVESTING,
+                    "benign": EmailClassification.BENIGN,
+                    "unknown": EmailClassification.UNKNOWN,
+                }
+                result.risk_score = UnifiedRiskScore()
+                result.risk_score.overall_score = dynamic_result.value
+                result.risk_score.overall_level = dynamic_result.level
+                result.risk_score.primary_classification = class_mapping.get(
+                    dynamic_result.classification.lower(), EmailClassification.UNKNOWN)
+                result.risk_score.confidence = dynamic_result.confidence
+                if hasattr(result.risk_score, 'mitre_techniques'):
+                    result.risk_score.mitre_techniques = dynamic_result.mitre_techniques
+                self.logger.info(f"Dynamic fallback score: {dynamic_result.value} ({dynamic_result.level})")
+            except Exception as dyn_err:
+                self.logger.error(f"Both scorers failed: adaptive={adaptive_err}, dynamic={dyn_err}")
+                from app.services.detection.multi_scorer import UnifiedRiskScore
+                result.risk_score = UnifiedRiskScore()
         
         # Set quick access fields
         if result.risk_score:

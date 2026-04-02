@@ -395,7 +395,7 @@ const DetectionEngineViz: React.FC<DetectionVizProps> = ({
                           <span
                             className={`text-sm font-bold bg-gradient-to-r ${dim.gradient} bg-clip-text text-transparent`}
                           >
-                            {animationPhase >= 2 ? dim.score : '--'}/100
+                            {animationPhase >= 2 ? Math.round(dim.score) : '--'}/100
                           </span>
                         </div>
                       </div>
@@ -404,7 +404,7 @@ const DetectionEngineViz: React.FC<DetectionVizProps> = ({
                         <div
                           className={`h-full rounded-full bg-gradient-to-r ${dim.gradient} transition-all duration-1000 ease-out`}
                           style={{
-                            width: animationPhase >= 2 ? `${Math.min(dim.score, 100)}%` : '0%',
+                            width: animationPhase >= 2 ? `${Math.min(Math.round(dim.score), 100)}%` : '0%',
                             transitionDelay: `${i * 150}ms`
                           }}
                         />
