@@ -180,23 +180,35 @@ class TwoPassAnalysisResult:
 class TwoPassThreatAnalyzer:
     """
     Two-pass AI threat analyzer.
-    
+
     Pass 1: Content analysis
     - Intent detection
     - Social engineering scoring
     - Brand spoofing detection
     - Action extraction
-    
+
     Pass 2: Full synthesis
     - Correlate with TI results
     - Incorporate detection rules
     - Final threat assessment
     - Generate recommendations
+
+    Supports Anthropic Claude (primary) and OpenAI (fallback).
     """
-    
-    def __init__(self, openai_client=None, model: str = "gpt-4o-mini"):
+
+    def __init__(self, openai_client=None, anthropic_client=None, model: str = None):
         self.openai_client = openai_client
-        self.model = model
+        self.anthropic_client = anthropic_client
+        # Auto-select model based on available client
+        if model:
+            self.model = model
+        elif anthropic_client:
+            self.model = "claude-sonnet-4-20250514"
+        elif openai_client:
+            self.model = "gpt-4o-mini"
+        else:
+            self.model = "unknown"
+        self.provider = "anthropic" if anthropic_client else ("openai" if openai_client else "none")
         self.logger = logging.getLogger(__name__)
     
     async def analyze(
@@ -221,8 +233,8 @@ class TwoPassThreatAnalyzer:
         result = TwoPassAnalysisResult()
         result.model_used = self.model
         
-        if not self.openai_client:
-            self.logger.warning("No OpenAI client configured")
+        if not self.anthropic_client and not self.openai_client:
+            self.logger.warning("No AI client configured (need Anthropic or OpenAI)")
             return result
         
         try:
@@ -252,6 +264,41 @@ class TwoPassThreatAnalyzer:
         
         return result
     
+    async def _call_ai(self, system_prompt: str, user_prompt: str, max_tokens: int = 800) -> str:
+        """
+        Unified AI call supporting Anthropic (primary) and OpenAI (fallback).
+        Returns the raw text content from the AI response.
+        """
+        if self.anthropic_client:
+            response = await self.anthropic_client.messages.create(
+                model=self.model,
+                max_tokens=max_tokens,
+                temperature=0.1,
+                system=system_prompt,
+                messages=[{"role": "user", "content": user_prompt}],
+            )
+            # Anthropic returns content as list of blocks
+            text_blocks = [b.text for b in response.content if b.type == "text"]
+            if not text_blocks:
+                raise ValueError("Anthropic returned no text content")
+            return text_blocks[0].strip()
+        elif self.openai_client:
+            response = await self.openai_client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                temperature=0.1,
+                max_tokens=max_tokens,
+            )
+            content = response.choices[0].message.content
+            if not content:
+                raise ValueError("OpenAI returned no content")
+            return content.strip()
+        else:
+            raise RuntimeError("No AI client available")
+
     async def _first_pass(
         self,
         email_content: Dict[str, Any],
@@ -261,12 +308,26 @@ class TwoPassThreatAnalyzer:
         First pass: Analyze email content for intent and SE tactics.
         """
         result = FirstPassResult()
-        
+
         subject = email_content.get("subject", "")
         body = email_content.get("body", "")[:3000]  # Limit body size
         sender = email_content.get("sender", "")
-        
-        prompt = f"""Analyze this email for social engineering tactics and malicious intent.
+
+        system_prompt = """You are an elite email security analyst with expertise in:
+• Phishing campaign identification (credential harvesting, malware delivery, BEC)
+• Social engineering tactics detection (urgency, fear, authority, reward)
+• Brand impersonation analysis (Microsoft 365, Google, banks, shipping)
+• Attack chain reconstruction (initial access → execution → impact)
+
+ANALYSIS APPROACH:
+1. Identify the attacker's intent (what do they want the victim to do?)
+2. Score social engineering techniques (0-100 each)
+3. Flag red flags (suspicious URLs, mismatched sender, grammar issues)
+4. Determine if any brand is being impersonated
+
+You are objective and evidence-based. Return only valid JSON."""
+
+        user_prompt = f"""Analyze this email for social engineering tactics and malicious intent.
 
 SENDER: {sender}
 SUBJECT: {subject}
@@ -307,39 +368,16 @@ Score each SE technique 0-100 based on how strongly it's used:
 - social_proof: "Others have done this", testimonials"""
 
         try:
-            response = await self.openai_client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": """You are an elite email security analyst with expertise in:
-• Phishing campaign identification (credential harvesting, malware delivery, BEC)
-• Social engineering tactics detection (urgency, fear, authority, reward)
-• Brand impersonation analysis (Microsoft 365, Google, banks, shipping)
-• Attack chain reconstruction (initial access → execution → impact)
+            content = await self._call_ai(system_prompt, user_prompt, max_tokens=800)
 
-ANALYSIS APPROACH:
-1. Identify the attacker's intent (what do they want the victim to do?)
-2. Score social engineering techniques (0-100 each)
-3. Flag red flags (suspicious URLs, mismatched sender, grammar issues)
-4. Determine if any brand is being impersonated
-
-You are objective and evidence-based. Return only valid JSON."""
-                    },
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.1,
-                max_tokens=800,
-            )
-            
-            content = response.choices[0].message.content.strip()
-            
-            # Clean JSON
-            if content.startswith("```"):
-                content = re.sub(r'^```(?:json)?\n?', '', content)
-                content = re.sub(r'\n?```$', '', content)
-            
-            data = json.loads(content)
+            # Clean JSON - strip code blocks and find JSON object
+            content = re.sub(r'^```(?:json)?\s*', '', content)
+            content = re.sub(r'\s*```\s*$', '', content)
+            # Find the JSON object even if surrounded by text
+            json_match = re.search(r'\{[\s\S]*\}', content)
+            if not json_match:
+                raise ValueError(f"No JSON object found in AI response: {content[:200]}")
+            data = json.loads(json_match.group())
             result.raw_response = data
             
             # Parse intent
@@ -483,13 +521,7 @@ SCORING GUIDELINES:
 3. Brand impersonation detected → add 20-30 points
 4. Response steps must be SPECIFIC and ACTIONABLE"""
 
-        try:
-            response = await self.openai_client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": """You are a Senior SOC Analyst Team Lead with 10+ years in incident response.
+        system_prompt = """You are a Senior SOC Analyst Team Lead with 10+ years in incident response.
 
 YOUR ROLE: Make the final threat determination by synthesizing ALL evidence:
 • First-pass content analysis (intent, social engineering)
@@ -511,21 +543,17 @@ YOUR RECOMMENDATIONS MUST BE ACTIONABLE:
 ✅ GOOD: "Submit hash to VirusTotal, add to EDR blocklist"
 
 You think like an incident responder. Return only valid JSON."""
-                    },
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.1,
-                max_tokens=1000,
-            )
-            
-            content = response.choices[0].message.content.strip()
-            
-            # Clean JSON
-            if content.startswith("```"):
-                content = re.sub(r'^```(?:json)?\n?', '', content)
-                content = re.sub(r'\n?```$', '', content)
-            
-            data = json.loads(content)
+
+        try:
+            content = await self._call_ai(system_prompt, prompt, max_tokens=1000)
+
+            # Clean JSON - strip code blocks and find JSON object
+            content = re.sub(r'^```(?:json)?\s*', '', content)
+            content = re.sub(r'\s*```\s*$', '', content)
+            json_match = re.search(r'\{[\s\S]*\}', content)
+            if not json_match:
+                raise ValueError(f"No JSON object found in AI response: {content[:200]}")
+            data = json.loads(json_match.group())
             
             result.threat_score = int(data.get("threat_score", 0))
             result.threat_level = data.get("threat_level", "unknown")
@@ -640,9 +668,9 @@ You think like an incident responder. Return only valid JSON."""
 _analyzer: Optional[TwoPassThreatAnalyzer] = None
 
 
-def get_threat_analyzer(openai_client=None) -> TwoPassThreatAnalyzer:
+def get_threat_analyzer(openai_client=None, anthropic_client=None) -> TwoPassThreatAnalyzer:
     """Get or create threat analyzer."""
     global _analyzer
-    if _analyzer is None or openai_client:
-        _analyzer = TwoPassThreatAnalyzer(openai_client)
+    if _analyzer is None or openai_client or anthropic_client:
+        _analyzer = TwoPassThreatAnalyzer(openai_client=openai_client, anthropic_client=anthropic_client)
     return _analyzer

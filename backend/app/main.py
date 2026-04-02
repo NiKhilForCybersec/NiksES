@@ -52,7 +52,7 @@ async def lifespan(app: FastAPI):
         anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"),
         openai_api_key=os.getenv("OPENAI_API_KEY"),
         ai_enabled=os.getenv("AI_ENABLED", "true").lower() == "true",  # Default to true
-        ai_provider=os.getenv("AI_PROVIDER", "openai"),  # Default to openai since user has it
+        ai_provider=os.getenv("AI_PROVIDER", "anthropic"),  # Default to anthropic (Claude)
     )
     
     # Log configured APIs
@@ -138,8 +138,8 @@ async def lifespan(app: FastAPI):
         analyzer = get_ai_analyzer()
         if analyzer:
             await analyzer.close()
-    except:
-        pass
+    except Exception as e:
+        logger.warning(f"AI analyzer cleanup failed: {e}")
     
     logger.info("NiksES API shutdown complete")
 

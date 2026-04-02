@@ -307,23 +307,46 @@ async def run_unified_analysis(
             logger.warning(f"GeoIP lookup failed: {e}")
             apis_errors.append(f"GeoIP: {str(e)}")
     
-    # 4. Initialize AI analyzers (if OpenAI key available)
+    # 4. Initialize AI clients (Anthropic primary, OpenAI fallback)
+    # SE/Content analyzers run heuristics only (no AI client needed).
+    # AI analysis is done via TwoPassThreatAnalyzer which uses anthropic_client or openai_client.
     openai_client = None
-    se_analyzer = None
-    content_analyzer = None
-    
+    anthropic_client = None
+    ai_provider_name = None
+
+    anthropic_key = getattr(settings, 'anthropic_api_key', None)
     openai_key = getattr(settings, 'openai_api_key', None)
-    if openai_key:
+
+    # Try Anthropic first (Claude)
+    if anthropic_key:
+        try:
+            import anthropic
+            anthropic_client = anthropic.AsyncAnthropic(api_key=anthropic_key)
+            ai_provider_name = "anthropic"
+            apis_configured.append("anthropic")
+            logger.info("AI client: Anthropic Claude initialized (primary)")
+        except Exception as e:
+            logger.warning(f"Failed to initialize Anthropic: {e}")
+            apis_errors.append(f"Anthropic: {str(e)}")
+
+    # Fall back to OpenAI if Anthropic not available
+    if not anthropic_client and openai_key:
         try:
             import openai
             openai_client = openai.AsyncOpenAI(api_key=openai_key)
-            se_analyzer = SocialEngineeringAnalyzer(openai_client)
-            content_analyzer = ContentAnalyzer(openai_client)
+            ai_provider_name = "openai"
             apis_configured.append("openai")
-            logger.info("OpenAI client initialized")
+            logger.info("AI client: OpenAI initialized (fallback)")
         except Exception as e:
             logger.warning(f"Failed to initialize OpenAI: {e}")
             apis_errors.append(f"OpenAI: {str(e)}")
+
+    if not ai_provider_name:
+        logger.warning("No AI provider configured - AI analysis will be skipped")
+
+    # SE/Content analyzers use heuristics only (no AI client)
+    se_analyzer = SocialEngineeringAnalyzer(None)
+    content_analyzer = ContentAnalyzer(None)
     
     # 5. Initialize TI providers individually
     vt_provider = None
@@ -397,38 +420,42 @@ async def run_unified_analysis(
     # 7. Initialize Lookalike detector
     lookalike_detector = LookalikeDetector()
     
-    # 8. Initialize orchestrator
+    # 8. Initialize orchestrator (heuristic mode - no AI client passed)
+    # AI analysis is handled separately by TwoPassThreatAnalyzer
     orchestrator = AnalysisOrchestrator(
         detection_engine=detection_engine,
         se_analyzer=se_analyzer,
         content_analyzer=content_analyzer,
         lookalike_detector=lookalike_detector,
         ti_fusion=ti_fusion,
-        openai_client=openai_client,
+        openai_client=None,  # No AI in orchestrator - TwoPass handles it
     )
-    
+
     # 9. Run analysis
     options = {
-        "use_llm": bool(openai_client),
+        "use_llm": False,  # Heuristics only in orchestrator
         "run_ti": bool(ti_fusion),
         "run_detection": True,
         "timeout": 120.0,
     }
-    
-    logger.info(f"[7/10] Running orchestrator: LLM={options['use_llm']}, TI={options['run_ti']}")
+
+    logger.info(f"[7/10] Running orchestrator (heuristic mode): TI={options['run_ti']}")
     
     result = await orchestrator.analyze_email(email, options)
     
     logger.info(f"[8/10] Orchestrator complete: score={result.overall_score}, level={result.overall_level}")
     
-    # 10. Run Two-Pass AI Analysis (if OpenAI available)
+    # 10. Run Two-Pass AI Analysis (if any AI provider available)
     two_pass_result = None
-    if openai_client:
+    if anthropic_client or openai_client:
         try:
             from app.services.ai.threat_analyzer import TwoPassThreatAnalyzer
-            
-            logger.info("[9/10] Running Two-Pass AI Analysis...")
-            threat_analyzer = TwoPassThreatAnalyzer(openai_client)
+
+            logger.info(f"[9/10] Running Two-Pass AI Analysis (provider: {ai_provider_name})...")
+            threat_analyzer = TwoPassThreatAnalyzer(
+                openai_client=openai_client,
+                anthropic_client=anthropic_client,
+            )
             
             # Prepare email content
             email_content = {
