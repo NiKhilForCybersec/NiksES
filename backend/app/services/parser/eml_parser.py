@@ -134,16 +134,16 @@ async def parse_eml_bytes(content: bytes) -> ParsedEmail:
                 anomalies.append(f"[CRITICAL] {desc}")
 
             # Detect display name email trick
-            if sender and sender.display_name and sender.address:
-                trick = detect_display_name_email_trick(sender.display_name, sender.address)
+            if sender and sender.display_name and sender.email:
+                trick = detect_display_name_email_trick(sender.display_name, sender.email)
                 if trick:
                     anomalies.append(f"[CRITICAL] {trick['description']}")
 
             # Detect reply-to mismatch
-            if sender and sender.address and reply_to:
+            if sender and sender.email and reply_to:
                 for rt in reply_to:
-                    if rt.address:
-                        mismatch = detect_reply_to_mismatch(sender.address, rt.address)
+                    if rt.email:
+                        mismatch = detect_reply_to_mismatch(sender.email, rt.email)
                         if mismatch:
                             anomalies.append(f"[{mismatch['severity'].upper()}] {mismatch['description']}")
 
