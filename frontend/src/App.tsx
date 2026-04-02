@@ -1276,9 +1276,15 @@ function App() {
             )}
           </div>
 
-          {/* Right Panel - Results */}
+          {/* Right Panel - Results (dynamic: email uses ResultsPanel, SMS/URL uses TextAnalysisResults) */}
           <div className="space-y-6">
-            {result ? (
+            {textAnalysisResult ? (
+              <TextAnalysisResults
+                result={textAnalysisResult}
+                onClose={() => setTextAnalysisResult(null)}
+                onSOCTools={() => setSocToolsOpen(true)}
+              />
+            ) : result ? (
               (() => {
                 try {
                   const transformed = getTransformedResult();
@@ -1312,7 +1318,7 @@ function App() {
                   <Shield className="w-16 h-16 text-slate-600 mx-auto mb-4" />
                   <p className="text-slate-400">No analysis results yet</p>
                   <p className="text-sm text-slate-500 mt-1">
-                    Upload an email file to get started
+                    {inputType === 'email' ? 'Upload an email file to get started' : 'Enter a message or URL to analyze'}
                   </p>
                 </div>
               </div>
