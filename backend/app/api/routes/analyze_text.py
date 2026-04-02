@@ -1567,14 +1567,13 @@ async def analyze_text(
     patterns.extend(detect_url_patterns(urls))
 
     # Add evasion-detected patterns as ScamPattern entries
-    for finding in evasion_findings:
-        severity_map = {"critical": "critical", "high": "high", "medium": "medium", "low": "low"}
+    for i, finding in enumerate(evasion_findings):
         patterns.append(ScamPattern(
+            pattern_id=f"EVASION-{finding['technique'].upper()}-{i}",
             name=f"Evasion: {finding['technique'].replace('_', ' ').title()}",
             description=finding['description'],
-            severity=severity_map.get(finding['severity'], 'medium'),
-            confidence=0.85,
-            indicators=[finding['description']],
+            severity=finding.get('severity', 'medium'),
+            matched_text=finding['description'][:200],
         ))
     
     # URL enrichment
