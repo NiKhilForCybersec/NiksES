@@ -30,8 +30,8 @@ class AnthropicProvider(BaseAIProvider):
     """
     
     provider_name = "anthropic"
-    default_model = "claude-sonnet-4-20250514"
-    
+    default_model = "claude-sonnet-4-6"
+
     API_URL = "https://api.anthropic.com/v1/messages"
     API_VERSION = "2023-06-01"
     
@@ -181,7 +181,7 @@ class AnthropicProvider(BaseAIProvider):
 class AnthropicHaikuProvider(AnthropicProvider):
     """Anthropic Claude 3 Haiku - faster, cheaper model."""
     
-    default_model = "claude-haiku-4-20250414"
+    default_model = "claude-haiku-4-5"
     
     def __init__(self, api_key: Optional[str] = None, **kwargs):
         super().__init__(api_key, model=self.default_model, **kwargs)
@@ -190,7 +190,7 @@ class AnthropicHaikuProvider(AnthropicProvider):
 class AnthropicSonnetProvider(AnthropicProvider):
     """Anthropic Claude 3.5 Sonnet - balanced model."""
     
-    default_model = "claude-sonnet-4-20250514"
-    
+    default_model = "claude-sonnet-4-6"
+
     def __init__(self, api_key: Optional[str] = None, **kwargs):
         super().__init__(api_key, model=self.default_model, **kwargs)

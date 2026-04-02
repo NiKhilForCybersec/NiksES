@@ -204,7 +204,7 @@ class TwoPassThreatAnalyzer:
         if model:
             self.model = model
         elif anthropic_client:
-            self.model = "claude-sonnet-4-20250514"
+            self.model = "claude-sonnet-4-6"
         elif openai_client:
             self.model = "gpt-4o-mini"
         else:
