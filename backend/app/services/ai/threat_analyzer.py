@@ -8,6 +8,7 @@ A comprehensive AI analysis system that:
 This provides much more accurate threat assessment by giving AI full context.
 """
 
+import asyncio
 import logging
 import json
 import re
@@ -238,19 +239,33 @@ class TwoPassThreatAnalyzer:
             return result
         
         try:
-            # === PASS 1: Content Analysis ===
+            # === PASS 1: Content Analysis (30s timeout) ===
             self.logger.info("Starting AI Pass 1: Content Analysis")
-            result.first_pass = await self._first_pass(email_content, sender_info)
-            
-            # === PASS 2: Full Synthesis ===
+            try:
+                result.first_pass = await asyncio.wait_for(
+                    self._first_pass(email_content, sender_info),
+                    timeout=30.0,
+                )
+            except asyncio.TimeoutError:
+                self.logger.warning("AI Pass 1 timed out after 30s — continuing with defaults")
+
+            # === PASS 2: Full Synthesis (45s timeout) ===
             self.logger.info("Starting AI Pass 2: Full Synthesis")
-            result.final_assessment = await self._second_pass(
-                email_content,
-                result.first_pass,
-                ti_results,
-                detection_results,
-                sender_info,
-            )
+            try:
+                result.final_assessment = await asyncio.wait_for(
+                    self._second_pass(
+                        email_content,
+                        result.first_pass,
+                        ti_results,
+                        detection_results,
+                        sender_info,
+                    ),
+                    timeout=45.0,
+                )
+            except asyncio.TimeoutError:
+                self.logger.warning("AI Pass 2 timed out after 45s — using Pass 1 results only")
+                result.final_assessment.threat_score = result.first_pass.se_scores.overall_score
+                result.final_assessment.summary = f"Pass 2 timed out. Pass 1 detected {result.first_pass.intent.value} intent."
             
             # Set combined scores
             result.ai_se_score = result.first_pass.se_scores.overall_score
@@ -310,7 +325,7 @@ class TwoPassThreatAnalyzer:
         result = FirstPassResult()
 
         subject = email_content.get("subject", "")
-        body = email_content.get("body", "")[:3000]  # Limit body size
+        body = email_content.get("body", "")[:8000]  # Limit body size (8K chars for better context)
         sender = email_content.get("sender", "")
 
         system_prompt = """You are an elite email security analyst with expertise in:

@@ -48,7 +48,7 @@ class Settings(BaseSettings):
     # Security
     # =========================================================================
     secret_key: str = Field(default="change-me-in-production-use-railway-env", description="Secret key for encryption")
-    cors_origins: str = Field(default="*", description="CORS origins - comma separated or * for all")
+    cors_origins: str = Field(default="http://localhost:3000,http://localhost:5173", description="CORS origins - comma separated")
     
     # =========================================================================
     # Threat Intelligence API Keys (Set in Railway Dashboard > Variables)
