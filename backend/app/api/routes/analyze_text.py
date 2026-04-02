@@ -1115,13 +1115,30 @@ async def enrich_urls(urls: List[str]) -> List[URLEnrichmentResult]:
                 if vt_available:
                     try:
                         vt_result = await vt.check_url(url)
-                        if vt_result:
-                            malicious_count = vt_result.get('malicious', 0)
-                            enrichment.vt_malicious = malicious_count
-                            if malicious_count > 0:
+                        if vt_result and 'error' not in vt_result:
+                            # VT returns 'positives' (malicious+suspicious) and 'stats' dict
+                            vt_stats = vt_result.get('stats', {})
+                            malicious_count = vt_stats.get('malicious', 0)
+                            suspicious_count = vt_stats.get('suspicious', 0)
+                            positives = vt_result.get('positives', malicious_count + suspicious_count)
+                            total = vt_result.get('total', 0)
+
+                            enrichment.vt_malicious = positives
+
+                            if positives >= 3:
                                 enrichment.is_malicious = True
-                                enrichment.threat_score = max(enrichment.threat_score, min(100, malicious_count * 10))
-                                logger.info(f"VirusTotal: {url} flagged by {malicious_count} engines")
+                                # Scale score: 3 detections=50, 10=80, 20+=95
+                                vt_score = min(95, 40 + (positives * 3))
+                                enrichment.threat_score = max(enrichment.threat_score, vt_score)
+                                enrichment.categories.append(f"VT: {positives}/{total} vendors flagged")
+                                logger.info(f"VirusTotal: {url} MALICIOUS - {positives}/{total} vendors flagged")
+                            elif positives >= 1:
+                                enrichment.threat_score = max(enrichment.threat_score, 40)
+                                enrichment.categories.append(f"VT: {positives}/{total} suspicious")
+                                logger.info(f"VirusTotal: {url} SUSPICIOUS - {positives}/{total} vendors flagged")
+                            else:
+                                logger.info(f"VirusTotal: {url} clean - 0/{total} vendors flagged")
+
                             sources.append("VirusTotal")
                             enrichment.categories.extend(vt_result.get('categories', []))
                     except Exception as e:
