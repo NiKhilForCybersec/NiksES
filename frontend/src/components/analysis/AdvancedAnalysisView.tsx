@@ -657,7 +657,7 @@ const AdvancedAnalysisView: React.FC<AdvancedAnalysisViewProps> = ({ result, onE
                     {/* SE Breakdown */}
                     {result.se_analysis.heuristic_breakdown && (
                       <div className="ml-8 space-y-1 mt-2">
-                        {Object.entries(result.se_analysis.heuristic_breakdown).map(([key, value]: [string, any], idx: number, arr: any[]) => (
+                        {Object.entries(result.se_analysis?.heuristic_breakdown || {}).map(([key, value]: [string, any], idx: number, arr: any[]) => (
                           <div key={key} className="flex items-center space-x-2 text-gray-400">
                             <span className="text-gray-600">{idx === arr.length - 1 ? '└──' : '├──'}</span>
                             <span className="capitalize">{key}:</span>
@@ -676,7 +676,7 @@ const AdvancedAnalysisView: React.FC<AdvancedAnalysisViewProps> = ({ result, onE
                       <div className="ml-8 mt-2">
                         <div className="text-gray-500 text-xs mb-1">Techniques detected:</div>
                         <div className="flex flex-wrap gap-1">
-                          {result.se_analysis.techniques.map((tech: string, idx: number) => (
+                          {(result.se_analysis?.techniques || []).map((tech: string, idx: number) => (
                             <span key={idx} className="px-2 py-0.5 bg-purple-900/50 text-purple-400 text-xs rounded">
                               {tech}
                             </span>
@@ -697,7 +697,7 @@ const AdvancedAnalysisView: React.FC<AdvancedAnalysisViewProps> = ({ result, onE
                     </div>
                     
                     <div className="ml-8 space-y-2 mt-2">
-                      {result.lookalike_analysis.matches.slice(0, 3).map((match: any, idx: number) => (
+                      {(result.lookalike_analysis?.matches || []).slice(0, 3).map((match: any, idx: number) => (
                         <div key={idx} className="bg-gray-900 rounded p-2">
                           {/* Show the suspicious domain first */}
                           {match.suspicious_domain && (
@@ -944,11 +944,11 @@ const AdvancedAnalysisView: React.FC<AdvancedAnalysisViewProps> = ({ result, onE
               <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
                 <h2 className="text-xl font-bold mb-4 flex items-center">
                   <Shield className="w-6 h-6 mr-2 text-orange-400" />
-                  Triggered Detection Rules ({result.detection.rules_triggered.length})
+                  Triggered Detection Rules ({(result.detection?.rules_triggered || []).length})
                 </h2>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {result.detection.rules_triggered.map((rule: any, idx: number) => (
+                  {(result.detection?.rules_triggered || []).map((rule: any, idx: number) => (
                     <div key={idx} className={`p-3 rounded-lg border ${
                       rule.severity?.toLowerCase() === 'critical' ? 'bg-red-900/30 border-red-500' :
                       rule.severity?.toLowerCase() === 'high' ? 'bg-orange-900/30 border-orange-500' :
@@ -1249,7 +1249,7 @@ const AdvancedAnalysisView: React.FC<AdvancedAnalysisViewProps> = ({ result, onE
               </h2>
               <div className="bg-gray-900 rounded p-3 font-mono text-xs overflow-x-auto max-h-96 overflow-y-auto">
                 {result.email?.raw_headers ? (
-                  Object.entries(result.email.raw_headers).map(([key, value]) => (
+                  Object.entries(result.email?.raw_headers || {}).map(([key, value]) => (
                     <div key={key} className="mb-1">
                       <span className="text-blue-400">{key}:</span>
                       <span className="text-gray-300 ml-2">{String(value)}</span>
@@ -1302,7 +1302,7 @@ const AdvancedAnalysisView: React.FC<AdvancedAnalysisViewProps> = ({ result, onE
                 <div className="mt-4 pt-4 border-t border-gray-700">
                   <h3 className="text-sm font-medium text-gray-400 mb-2">Key Findings</h3>
                   <ul className="space-y-1">
-                    {tiResults.findings.map((finding: string, idx: number) => (
+                    {(tiResults?.findings || []).map((finding: string, idx: number) => (
                       <li key={idx} className="flex items-start text-sm">
                         <AlertTriangle className="w-4 h-4 mr-2 text-yellow-400 flex-shrink-0 mt-0.5" />
                         <span className="text-gray-300">{finding}</span>
@@ -1635,7 +1635,7 @@ const AdvancedAnalysisView: React.FC<AdvancedAnalysisViewProps> = ({ result, onE
                   URL Analysis ({result.email.urls.length} URLs)
                 </h2>
                 <div className="space-y-3">
-                  {result.email.urls.slice(0, 10).map((url: any, idx: number) => {
+                  {(result.email?.urls || []).slice(0, 10).map((url: any, idx: number) => {
                     const urlStr = typeof url === 'string' ? url : url.url;
                     const enriched = urlEnrichments.find((e: any) => e.url === urlStr);
                     const urlObj = typeof url === 'object' ? url : { url: urlStr };
@@ -1739,7 +1739,7 @@ const AdvancedAnalysisView: React.FC<AdvancedAnalysisViewProps> = ({ result, onE
                   Attachment Analysis ({result.email.attachments.length} files)
                 </h2>
                 <div className="space-y-4">
-                  {result.email.attachments.map((att: any, idx: number) => {
+                  {(result.email?.attachments || []).map((att: any, idx: number) => {
                     const enriched = attachmentEnrichments.find((e: any) => e.sha256 === att.sha256);
                     const threatLevel = att.threat_level?.toLowerCase() || 'unknown';
                     const threatScore = att.threat_score || 0;
@@ -2078,7 +2078,7 @@ const AdvancedAnalysisView: React.FC<AdvancedAnalysisViewProps> = ({ result, onE
                   Domains ({result.iocs.domains.length})
                 </h2>
                 <div className="space-y-2">
-                  {result.iocs.domains.map((domain: string, idx: number) => (
+                  {(result.iocs?.domains || []).map((domain: string, idx: number) => (
                     <div key={idx} className="flex items-center justify-between bg-gray-900 rounded p-2">
                       <span className="font-mono text-sm text-yellow-400">{defang(domain)}</span>
                       <div className="flex items-center space-x-2">
@@ -2114,7 +2114,7 @@ const AdvancedAnalysisView: React.FC<AdvancedAnalysisViewProps> = ({ result, onE
                   URLs ({result.iocs.urls.length})
                 </h2>
                 <div className="space-y-2">
-                  {result.iocs.urls.map((url: string, idx: number) => (
+                  {(result.iocs?.urls || []).map((url: string, idx: number) => (
                     <div key={idx} className="bg-gray-900 rounded p-2">
                       <div className="flex items-start justify-between">
                         <span className="font-mono text-sm text-yellow-400 break-all">{defang(url)}</span>
@@ -2139,7 +2139,7 @@ const AdvancedAnalysisView: React.FC<AdvancedAnalysisViewProps> = ({ result, onE
                   IP Addresses ({result.iocs.ips.length})
                 </h2>
                 <div className="space-y-2">
-                  {result.iocs.ips.map((ip: string, idx: number) => (
+                  {(result.iocs?.ips || []).map((ip: string, idx: number) => (
                     <div key={idx} className="flex items-center justify-between bg-gray-900 rounded p-2">
                       <span className="font-mono text-sm">{defang(ip)}</span>
                       <div className="flex items-center space-x-2">
@@ -2175,7 +2175,7 @@ const AdvancedAnalysisView: React.FC<AdvancedAnalysisViewProps> = ({ result, onE
                   File Hashes ({result.iocs.file_hashes_sha256.length})
                 </h2>
                 <div className="space-y-2">
-                  {result.iocs.file_hashes_sha256.map((hash: string, idx: number) => (
+                  {(result.iocs?.file_hashes_sha256 || []).map((hash: string, idx: number) => (
                     <div key={idx} className="flex items-center justify-between bg-gray-900 rounded p-2">
                       <span className="font-mono text-xs text-gray-300">{hash}</span>
                       <div className="flex items-center space-x-2">
@@ -2208,10 +2208,10 @@ const AdvancedAnalysisView: React.FC<AdvancedAnalysisViewProps> = ({ result, onE
               <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
                 <h2 className="text-lg font-semibold mb-4 flex items-center">
                   <Mail className="w-5 h-5 mr-2 text-cyan-400" />
-                  Email Addresses ({result.iocs.email_addresses.length})
+                  Email Addresses ({(result.iocs?.email_addresses || []).length})
                 </h2>
                 <div className="space-y-2">
-                  {result.iocs.email_addresses.map((email: string, idx: number) => (
+                  {(result.iocs?.email_addresses || []).map((email: string, idx: number) => (
                     <div key={idx} className="flex items-center justify-between bg-gray-900 rounded p-2">
                       <span className="font-mono text-sm">{defang(email)}</span>
                       <button
@@ -2482,7 +2482,7 @@ const AdvancedAnalysisView: React.FC<AdvancedAnalysisViewProps> = ({ result, onE
                   <div className="mb-4">
                     <h3 className="text-sm font-semibold text-gray-400 mb-2">Techniques Detected</h3>
                     <div className="flex flex-wrap gap-2">
-                      {result.se_analysis.techniques.map((tech: string, idx: number) => (
+                      {(result.se_analysis?.techniques || []).map((tech: string, idx: number) => (
                         <span key={idx} className="px-2 py-1 bg-purple-900/50 text-purple-400 text-xs rounded">
                           {tech}
                         </span>
@@ -2672,7 +2672,7 @@ const AdvancedAnalysisView: React.FC<AdvancedAnalysisViewProps> = ({ result, onE
                 {/* API Status */}
                 {result.ti_results.api_status && Object.keys(result.ti_results.api_status).length > 0 && (
                   <div className="grid grid-cols-3 gap-2 mb-4">
-                    {Object.entries(result.ti_results.api_status).map(([source, status]: [string, any]) => (
+                    {Object.entries(result.ti_results?.api_status || {}).map(([source, status]: [string, any]) => (
                       <div key={source} className="bg-gray-900 rounded p-2 flex items-center justify-between">
                         <span className="text-sm text-gray-400">{source}</span>
                         <span className={`text-xs px-2 py-0.5 rounded ${
@@ -2722,7 +2722,7 @@ const AdvancedAnalysisView: React.FC<AdvancedAnalysisViewProps> = ({ result, onE
 
                 {/* Dimension Bars */}
                 <div className="space-y-3 mb-4">
-                  {Object.entries(result.risk_score.dimensions).map(([dim, data]: [string, any]) => (
+                  {Object.entries(result.risk_score?.dimensions || {}).map(([dim, data]: [string, any]) => (
                     <div key={dim} className="bg-gray-900 rounded p-3">
                       <div className="flex items-center justify-between mb-1">
                         <span className="text-sm font-medium text-gray-300">{dim.replace(/_/g, ' ')}</span>
