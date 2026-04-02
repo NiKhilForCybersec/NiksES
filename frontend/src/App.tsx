@@ -280,12 +280,53 @@ function App() {
     setCurrentAnalysisType('email');
     setAnalysisSteps(createAnalysisSteps());
 
-    simulateProgress();
+    // Generate analysis ID for progress polling
+    const analysisId = crypto.randomUUID();
+
+    // Stage-to-step mapping for real progress
+    const stageToStepId: Record<string, string> = {
+      init_detection: 'parse',
+      headers: 'auth',
+      geoip: 'geoip',
+      init_ai: 'ai',
+      init_ti: 'enrichment',
+      detection: 'detection',
+      ti_enrichment: 'enrichment',
+      ai_pass_1: 'ai',
+      ai_pass_2: 'ai',
+      scoring: 'scoring',
+      complete: 'report',
+    };
+
+    // Start polling backend for real progress
+    const stepOrder = ['parse', 'urls', 'attachments', 'auth', 'enrichment', 'geoip', 'detection', 'scoring', 'ai', 'report'];
+    const pollInterval = window.setInterval(async () => {
+      try {
+        const statusRes = await apiClient.get(`/analyze/status/${analysisId}`);
+        const { stage } = statusRes.data;
+        const currentStepId = stageToStepId[stage] || '';
+        if (!currentStepId) return;
+
+        const currentIdx = stepOrder.indexOf(currentStepId);
+        if (currentIdx < 0) return;
+
+        setAnalysisSteps(prev => prev.map((s, i) => {
+          const sIdx = stepOrder.indexOf(s.id);
+          if (sIdx < currentIdx) return { ...s, status: 'success' as const };
+          if (sIdx === currentIdx) return { ...s, status: 'running' as const };
+          return s;
+        }));
+      } catch {
+        // Status endpoint not ready yet or analysis not started, ignore
+      }
+    }, 2000);
+    progressTimeoutIds.current.push(pollInterval);
 
     const formData = new FormData();
     formData.append('file', file);
     formData.append('enable_enrichment', 'true');
     formData.append('enable_ai', 'true');
+    formData.append('analysis_id', analysisId);
 
     try {
       const response = await apiClient.post('/analyze', formData, {

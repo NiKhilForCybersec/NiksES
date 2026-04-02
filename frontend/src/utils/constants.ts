@@ -16,8 +16,10 @@ export const APP_TAGLINE = "AI-Powered Email Investigation Copilot";
 // =============================================================================
 // API CONFIGURATION
 // =============================================================================
-// API Base URL - direct connection to backend
-export const API_BASE_URL = "https://nikses-production.up.railway.app/api/v1";
+// API Base URL - uses Vite proxy in dev, direct connection in production
+export const API_BASE_URL = import.meta.env.DEV
+  ? "/api/v1"
+  : "https://nikses-production.up.railway.app/api/v1";
 export const API_TIMEOUT = 120000; // 2 minutes - backend needs time for TI checks
 
 // =============================================================================
