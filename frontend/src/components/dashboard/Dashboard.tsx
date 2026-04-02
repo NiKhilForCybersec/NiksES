@@ -186,9 +186,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewAnalysis, onClose }) => {
       setStats(statsResponse.data);
     } catch (error) {
       console.error('Failed to fetch dashboard data:', error);
-      // Use mock data for demonstration
-      setAnalyses(getMockAnalyses());
-      setStats(getMockStats());
+      // Show empty state instead of mock data
+      setAnalyses([]);
+      setStats(null);
     }
     setLoading(false);
   };
