@@ -231,6 +231,11 @@ const ResultsPanel: React.FC<ResultsPanelProps> = ({ result, onExport, onViewFul
                   <span className="text-xs text-gray-400 bg-gray-800 px-2 py-1 rounded border border-gray-700">
                     {riskLevel}
                   </span>
+                  {result?.risk_score?.confidence != null && (
+                    <span className="text-[10px] text-blue-400 bg-blue-900/30 px-1.5 py-0.5 rounded border border-blue-700/30">
+                      {(result.risk_score.confidence * 100).toFixed(0)}% conf
+                    </span>
+                  )}
                 </div>
                 <h3 className="font-semibold text-gray-100 text-sm truncate max-w-[280px]">
                   {email.subject || '(No Subject)'}
@@ -368,7 +373,7 @@ const ResultsPanel: React.FC<ResultsPanelProps> = ({ result, onExport, onViewFul
               </div>
             ) : (
               <div className="space-y-2">
-                {rulesTriggered.slice(0, 5).map((rule: any, idx: number) => (
+                {rulesTriggered.map((rule: any, idx: number) => (
                   <div key={idx} className="bg-gray-900 rounded-lg p-3 border border-gray-700">
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1 min-w-0">
@@ -376,17 +381,13 @@ const ResultsPanel: React.FC<ResultsPanelProps> = ({ result, onExport, onViewFul
                           <span className={`px-2 py-0.5 text-[10px] font-medium rounded border ${getSeverityStyles(rule.severity)}`}>
                             {(rule.severity || 'unknown').toUpperCase()}
                           </span>
+                          {rule.rule_id && <span className="text-[10px] text-gray-500 font-mono">{rule.rule_id}</span>}
                         </div>
                         <p className="text-sm text-gray-300">{rule.description || rule.rule_name || rule.name}</p>
                       </div>
                     </div>
                   </div>
                 ))}
-                {rulesTriggered.length > 5 && (
-                  <p className="text-xs text-gray-500 text-center">
-                    +{rulesTriggered.length - 5} more rules
-                  </p>
-                )}
               </div>
             )}
           </Section>
