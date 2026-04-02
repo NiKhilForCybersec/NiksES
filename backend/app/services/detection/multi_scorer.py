@@ -43,15 +43,17 @@ class DimensionScore:
     score: int = 0  # 0-100
     level: str = "low"  # low, medium, high, critical
     weight: float = 1.0  # Weight in final calculation
+    confidence: float = 0.0  # 0-1, reliability of this dimension's score
     indicators: List[str] = field(default_factory=list)
     details: Dict[str, Any] = field(default_factory=dict)
-    
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "dimension": self.dimension.value,
             "score": self.score,
             "level": self.level,
             "weight": self.weight,
+            "confidence": self.confidence,
             "indicators": self.indicators,
             "details": self.details,
         }
@@ -108,7 +110,8 @@ class UnifiedRiskScore:
     # Metadata
     rules_triggered: int = 0
     data_sources_available: int = 0
-    
+    scoring_metadata: Dict[str, Any] = field(default_factory=dict)
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "overall_score": self.overall_score,
@@ -124,6 +127,7 @@ class UnifiedRiskScore:
             "mitre_techniques": self.mitre_techniques,
             "rules_triggered": self.rules_triggered,
             "data_sources_available": self.data_sources_available,
+            "scoring_metadata": self.scoring_metadata,
         }
 
 
@@ -292,9 +296,13 @@ class MultiDimensionalScorer:
         dim.score = min(100, score)
         dim.level = self._score_to_level(dim.score)
         dim.weight = DIMENSION_WEIGHTS[RiskDimension.TECHNICAL]
-        
+        # Confidence: based on auth data availability (SPF/DKIM/DMARC = 3 checks max) + header presence
+        auth_checks_found = auth_total
+        has_headers = 1.0 if header_analysis else 0.0
+        dim.confidence = min(1.0, (auth_checks_found / 3.0) * 0.6 + has_headers * 0.4)
+
         return dim
-    
+
     def _score_social_engineering(
         self,
         se_analysis: Dict[str, Any],
@@ -322,9 +330,12 @@ class MultiDimensionalScorer:
             "authority": se_analysis.get("heuristic_breakdown", {}).get("authority", 0),
             "reward": se_analysis.get("heuristic_breakdown", {}).get("reward", 0),
         }
-        
+        # Confidence: AI-derived (two-pass) = 0.85, heuristic-only = 0.5, no data = 0.2
+        used_llm = se_analysis.get("used_llm", False)
+        dim.confidence = 0.85 if used_llm else (0.5 if dim.score > 0 else 0.2)
+
         return dim
-    
+
     def _score_brand(
         self,
         lookalike_results: Optional[Dict[str, Any]],
@@ -406,9 +417,13 @@ class MultiDimensionalScorer:
         if sender_is_legitimate_brand and dim.score == 0:
             dim.details["sender_verified"] = True
             dim.details["verified_brand"] = sender_brand
-        
+        # Confidence: lookalike detector + brand rules = 0.9, rules-only = 0.4
+        has_lookalike = bool(lookalike_results and lookalike_results.get("has_lookalikes"))
+        has_brand_rules = any(r.get("category") == "brand_impersonation" for r in (detection_results or {}).get("rules_triggered", []))
+        dim.confidence = 0.9 if has_lookalike else (0.4 if has_brand_rules else 0.3)
+
         return dim
-    
+
     def _score_content(
         self,
         content_analysis: Optional[Dict[str, Any]],
@@ -478,9 +493,13 @@ class MultiDimensionalScorer:
         dim.score = min(100, score)
         dim.level = self._score_to_level(dim.score)
         dim.weight = DIMENSION_WEIGHTS[RiskDimension.CONTENT]
-        
+        # Confidence: AI-derived = 0.85, heuristic with data = 0.5, no data = 0.2
+        has_content_data = bool(content_analysis and content_analysis.get("intent") != "unknown")
+        used_ai = bool(content_analysis and content_analysis.get("analysis_method") == "hybrid")
+        dim.confidence = 0.85 if used_ai else (0.5 if has_content_data else 0.2)
+
         return dim
-    
+
     def _score_threat_intel(
         self,
         ti_results: Dict[str, Any],
@@ -505,76 +524,168 @@ class MultiDimensionalScorer:
         
         dim.details["sources_available"] = ti_results.get("sources_available", 0)
         dim.details["sources_flagged"] = ti_results.get("sources_flagged", 0)
-        
+        # Confidence: proportion of TI sources that returned data
+        total_possible = 6  # VT, AbuseIPDB, URLhaus, IPQS, PhishTank, GSB
+        sources_available = ti_results.get("sources_available", 0)
+        dim.confidence = min(1.0, sources_available / total_possible) if total_possible > 0 else 0.0
+
         return dim
-    
+
     def _calculate_overall(self, result: UnifiedRiskScore) -> UnifiedRiskScore:
-        """Calculate overall score from dimensions."""
-        
+        """
+        Adaptive weighted scoring algorithm (v2).
+
+        Enterprise-grade approach combining:
+        - Confidence-weighted dimensions (MISP/ThreatConnect pattern)
+        - Adaptive redistribution for missing data (absence ≠ innocence)
+        - Meta-rule compounding for correlated signals (SpamAssassin pattern)
+        - Evidence-based floor logic (Microsoft Defender pattern)
+        """
+        metadata = {
+            "algorithm": "adaptive_weighted_v2",
+            "base_weights": {k.value: v for k, v in DIMENSION_WEIGHTS.items()},
+            "per_dimension": {},
+            "redistribution": {"applied": False, "missing": [], "redistributed_weight": 0.0},
+            "compounding": {"applied": False, "hot_dimensions": 0, "multiplier": 1.0},
+            "floor": {"applied": False, "value": 0, "reason": ""},
+        }
+
         if not result.dimensions:
             result.overall_score = 0
             result.overall_level = "unknown"
             result.confidence = 0.0
+            result.scoring_metadata = metadata
             return result
-        
-        weighted_sum = 0.0
-        weight_sum = 0.0
-        max_score = 0
-        critical_dim = None
-        
+
+        # Step 1: Compute effective weights (confidence-adjusted)
+        # Effective weight = base_weight × (0.4 + 0.6 × confidence)
+        # Even 0-confidence dimensions contribute at 40% — absence ≠ innocence
+        effective_weights = {}
+        all_dims = set(DIMENSION_WEIGHTS.keys())
+        present_dims = set()
+
         for dim_name, dim_score in result.dimensions.items():
-            weighted_sum += dim_score.score * dim_score.weight
-            weight_sum += dim_score.weight
-            # Track the highest scoring dimension
-            if dim_score.score > max_score:
-                max_score = dim_score.score
-                critical_dim = dim_name
-        
-        if weight_sum > 0:
-            result.overall_score = int(weighted_sum / weight_sum)
-        
-        # Check if this is likely a legitimate email
-        # If technical (auth) is low AND brand impersonation is low, 
-        # don't apply aggressive floors - trust the weighted average
-        technical_score = result.dimensions.get('technical', DimensionScore(dimension=RiskDimension.TECHNICAL)).score
-        brand_score = result.dimensions.get('brand_impersonation', DimensionScore(dimension=RiskDimension.BRAND_IMPERSONATION)).score
-        
-        # Only apply floors when there's evidence of malicious behavior beyond content
-        # If auth passes (technical=0) and no brand impersonation (brand=0), 
-        # trust the weighted average for content-only flags
-        should_apply_floor = technical_score > 10 or brand_score > 20
-        
-        # Also apply floor if the critical dimension is brand impersonation or social engineering
-        # (these are strong indicators regardless of auth)
-        if critical_dim in ['brand_impersonation', 'social_engineering'] and max_score >= 50:
-            should_apply_floor = True
-        
-        if should_apply_floor:
-            # CRITICAL FIX: Don't let weighted average dilute critical findings
-            # If any dimension is very high, ensure overall score reflects severity
-            if max_score >= 90:
-                # CRITICAL finding - ensure minimum score of 65 (high)
-                result.overall_score = max(result.overall_score, 65)
-            elif max_score >= 70:
-                # HIGH finding - ensure minimum score of 45 (medium-high)
-                result.overall_score = max(result.overall_score, 45)
-            elif max_score >= 50:
-                # MEDIUM-HIGH finding - ensure minimum score of 35
-                result.overall_score = max(result.overall_score, 35)
-        
-        # Additional boost if multiple high-risk dimensions
-        high_dims = sum(1 for d in result.dimensions.values() if d.score >= 60)
-        if high_dims >= 3:
-            result.overall_score = min(100, result.overall_score + 15)
-        elif high_dims >= 2:
-            result.overall_score = min(100, result.overall_score + 10)
-        
+            try:
+                dim_enum = RiskDimension(dim_name)
+            except ValueError:
+                continue
+            if dim_enum not in DIMENSION_WEIGHTS:
+                continue
+            present_dims.add(dim_enum)
+            base_w = DIMENSION_WEIGHTS[dim_enum]
+            eff_w = base_w * (0.4 + 0.6 * dim_score.confidence)
+            effective_weights[dim_enum] = eff_w
+            metadata["per_dimension"][dim_name] = {
+                "score": dim_score.score,
+                "confidence": round(dim_score.confidence, 3),
+                "base_weight": base_w,
+                "effective_weight": round(eff_w, 4),
+            }
+
+        # Step 2: Redistribute missing dimension weights
+        missing_dims = all_dims - present_dims - {RiskDimension.BEHAVIORAL}
+        if missing_dims and effective_weights:
+            missing_weight = sum(DIMENSION_WEIGHTS.get(d, 0) for d in missing_dims)
+            total_eff = sum(effective_weights.values())
+            if total_eff > 0:
+                for dim_enum in effective_weights:
+                    proportion = effective_weights[dim_enum] / total_eff
+                    effective_weights[dim_enum] += missing_weight * proportion
+            metadata["redistribution"] = {
+                "applied": True,
+                "missing": [d.value for d in missing_dims],
+                "redistributed_weight": round(missing_weight, 3),
+            }
+
+        # Step 3: Normalize weights to sum to 1.0
+        total_weight = sum(effective_weights.values())
+        if total_weight > 0:
+            for dim_enum in effective_weights:
+                effective_weights[dim_enum] /= total_weight
+
+        # Step 4: Weighted score
+        weighted_sum = 0.0
+        for dim_name, dim_score in result.dimensions.items():
+            try:
+                dim_enum = RiskDimension(dim_name)
+            except ValueError:
+                continue
+            w = effective_weights.get(dim_enum, 0)
+            weighted_sum += dim_score.score * w
+            # Update metadata with normalized weight
+            if dim_name in metadata["per_dimension"]:
+                metadata["per_dimension"][dim_name]["normalized_weight"] = round(w, 4)
+
+        overall = int(weighted_sum)
+
+        # Step 5: Meta-rule compounding — correlated signals across dimensions
+        hot_dims = [(name, d) for name, d in result.dimensions.items()
+                     if d.score >= 50 and d.confidence >= 0.5]
+        hot_count = len(hot_dims)
+
+        multiplier = 1.0
+        if hot_count >= 4:
+            multiplier = 1.20  # Confirmed multi-vector attack
+        elif hot_count >= 3:
+            multiplier = 1.15
+        elif hot_count >= 2:
+            multiplier = 1.08
+
+        if multiplier > 1.0:
+            overall = min(100, int(overall * multiplier))
+            metadata["compounding"] = {
+                "applied": True,
+                "hot_dimensions": hot_count,
+                "hot_names": [name for name, _ in hot_dims],
+                "multiplier": multiplier,
+            }
+
+        # Step 6: Floor logic — prevent high-confidence critical findings from being diluted
+        floor_value = 0
+        floor_reason = ""
+
+        for dim_name, dim_score in result.dimensions.items():
+            # High-confidence critical finding
+            if dim_score.confidence >= 0.8 and dim_score.score >= 85:
+                new_floor = 70
+                if new_floor > floor_value:
+                    floor_value = new_floor
+                    floor_reason = f"High-confidence {dim_name} detection (score={dim_score.score}, conf={dim_score.confidence:.0%})"
+            elif dim_score.confidence >= 0.7 and dim_score.score >= 70:
+                new_floor = 50
+                if new_floor > floor_value:
+                    floor_value = new_floor
+                    floor_reason = f"{dim_name} detection with good confidence (score={dim_score.score}, conf={dim_score.confidence:.0%})"
+
+        # Auth failure + brand impersonation = known attack pattern
+        tech = result.dimensions.get("technical")
+        brand = result.dimensions.get("brand_impersonation")
+        if tech and brand and tech.score > 30 and brand.score > 30:
+            new_floor = 55
+            if new_floor > floor_value:
+                floor_value = new_floor
+                floor_reason = "Auth failure combined with brand impersonation"
+
+        if floor_value > 0 and overall < floor_value:
+            overall = floor_value
+            metadata["floor"] = {"applied": True, "value": floor_value, "reason": floor_reason}
+
+        # Step 7: Final result
+        result.overall_score = min(100, max(0, overall))
         result.overall_level = self._score_to_level(result.overall_score)
-        
-        # Confidence based on data availability
+
+        # Overall confidence = weighted average of dimension confidences
+        conf_sum = sum(d.confidence * effective_weights.get(RiskDimension(n), 0)
+                       for n, d in result.dimensions.items()
+                       if n in [e.value for e in effective_weights])
+        result.confidence = round(min(1.0, conf_sum * 1.2), 3)  # slight boost, cap at 1.0
         result.data_sources_available = len(result.dimensions)
-        result.confidence = min(1.0, result.data_sources_available / 5)
-        
+
+        metadata["final_score"] = result.overall_score
+        metadata["confidence"] = result.confidence
+        metadata["effective_weights"] = {k.value: round(v, 4) for k, v in effective_weights.items()}
+        result.scoring_metadata = metadata
+
         return result
     
     def _score_to_level(self, score: int) -> str:
