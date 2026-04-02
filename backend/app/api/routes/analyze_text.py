@@ -502,21 +502,24 @@ def calculate_risk_score(
     ai_analysis: Any = None,
 ) -> int:
     """
-    Calculate overall risk score using fully dynamic weighted scoring.
-    
-    Score Components:
-    1. Pattern Detection Score (0-40 points) - Based on pattern severity
-    2. URL Enrichment Score (0-30 points) - From VirusTotal, PhishTank, URLhaus
-    3. URL Sandbox Score (0-20 points) - From URLScan.io dynamic analysis
-    4. AI Analysis Score (0-10 points) - From AI threat assessment
-    
-    All weights are derived from the actual data, not hardcoded thresholds.
+    Calculate overall risk score using dynamic weighted scoring.
+
+    KEY PRINCIPLE: Components with NO actionable data are EXCLUDED from the
+    weighted average — they don't drag the score down. Only components that
+    actually produced meaningful results contribute to the final score.
+
+    Score Components (weights when all present):
+    1. Pattern Detection (0.30) - Rule-based pattern matching
+    2. URL Structural Analysis (0.20) - Typosquat, subdomain depth, TLD analysis
+    3. URL Enrichment (0.20) - VirusTotal, PhishTank, URLhaus
+    4. URL Sandbox (0.10) - URLScan.io dynamic analysis
+    5. AI Analysis (0.20) - AI threat assessment
     """
     component_scores = []
     component_weights = []
-    
+
     # =========================================================================
-    # COMPONENT 1: Pattern Detection Score (weight: 0.4)
+    # COMPONENT 1: Pattern Detection Score (weight: 0.30)
     # =========================================================================
     pattern_score = 0
     if patterns:
@@ -526,73 +529,178 @@ def calculate_risk_score(
             "medium": 0.5,
             "low": 0.25,
         }
-        
-        # Calculate normalized pattern score
+
         pattern_contributions = []
         for pattern in patterns:
             weight = severity_weights.get(pattern.severity, 0.25)
             pattern_contributions.append(weight)
-        
+
         if pattern_contributions:
-            # Use exponential decay to prevent score explosion with many patterns
-            # First pattern gets full weight, subsequent patterns get diminishing returns
             sorted_contributions = sorted(pattern_contributions, reverse=True)
             weighted_sum = 0
             for i, contribution in enumerate(sorted_contributions):
-                decay_factor = 0.7 ** i  # Each subsequent pattern contributes 70% of previous
+                decay_factor = 0.7 ** i
                 weighted_sum += contribution * decay_factor
-            
-            # Normalize to 0-100 scale, cap at ~4 critical patterns worth
-            max_possible = sum(0.7 ** i for i in range(4))  # ~2.8
+
+            max_possible = sum(0.7 ** i for i in range(4))
             pattern_score = min(100, (weighted_sum / max_possible) * 100)
-    
-    if patterns:  # Only add if we have patterns to evaluate
+
+    if patterns:
         component_scores.append(pattern_score)
-        component_weights.append(0.4)
-    
+        component_weights.append(0.30)
+
     # =========================================================================
-    # COMPONENT 2: URL Enrichment Score (weight: 0.3)
+    # COMPONENT 2: URL Structural Analysis (weight: 0.20)
+    # Catches typosquats, suspicious TLDs, subdomain abuse, etc.
+    # This runs on the URL itself — no external API needed.
+    # =========================================================================
+    structural_score = 0
+    if urls:
+        url_signals = []
+
+        # Known brands for typosquat detection
+        brand_names = [
+            'paypal', 'google', 'microsoft', 'apple', 'amazon', 'netflix',
+            'facebook', 'instagram', 'twitter', 'linkedin', 'ebay', 'bank',
+            'chase', 'wellsfargo', 'citibank', 'usps', 'fedex', 'ups', 'dhl',
+            'dropbox', 'onedrive', 'icloud', 'outlook', 'yahoo', 'aol',
+            'walmart', 'target', 'bestbuy', 'costco', 'steam', 'discord',
+            'whatsapp', 'telegram', 'signal', 'zoom', 'slack', 'docusign',
+            'adobe', 'office365', 'sharepoint', 'coinbase', 'binance',
+        ]
+
+        # Suspicious TLDs commonly used in phishing
+        suspicious_tlds = [
+            '.xyz', '.top', '.club', '.work', '.click', '.link', '.info',
+            '.online', '.site', '.website', '.space', '.buzz', '.gq',
+            '.ml', '.cf', '.tk', '.ga', '.icu', '.cam', '.rest',
+        ]
+
+        for url in urls:
+            url_lower = url.lower()
+            url_score = 0
+
+            # Extract domain parts
+            try:
+                from urllib.parse import urlparse
+                parsed = urlparse(url if '://' in url else f'https://{url}')
+                hostname = parsed.hostname or url.split('/')[0]
+            except Exception:
+                hostname = url.split('/')[0]
+
+            hostname_lower = hostname.lower() if hostname else url_lower
+            parts = hostname_lower.split('.')
+
+            # 1. Subdomain depth (>3 levels is suspicious, >5 is very suspicious)
+            if len(parts) > 5:
+                url_score += 35  # Deeply nested like signin.eby.de.xxx.civpro.co.za
+            elif len(parts) > 3:
+                url_score += 20
+
+            # 2. Typosquat detection — brand name appears but domain isn't the real brand
+            for brand in brand_names:
+                if brand in hostname_lower:
+                    # Check if it's NOT the real brand domain
+                    real_domain = f'{brand}.com'
+                    real_domain2 = f'{brand}.net'
+                    real_domain3 = f'{brand}.org'
+                    if not hostname_lower.endswith(real_domain) and \
+                       not hostname_lower.endswith(real_domain2) and \
+                       not hostname_lower.endswith(real_domain3):
+                        url_score += 40  # Brand name in non-brand domain = typosquat
+                        break
+
+            # 3. Suspicious TLD
+            for tld in suspicious_tlds:
+                if hostname_lower.endswith(tld):
+                    url_score += 15
+                    break
+
+            # 4. Login/signin keywords in subdomain (credential harvesting signal)
+            login_keywords = ['signin', 'login', 'verify', 'secure', 'account', 'update', 'confirm', 'auth', 'password', 'reset']
+            for keyword in login_keywords:
+                if keyword in hostname_lower and not hostname_lower.endswith(f'{keyword}.com'):
+                    url_score += 20
+                    break
+
+            # 5. Random-looking subdomain (entropy check)
+            for part in parts:
+                if len(part) > 10:
+                    consonants = sum(1 for c in part if c in 'bcdfghjklmnpqrstvwxyz')
+                    if len(part) > 0 and consonants / len(part) > 0.7:
+                        url_score += 15  # High consonant ratio = random string
+                        break
+
+            # 6. IP address in URL
+            if re.search(r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}', hostname_lower):
+                url_score += 25
+
+            # 7. Excessive URL length
+            if len(url) > 200:
+                url_score += 10
+            elif len(url) > 100:
+                url_score += 5
+
+            # 8. Port number in URL (non-standard)
+            if re.search(r':\d{4,5}', url):
+                url_score += 15
+
+            # 9. Encoded characters (obfuscation)
+            if '%' in url and url.count('%') > 3:
+                url_score += 10
+
+            url_signals.append(min(100, url_score))
+
+        if url_signals:
+            structural_score = max(url_signals)  # Use highest scoring URL
+
+    if urls and structural_score > 0:
+        component_scores.append(structural_score)
+        component_weights.append(0.20)
+
+    # =========================================================================
+    # COMPONENT 3: URL Enrichment Score (weight: 0.20)
+    # ONLY included if TI returned ACTIONABLE data (not just "unknown"/"not found")
     # =========================================================================
     enrichment_score = 0
+    has_actionable_enrichment = False
     if url_enrichment:
         enrichment_contributions = []
-        
+
         for enrichment in url_enrichment:
-            # Use actual threat_score from enrichment sources
             if enrichment.is_malicious:
-                # If marked malicious by any source, high contribution
                 enrichment_contributions.append(90)
+                has_actionable_enrichment = True
             elif enrichment.threat_score > 0:
-                # Use actual threat score from VirusTotal/other sources
                 enrichment_contributions.append(enrichment.threat_score)
+                has_actionable_enrichment = True
             elif enrichment.categories:
-                # Has categories but not scored - moderate contribution
                 malicious_categories = ['phishing', 'malware', 'spam', 'scam', 'suspicious']
                 if any(cat.lower() in malicious_categories for cat in enrichment.categories):
                     enrichment_contributions.append(60)
-                else:
-                    enrichment_contributions.append(20)
-        
+                    has_actionable_enrichment = True
+
         if enrichment_contributions:
-            # Take weighted average favoring highest scores
             sorted_scores = sorted(enrichment_contributions, reverse=True)
             weighted_sum = sum(score * (0.8 ** i) for i, score in enumerate(sorted_scores))
             weight_sum = sum(0.8 ** i for i in range(len(sorted_scores)))
             enrichment_score = weighted_sum / weight_sum if weight_sum > 0 else 0
-    
-    if url_enrichment:  # Only add if we have enrichment data
+
+    # CRITICAL: Only include if TI returned actual threat data
+    if has_actionable_enrichment:
         component_scores.append(enrichment_score)
-        component_weights.append(0.3)
-    
+        component_weights.append(0.20)
+
     # =========================================================================
-    # COMPONENT 3: URL Sandbox Score (weight: 0.2)
+    # COMPONENT 4: URL Sandbox Score (weight: 0.10)
+    # ONLY included if sandbox returned a real verdict (not UNKNOWN/score 0)
     # =========================================================================
     sandbox_score = 0
+    has_actionable_sandbox = False
     if url_sandbox:
         sandbox_contributions = []
-        
+
         for sandbox in url_sandbox:
-            # Handle both dict and object formats
             if isinstance(sandbox, dict):
                 is_malicious = sandbox.get('is_malicious', False)
                 threat_score = sandbox.get('threat_score', 0)
@@ -601,83 +709,80 @@ def calculate_risk_score(
                 is_malicious = getattr(sandbox, 'is_malicious', False)
                 threat_score = getattr(sandbox, 'threat_score', 0)
                 threat_level = getattr(sandbox, 'threat_level', 'unknown')
-            
+
             if is_malicious:
                 sandbox_contributions.append(95)
+                has_actionable_sandbox = True
             elif threat_score > 0:
-                # Use actual URLScan.io/Cuckoo threat score directly
                 sandbox_contributions.append(threat_score)
-            elif threat_level == 'suspicious':
-                sandbox_contributions.append(50)
-            elif threat_level == 'malicious':
-                sandbox_contributions.append(90)
-        
+                has_actionable_sandbox = True
+            elif threat_level in ('suspicious', 'malicious'):
+                sandbox_contributions.append(90 if threat_level == 'malicious' else 50)
+                has_actionable_sandbox = True
+
         if sandbox_contributions:
-            # Average of all sandbox results
             sandbox_score = sum(sandbox_contributions) / len(sandbox_contributions)
-    
-    if url_sandbox and len(url_sandbox) > 0:  # Only add if we have sandbox data
+
+    # CRITICAL: Only include if sandbox returned a real verdict
+    if has_actionable_sandbox:
         component_scores.append(sandbox_score)
-        component_weights.append(0.2)
-    
+        component_weights.append(0.10)
+
     # =========================================================================
-    # COMPONENT 4: AI Analysis Score (weight: 0.1)
+    # COMPONENT 5: AI Analysis Score (weight: 0.20)
     # =========================================================================
     ai_score = 0
+    ai_enabled = False
     if ai_analysis:
-        # Handle both dict and object formats
         if isinstance(ai_analysis, dict):
-            enabled = ai_analysis.get('enabled', False)
+            ai_enabled = ai_analysis.get('enabled', False)
             threat_assessment = ai_analysis.get('threat_assessment', '')
             confidence = ai_analysis.get('confidence', 0)
         else:
-            enabled = getattr(ai_analysis, 'enabled', False)
+            ai_enabled = getattr(ai_analysis, 'enabled', False)
             threat_assessment = getattr(ai_analysis, 'threat_assessment', '')
             confidence = getattr(ai_analysis, 'confidence', 0)
-        
-        if enabled:
-            # Map AI assessment to score
+
+        if ai_enabled:
             assessment_scores = {
                 'MALICIOUS': 95,
-                'SUSPICIOUS': 60,
-                'LIKELY_SAFE': 25,
-                'SAFE': 10,
+                'SUSPICIOUS': 65,
+                'LIKELY_SAFE': 20,
+                'SAFE': 5,
             }
             base_score = assessment_scores.get(threat_assessment.upper(), 50)
-            
-            # Weight by AI confidence
             ai_score = base_score * confidence if confidence > 0 else base_score * 0.5
-    
-    if ai_analysis and (isinstance(ai_analysis, dict) and ai_analysis.get('enabled')) or (hasattr(ai_analysis, 'enabled') and ai_analysis.enabled):
+
+    if ai_enabled:
         component_scores.append(ai_score)
-        component_weights.append(0.1)
-    
+        component_weights.append(0.20)
+
     # =========================================================================
     # FINAL SCORE CALCULATION
     # =========================================================================
     if not component_scores:
-        # Fallback: Basic URL risk heuristics if no other data
+        # Fallback: Basic URL risk heuristics if no components produced data
         base_score = 0
         for url in urls:
             if len(url) > 150:
                 base_score += 5
             if url.count('.') > 4:
-                base_score += 5
+                base_score += 10
             if re.search(r':\d{4,5}/', url):
                 base_score += 8
             if '%' in url and url.count('%') > 3:
                 base_score += 5
             if re.search(r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}', url):
-                base_score += 10  # IP in URL
+                base_score += 15
         return min(100, base_score)
-    
-    # Normalize weights to sum to 1.0
+
+    # Normalize weights to sum to 1.0 (only active components)
     weight_sum = sum(component_weights)
     normalized_weights = [w / weight_sum for w in component_weights]
-    
+
     # Calculate weighted average
     final_score = sum(score * weight for score, weight in zip(component_scores, normalized_weights))
-    
+
     return min(100, max(0, int(round(final_score))))
 
 
