@@ -160,7 +160,7 @@ class ThreatIntelResults(BaseModel):
 
 class RiskDimension(BaseModel):
     """Single risk dimension with score and indicators."""
-    score: int = Field(0)
+    score: float = Field(0)
     level: str = Field("low")
     weight: float = Field(0.0, description="Weight of this dimension in overall score")
     confidence: float = Field(0.0, description="Reliability of this dimension's score (0-1)")
