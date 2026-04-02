@@ -1083,14 +1083,15 @@ async def get_ai_analysis(
         logger.info(f"  OpenAI API Key: {'SET (' + openai_key[:4] + '...)' if openai_key else 'NOT SET'}")
         logger.info(f"  Anthropic API Key: {'SET (' + anthropic_key[:4] + '...)' if anthropic_key else 'NOT SET'}")
         
-        if openai_key:
+        # Anthropic first (Claude), OpenAI fallback — matches email analysis priority
+        if anthropic_key:
+            provider = AnthropicProvider(api_key=anthropic_key)
+            provider_name = "anthropic"
+            logger.info(f"  Using provider: Anthropic Claude (is_configured={provider.is_configured()})")
+        elif openai_key:
             provider = OpenAIProvider(api_key=openai_key)
             provider_name = "openai"
             logger.info(f"  Using provider: OpenAI (is_configured={provider.is_configured()})")
-        elif anthropic_key:
-            provider = AnthropicProvider(api_key=anthropic_key)
-            provider_name = "anthropic"
-            logger.info(f"  Using provider: Anthropic (is_configured={provider.is_configured()})")
         
         if not provider or not provider.is_configured():
             logger.warning("  AI provider not configured - analysis disabled")

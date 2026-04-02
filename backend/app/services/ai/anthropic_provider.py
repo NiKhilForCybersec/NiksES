@@ -99,19 +99,19 @@ class AnthropicProvider(BaseAIProvider):
                         headers=self._get_headers(),
                         json=payload,
                     ) as response:
-                        data = await response.json()
-                        
+                        # Check status BEFORE parsing JSON (avoids ContentTypeError on error responses)
                         if response.status == 200:
+                            data = await response.json()
                             # Extract content
                             content = ""
                             for block in data.get("content", []):
                                 if block.get("type") == "text":
                                     content += block.get("text", "")
-                            
+
                             # Calculate tokens
                             usage = data.get("usage", {})
                             tokens = usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
-                            
+
                             return AIResponse(
                                 content=content,
                                 model=data.get("model", self.model),
@@ -119,7 +119,7 @@ class AnthropicProvider(BaseAIProvider):
                                 finish_reason=data.get("stop_reason", "unknown"),
                                 raw_response=data,
                             )
-                        
+
                         elif response.status == 429:
                             # Rate limited - wait and retry
                             wait_time = 2 ** attempt
@@ -127,12 +127,19 @@ class AnthropicProvider(BaseAIProvider):
                             await asyncio.sleep(wait_time)
                             last_error = AIRateLimitError("Rate limit exceeded")
                             continue
-                        
+
                         elif response.status == 401:
                             raise AIConfigurationError("Invalid API key")
-                        
+
                         else:
-                            error_msg = data.get("error", {}).get("message", str(data))
+                            # Read error as text to avoid ContentTypeError
+                            error_text = await response.text()
+                            try:
+                                import json
+                                error_data = json.loads(error_text)
+                                error_msg = error_data.get("error", {}).get("message", error_text[:200])
+                            except (json.JSONDecodeError, AttributeError):
+                                error_msg = error_text[:200]
                             raise AIProviderError(f"API error ({response.status}): {error_msg}")
             
             except asyncio.TimeoutError:
