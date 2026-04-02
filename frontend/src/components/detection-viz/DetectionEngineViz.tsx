@@ -22,6 +22,7 @@ interface DimensionScore {
   name: string;
   score: number;
   weight: number;
+  confidence: number;
   color: string;
   gradient: string;
 }
@@ -46,6 +47,8 @@ interface DetectionVizProps {
     rules_triggered?: any[];
     ti_results?: any;
     breakdown?: any;
+    scoring_metadata?: any;
+    mitre_techniques?: any[];
   };
 }
 
@@ -81,7 +84,7 @@ const DetectionEngineViz: React.FC<DetectionVizProps> = ({
   // Build evidence from real rules_triggered
   const evidence: EvidenceNode[] = React.useMemo(() => {
     if (analysisData?.rules_triggered && analysisData.rules_triggered.length > 0) {
-      return analysisData.rules_triggered.slice(0, 10).map((rule: any, i: number) => ({
+      return analysisData.rules_triggered.map((rule: any, i: number) => ({
         id: `e${i}`,
         label: rule.description || rule.rule_id || `Rule ${i + 1}`,
         category: rule.category?.toLowerCase() || 'content',
@@ -92,25 +95,40 @@ const DetectionEngineViz: React.FC<DetectionVizProps> = ({
     return [];
   }, [analysisData?.rules_triggered]);
 
-  // Build dimensions from breakdown or estimate from score
+  // Dimension display config
+  const DIMENSION_DISPLAY: Record<string, { label: string; color: string; gradient: string }> = {
+    technical: { label: 'Technical', color: '#3b82f6', gradient: 'from-blue-500 to-cyan-500' },
+    social_engineering: { label: 'Social Engineering', color: '#f59e0b', gradient: 'from-amber-500 to-yellow-500' },
+    brand_impersonation: { label: 'Brand Impersonation', color: '#8b5cf6', gradient: 'from-violet-500 to-purple-500' },
+    content: { label: 'Content', color: '#10b981', gradient: 'from-emerald-500 to-green-500' },
+    threat_intel: { label: 'Threat Intel', color: '#ef4444', gradient: 'from-red-500 to-orange-500' },
+  };
+
+  // Build dimensions from real risk_score.dimensions
   const dimensions: DimensionScore[] = React.useMemo(() => {
-    if (analysisData?.breakdown) {
-      const b = analysisData.breakdown;
-      return [
-        { name: 'Threat Intel', score: Math.round(b.ti_score || 0), weight: b.ti_weight || 0.40, color: '#ef4444', gradient: 'from-red-500 to-orange-500' },
-        { name: 'Evidence', score: Math.round(b.evidence_score || 0), weight: b.evidence_weight || 0.35, color: '#3b82f6', gradient: 'from-blue-500 to-cyan-500' },
-        { name: 'Attack Chains', score: Math.round(b.chain_score || 0), weight: b.chain_weight || 0.18, color: '#f59e0b', gradient: 'from-amber-500 to-yellow-500' },
-        { name: 'AI Analysis', score: Math.round(b.ai_score || 0), weight: b.ai_weight || 0.12, color: '#8b5cf6', gradient: 'from-violet-500 to-purple-500' },
-      ].filter(d => d.score > 0 || d.weight > 0);
+    if (analysisData?.dimensions && typeof analysisData.dimensions === 'object') {
+      return Object.entries(analysisData.dimensions).map(([name, data]: [string, any]) => {
+        const display = DIMENSION_DISPLAY[name] || { label: name.replace(/_/g, ' '), color: '#64748b', gradient: 'from-gray-500 to-gray-400' };
+        // Use scoring_metadata for effective weights if available
+        const meta = analysisData.scoring_metadata?.per_dimension?.[name];
+        return {
+          name: display.label,
+          score: data?.score || 0,
+          weight: meta?.normalized_weight || data?.weight || 0,
+          confidence: data?.confidence || meta?.confidence || 0,
+          color: display.color,
+          gradient: display.gradient,
+        };
+      }).filter(d => d.score > 0 || d.weight > 0);
     }
-    // Estimate from final score
+    // Fallback: single detection score
     if (finalScore > 0) {
       return [
-        { name: 'Detection Score', score: finalScore, weight: 1.0, color: '#ef4444', gradient: 'from-red-500 to-orange-500' },
+        { name: 'Detection Score', score: finalScore, weight: 1.0, confidence: 0.5, color: '#ef4444', gradient: 'from-red-500 to-orange-500' },
       ];
     }
     return [];
-  }, [analysisData?.breakdown, finalScore]);
+  }, [analysisData?.dimensions, analysisData?.scoring_metadata, finalScore]);
 
   // Build attack chains from real data
   const attackChains: AttackChain[] = React.useMemo(() => {
@@ -361,29 +379,43 @@ const DetectionEngineViz: React.FC<DetectionVizProps> = ({
                       `}
                       style={{ transitionDelay: `${i * 100}ms` }}
                     >
-                      <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center justify-between mb-1">
                         <div className="flex items-center gap-2">
-                          <div 
+                          <div
                             className="w-3 h-3 rounded-full"
                             style={{ backgroundColor: dim.color }}
                           />
                           <span className="text-sm font-medium text-slate-200">{dim.name}</span>
+                          <span className="text-[10px] text-slate-500 bg-slate-700/50 px-1.5 py-0.5 rounded">
+                            {(dim.weight * 100).toFixed(0)}% weight
+                          </span>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="text-xs text-slate-500">{(dim.weight * 100).toFixed(0)}%</span>
-                          <span 
+                          <span className="text-[10px] text-blue-400">{(dim.confidence * 100).toFixed(0)}% conf</span>
+                          <span
                             className={`text-sm font-bold bg-gradient-to-r ${dim.gradient} bg-clip-text text-transparent`}
                           >
-                            {animationPhase >= 2 ? dim.score : '--'}
+                            {animationPhase >= 2 ? dim.score : '--'}/100
                           </span>
                         </div>
                       </div>
+                      {/* Score bar */}
                       <div className="h-2 bg-slate-700/50 rounded-full overflow-hidden">
                         <div
                           className={`h-full rounded-full bg-gradient-to-r ${dim.gradient} transition-all duration-1000 ease-out`}
-                          style={{ 
+                          style={{
                             width: animationPhase >= 2 ? `${Math.min(dim.score, 100)}%` : '0%',
                             transitionDelay: `${i * 150}ms`
+                          }}
+                        />
+                      </div>
+                      {/* Confidence bar */}
+                      <div className="h-1 bg-slate-700/30 rounded-full overflow-hidden mt-1">
+                        <div
+                          className="h-full rounded-full bg-blue-500/60 transition-all duration-1000 ease-out"
+                          style={{
+                            width: animationPhase >= 2 ? `${Math.min(dim.confidence * 100, 100)}%` : '0%',
+                            transitionDelay: `${i * 150 + 200}ms`
                           }}
                         />
                       </div>
@@ -422,6 +454,39 @@ const DetectionEngineViz: React.FC<DetectionVizProps> = ({
                           </span>
                         </div>
                       ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Scoring Metadata - Why This Score? */}
+                {analysisData?.scoring_metadata && animationPhase >= 2 && (
+                  <div className="mt-4 p-3 rounded-xl bg-slate-800/40 border border-slate-700/50">
+                    <div className="text-sm font-medium text-slate-400 mb-2 flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+                      Why This Score?
+                    </div>
+                    <div className="space-y-1.5 text-xs text-slate-400">
+                      {analysisData.scoring_metadata.compounding?.applied && (
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-yellow-400">x{analysisData.scoring_metadata.compounding.multiplier}</span>
+                          <span>Correlation boost — {analysisData.scoring_metadata.compounding.hot_dimensions} dimensions flagged</span>
+                        </div>
+                      )}
+                      {analysisData.scoring_metadata.floor?.applied && (
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-red-400">Floor: {analysisData.scoring_metadata.floor.value}</span>
+                          <span>{analysisData.scoring_metadata.floor.reason}</span>
+                        </div>
+                      )}
+                      {analysisData.scoring_metadata.redistribution?.applied && (
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-blue-400">Redistributed</span>
+                          <span>Missing: {(analysisData.scoring_metadata.redistribution.missing || []).join(', ')}</span>
+                        </div>
+                      )}
+                      <div className="flex items-center gap-1.5 text-slate-500">
+                        <span>Algorithm: {analysisData.scoring_metadata.algorithm}</span>
+                      </div>
                     </div>
                   </div>
                 )}
