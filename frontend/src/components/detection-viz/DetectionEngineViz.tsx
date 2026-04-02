@@ -317,7 +317,7 @@ const DetectionEngineViz: React.FC<DetectionVizProps> = ({
                           className="w-2 h-2 rounded-full flex-shrink-0"
                           style={{ backgroundColor: getCategoryColor(ev.category) }}
                         />
-                        <span className="text-xs text-slate-300 truncate">{ev.label}</span>
+                        <span className="text-xs text-slate-300 leading-tight" title={ev.label}>{ev.label}</span>
                       </div>
                       <div className="mt-1 h-1 bg-slate-700 rounded-full overflow-hidden">
                         <div 

@@ -163,6 +163,7 @@ class RiskDimension(BaseModel):
     score: int = Field(0)
     level: str = Field("low")
     weight: float = Field(0.0, description="Weight of this dimension in overall score")
+    confidence: float = Field(0.0, description="Reliability of this dimension's score (0-1)")
     indicators: List[str] = Field(default_factory=list)
     details: Dict[str, Any] = Field(default_factory=dict, description="Additional dimension details")
 
@@ -182,6 +183,7 @@ class MultiDimensionalRiskScore(BaseModel):
     mitre_techniques: List[Dict[str, str]] = Field(default_factory=list)
     rules_triggered: int = Field(0)
     data_sources_available: int = Field(0)
+    scoring_metadata: Dict[str, Any] = Field(default_factory=dict, description="Adaptive scoring algorithm details")
 
 
 class AnalysisResult(BaseModel):

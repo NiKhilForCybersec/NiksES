@@ -1407,13 +1407,16 @@ function App() {
         isOpen={detectionVizOpen}
         onClose={() => setDetectionVizOpen(false)}
         analysisData={result ? {
-          score: result.detection?.risk_score,
-          level: result.detection?.risk_level,
-          confidence: result.detection?.confidence,
+          score: result.overall_score ?? result.detection?.risk_score,
+          level: result.overall_level ?? result.detection?.risk_level,
+          confidence: (result as any).risk_score?.confidence ?? result.detection?.confidence,
           evidenceCount: result.detection?.rules_triggered?.length,
           rules_triggered: result.detection?.rules_triggered,
           attackChains: enhancedResult?.attack_chains || (result.detection as any)?.attack_chains,
           breakdown: enhancedResult?.breakdown || (result.detection as any)?.breakdown,
+          dimensions: (result as any).risk_score?.dimensions,
+          scoring_metadata: (result as any).risk_score?.scoring_metadata,
+          mitre_techniques: (result as any).risk_score?.mitre_techniques || (result as any).ai_triage?.mitre_techniques,
           ti_results: enhancedResult?.ti_results || result.enrichment,
         } : (textAnalysisResult ? {
           score: textAnalysisResult.risk_score,

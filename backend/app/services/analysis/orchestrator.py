@@ -594,10 +594,43 @@ class AnalysisOrchestrator:
             
             # Store detailed breakdown in dimensions
             if dynamic_result.breakdown and dynamic_result.breakdown.dimensions:
+                from app.services.detection.multi_scorer import DimensionScore, RiskDimension
                 for dim_name, dim_score in dynamic_result.breakdown.dimensions.items():
-                    if dim_name in result.risk_score.dimensions:
-                        result.risk_score.dimensions[dim_name].score = dim_score.score
-                        result.risk_score.dimensions[dim_name].weight = dim_score.weight
+                    try:
+                        dim_enum = RiskDimension(dim_name)
+                    except ValueError:
+                        dim_enum = None
+                    result.risk_score.dimensions[dim_name] = DimensionScore(
+                        dimension=dim_enum or RiskDimension.TECHNICAL,
+                        score=getattr(dim_score, 'score', 0),
+                        weight=getattr(dim_score, 'weight', 0),
+                        confidence=getattr(dim_score, 'confidence', 0.5),
+                        level=getattr(dim_score, 'level', 'low'),
+                        indicators=getattr(dim_score, 'indicators', []),
+                        details=getattr(dim_score, 'details', {}),
+                    )
+
+            # If dynamic scorer didn't produce dimensions, run MultiDimensionalScorer for dimensions only
+            if not result.risk_score.dimensions:
+                try:
+                    from app.services.detection.multi_scorer import MultiDimensionalScorer
+                    dim_scorer = MultiDimensionalScorer()
+                    dim_result = dim_scorer.calculate_unified_score(
+                        detection_results=detection_results,
+                        se_analysis=se_analysis,
+                        content_analysis=content_analysis,
+                        lookalike_results=lookalike_results,
+                        ti_results=ti_results,
+                        header_analysis=result.header_analysis,
+                        sender_domain=sender_domain,
+                    )
+                    if dim_result and dim_result.dimensions:
+                        result.risk_score.dimensions = dim_result.dimensions
+                        result.risk_score.scoring_metadata = dim_result.scoring_metadata
+                        result.risk_score.recommended_actions = dim_result.recommended_actions
+                        result.risk_score.top_indicators = dim_result.top_indicators
+                except Exception as dim_err:
+                    self.logger.warning(f"Dimension scoring failed: {dim_err}")
             
             self.logger.info(
                 f"Dynamic score: {dynamic_result.value} ({dynamic_result.level}) "

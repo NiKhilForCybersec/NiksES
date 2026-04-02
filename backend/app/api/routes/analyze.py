@@ -1000,6 +1000,7 @@ def build_risk_score(orchestrator_result) -> Optional[MultiDimensionalRiskScore]
                 score=dim_data.get('score', 0),
                 level=dim_data.get('level', 'low'),
                 weight=dim_data.get('weight', 0.0),
+                confidence=dim_data.get('confidence', 0.0),
                 indicators=dim_data.get('indicators', []),
                 details=dim_data.get('details', {}),
             )
@@ -1027,6 +1028,7 @@ def build_risk_score(orchestrator_result) -> Optional[MultiDimensionalRiskScore]
         mitre_techniques=rs_dict.get('mitre_techniques', []),
         rules_triggered=rs_dict.get('rules_triggered', 0),
         data_sources_available=rs_dict.get('data_sources_available', 0),
+        scoring_metadata=rs_dict.get('scoring_metadata', {}),
     )
 
 
