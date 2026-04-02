@@ -23,6 +23,17 @@ from app.models.email import (
 )
 from app.utils.exceptions import ParsingError
 
+try:
+    from app.services.detection.text_normalizer import (
+        full_text_normalize, detect_evasion_techniques, analyze_url_safety,
+        detect_display_name_email_trick, detect_reply_to_mismatch,
+        detect_hidden_html_content, detect_data_uri, detect_javascript_uri,
+        full_url_decode,
+    )
+    HAS_NORMALIZER = True
+except ImportError:
+    HAS_NORMALIZER = False
+
 logger = logging.getLogger(__name__)
 
 # URL regex pattern
@@ -102,22 +113,66 @@ async def parse_eml_bytes(content: bytes) -> ParsedEmail:
         
         # Extract body
         body_text, body_html = _extract_body(msg)
-        
-        # Extract URLs from body
-        urls = _extract_urls(body_text, body_html)
-        
+
+        # === EVASION DETECTION & TEXT NORMALIZATION ===
+        anomalies = []
+        if HAS_NORMALIZER:
+            # Detect evasion in raw text BEFORE normalization
+            for finding in detect_evasion_techniques(body_text or ''):
+                anomalies.append(f"[{finding['severity'].upper()}] {finding['description']}")
+            for finding in detect_evasion_techniques(subject or ''):
+                anomalies.append(f"[{finding['severity'].upper()}] Subject: {finding['description']}")
+
+            # Detect hidden HTML content
+            for finding in detect_hidden_html_content(body_html or ''):
+                anomalies.append(f"[{finding['severity'].upper()}] {finding['description']}")
+
+            # Detect data: and javascript: URIs
+            for desc in detect_data_uri(body_html or ''):
+                anomalies.append(f"[CRITICAL] {desc}")
+            for desc in detect_javascript_uri(body_html or ''):
+                anomalies.append(f"[CRITICAL] {desc}")
+
+            # Detect display name email trick
+            if sender and sender.display_name and sender.address:
+                trick = detect_display_name_email_trick(sender.display_name, sender.address)
+                if trick:
+                    anomalies.append(f"[CRITICAL] {trick['description']}")
+
+            # Detect reply-to mismatch
+            if sender and sender.address and reply_to:
+                for rt in reply_to:
+                    if rt.address:
+                        mismatch = detect_reply_to_mismatch(sender.address, rt.address)
+                        if mismatch:
+                            anomalies.append(f"[{mismatch['severity'].upper()}] {mismatch['description']}")
+
+            # Normalize text for downstream analysis (strip zero-width, bidi, normalize unicode)
+            body_text_normalized = full_text_normalize(body_text) if body_text else body_text
+        else:
+            body_text_normalized = body_text
+
+        # Extract URLs from body (use normalized text for better extraction)
+        urls = _extract_urls(body_text_normalized or body_text, body_html)
+
+        # Run URL safety checks on extracted URLs
+        if HAS_NORMALIZER:
+            for extracted_url in urls:
+                for finding in analyze_url_safety(extracted_url.url):
+                    anomalies.append(f"[{finding['severity'].upper()}] URL: {finding['description']}")
+
         # Extract attachments
         attachments = _extract_attachments(msg)
-        
+
         # Parse authentication results
         spf_result, dkim_result, dmarc_result, auth_results = _parse_authentication_results(msg)
-        
+
         # Extract phone numbers
         phone_numbers = _extract_phone_numbers(body_text)
-        
+
         # Parse received chain and get originating IP
         received_chain, originating_ip = _parse_received_chain(msg)
-        
+
         # Build header analysis
         header_analysis = HeaderAnalysis(
             received_chain=received_chain,
@@ -126,7 +181,7 @@ async def parse_eml_bytes(content: bytes) -> ParsedEmail:
             spf_result=spf_result,
             dkim_result=dkim_result,
             dmarc_result=dmarc_result,
-            anomalies=[],
+            anomalies=anomalies,
         )
         
         return ParsedEmail(

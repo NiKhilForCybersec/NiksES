@@ -18,6 +18,15 @@ from pydantic import BaseModel, Field
 
 from app.api.dependencies import get_analysis_store
 
+try:
+    from app.services.detection.text_normalizer import (
+        full_text_normalize, normalize_sms_text, detect_evasion_techniques,
+        analyze_url_safety, full_url_decode, detect_data_uri,
+    )
+    HAS_NORMALIZER = True
+except ImportError:
+    HAS_NORMALIZER = False
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/analyze", tags=["analysis"])
@@ -1514,28 +1523,59 @@ async def analyze_text(
     - AI-powered threat assessment
     - Threat intelligence enrichment
     """
-    text = request.text.strip()
+    raw_text = request.text.strip()
     is_url_mode = request.source == TextSource.URL
-    
+
+    # === TEXT NORMALIZATION & EVASION DETECTION ===
+    evasion_findings = []
+    if HAS_NORMALIZER:
+        # Detect evasion techniques in raw text BEFORE normalization
+        for finding in detect_evasion_techniques(raw_text):
+            evasion_findings.append(finding)
+        # Detect data: URIs
+        for desc in detect_data_uri(raw_text):
+            evasion_findings.append({"technique": "data_uri", "description": desc, "severity": "critical"})
+        # Normalize text (strip zero-width, bidi, unicode normalize)
+        text = normalize_sms_text(raw_text)
+    else:
+        text = raw_text
+
     # Generate analysis ID
     analysis_id = hashlib.sha256(
         f"{text}{datetime.utcnow().isoformat()}".encode()
     ).hexdigest()[:16]
-    
+
     analysis_type = "url" if is_url_mode else "sms" if request.source == TextSource.SMS else "message"
     logger.info(f"Analyzing {analysis_type}: {analysis_id} ({len(text)} chars)")
-    
-    # Extract IOCs
+
+    # Extract IOCs (from normalized text for better extraction)
     urls = extract_urls(text)
     domains = extract_domains(urls)
     ips = extract_ips(text)
     phones = extract_phone_numbers(text) if not is_url_mode else []
-    
+
+    # Run URL safety checks on extracted URLs
+    if HAS_NORMALIZER:
+        for url in urls:
+            for finding in analyze_url_safety(url):
+                evasion_findings.append(finding)
+
     # Detect patterns
     patterns = []
     if not is_url_mode:
         patterns.extend(detect_sms_patterns(text))
     patterns.extend(detect_url_patterns(urls))
+
+    # Add evasion-detected patterns as ScamPattern entries
+    for finding in evasion_findings:
+        severity_map = {"critical": "critical", "high": "high", "medium": "medium", "low": "low"}
+        patterns.append(ScamPattern(
+            name=f"Evasion: {finding['technique'].replace('_', ' ').title()}",
+            description=finding['description'],
+            severity=severity_map.get(finding['severity'], 'medium'),
+            confidence=0.85,
+            indicators=[finding['description']],
+        ))
     
     # URL enrichment
     url_enrichment = []
