@@ -525,5 +525,266 @@ class NoMXRecordRule(DetectionRule):
                     'domain': domain_info.domain,
                 }],
             )
-        
+
+        return None
+
+
+# =============================================================================
+# AI-Generated Phishing Detection Rules
+# Based on 2025-2026 threat intelligence:
+# - 82.6% of phishing emails use AI-generated content (SlashNext 2025)
+# - AI phishing has 54% click-through vs 12% for human-written (Hoxhunt 2025)
+# - Key indicators: overly formal language, generic HTML markers, hallucinated entities
+# =============================================================================
+
+# AI-generated phishing artifacts — generic phrases that LLMs frequently produce
+AI_GENERIC_PHRASES = [
+    'i hope this message finds you well',
+    'i hope this email finds you well',
+    'i am writing to inform you',
+    'please do not hesitate to contact',
+    'your prompt attention to this matter',
+    'we value your continued patronage',
+    'thank you for your prompt response',
+    'as a valued customer',
+    'as a valued member',
+    'this is to notify you that',
+    'please be advised that',
+    'kindly be informed that',
+    'we regret to inform you that your',
+    'it has come to our attention that',
+    'for your convenience and security',
+]
+
+# HTML artifacts commonly found in AI-generated phishing templates
+AI_HTML_MARKERS = [
+    '<!-- main content -->', '<!-- header section -->', '<!-- footer section -->',
+    '<!-- click to call -->', '<!-- cta button -->', '<!-- logo section -->',
+    '<!-- email body -->', '<!-- action required -->',
+]
+
+
+@register_rule
+class AIGeneratedContentRule(DetectionRule):
+    """Detect AI-generated phishing content patterns.
+
+    Research basis: SlashNext 2025 report found 82.6% of phishing uses AI.
+    AI-generated emails are overly polished with generic formal phrases
+    that real humans rarely use in combination. Alone, each phrase is benign;
+    together, they indicate templated AI output.
+    """
+
+    rule_id = "PHISH-011"
+    name = "AI-Generated Phishing Indicators"
+    description = "Email shows patterns consistent with AI-generated phishing content"
+    category = "phishing"
+    severity = RiskLevel.MEDIUM
+    mitre_technique = "T1566.001"
+
+    async def evaluate(
+        self,
+        email: ParsedEmail,
+        enrichment: Optional[EnrichmentResults] = None
+    ) -> Optional[RuleMatch]:
+        body_text = self.get_body_text(email)
+
+        if not body_text or len(body_text) < 100:
+            return None
+
+        # Skip legitimate brands
+        if self.is_sender_legitimate_brand(email):
+            return None
+
+        found_phrases = []
+        for phrase in AI_GENERIC_PHRASES:
+            if phrase in body_text:
+                found_phrases.append(phrase)
+
+        # Check HTML for AI template markers
+        html_markers_found = []
+        if email.body_html:
+            html_lower = email.body_html.lower()
+            for marker in AI_HTML_MARKERS:
+                if marker in html_lower:
+                    html_markers_found.append(marker)
+
+        # Scoring: 3+ generic phrases OR 2+ phrases + HTML markers = suspicious
+        ai_score = len(found_phrases) + len(html_markers_found)
+
+        if ai_score >= 3:
+            severity = RiskLevel.HIGH if ai_score >= 5 else RiskLevel.MEDIUM
+
+            evidence = [f"AI-generated content indicators ({ai_score} signals):"]
+            for p in found_phrases[:4]:
+                evidence.append(f"  - Generic phrase: '{p}'")
+            for m in html_markers_found[:3]:
+                evidence.append(f"  - HTML template marker: {m}")
+
+            return self.create_match(
+                evidence=evidence,
+                indicators=[{
+                    'type': 'ai_generated_content',
+                    'generic_phrases': len(found_phrases),
+                    'html_markers': len(html_markers_found),
+                    'total_signals': ai_score,
+                }],
+                severity_override=severity,
+            )
+
+        return None
+
+
+@register_rule
+class HyperPersonalizedPhishingRule(DetectionRule):
+    """Detect hyper-personalized phishing combining personal details with urgency.
+
+    AI-powered phishing scrapes social media, LinkedIn, company websites
+    to create highly targeted emails. This rule detects when personal
+    references (name, company, role) combine with threat/urgency patterns.
+    """
+
+    rule_id = "PHISH-012"
+    name = "Hyper-Personalized Phishing"
+    description = "Email combines personal details with pressure tactics — common in AI-driven spear phishing"
+    category = "phishing"
+    severity = RiskLevel.HIGH
+    mitre_technique = "T1598.003"
+
+    # Personalization signals
+    PERSONALIZATION_PATTERNS = [
+        r'dear\s+(?:mr|mrs|ms|dr|prof)\.?\s+\w+',  # Dear Mr. Smith
+        r'hi\s+\w+,?\s+(?:as|we|i)\s',              # Hi John, as we discussed
+        r'your\s+(?:role|position|department)\s+(?:as|at|in)',  # your role as
+        r'regarding\s+your\s+(?:recent|latest|upcoming)',       # regarding your recent
+        r'following\s+(?:our|your)\s+(?:conversation|meeting|call)',  # following our meeting
+    ]
+
+    PRESSURE_PATTERNS = [
+        r'(?:must|need to)\s+(?:verify|confirm|update|respond)\s+(?:within|before|by)',
+        r'(?:failure|failing)\s+to\s+(?:respond|verify|confirm|comply)',
+        r'(?:account|access)\s+will\s+be\s+(?:suspended|terminated|locked|disabled)',
+        r'(?:immediate|urgent)\s+(?:action|attention|response)\s+(?:required|needed)',
+    ]
+
+    async def evaluate(
+        self,
+        email: ParsedEmail,
+        enrichment: Optional[EnrichmentResults] = None
+    ) -> Optional[RuleMatch]:
+        body_text = self.get_body_text(email)
+
+        if not body_text or len(body_text) < 50:
+            return None
+
+        if self.is_sender_legitimate_brand(email):
+            return None
+
+        personalization_hits = []
+        for pattern in self.PERSONALIZATION_PATTERNS:
+            match = re.search(pattern, body_text, re.IGNORECASE)
+            if match:
+                personalization_hits.append(match.group())
+
+        pressure_hits = []
+        for pattern in self.PRESSURE_PATTERNS:
+            match = re.search(pattern, body_text, re.IGNORECASE)
+            if match:
+                pressure_hits.append(match.group())
+
+        # Both personalization AND pressure = spear phishing
+        if personalization_hits and pressure_hits:
+            evidence = [
+                f"Hyper-personalized phishing detected:",
+                f"  Personalization signals ({len(personalization_hits)}):",
+            ]
+            for h in personalization_hits[:3]:
+                evidence.append(f"    - '{h}'")
+            evidence.append(f"  Pressure tactics ({len(pressure_hits)}):")
+            for h in pressure_hits[:3]:
+                evidence.append(f"    - '{h}'")
+
+            severity = RiskLevel.CRITICAL if len(personalization_hits) >= 2 and len(pressure_hits) >= 2 else RiskLevel.HIGH
+
+            return self.create_match(
+                evidence=evidence,
+                indicators=[{
+                    'type': 'hyper_personalized_phishing',
+                    'personalization_signals': len(personalization_hits),
+                    'pressure_signals': len(pressure_hits),
+                }],
+                severity_override=severity,
+            )
+
+        return None
+
+
+@register_rule
+class PolymorphicURLRule(DetectionRule):
+    """Detect polymorphic phishing URLs with tracking/unique identifiers.
+
+    76% of phishing URLs in 2025 were unique (Palo Alto Networks).
+    Attackers use unique URL paths per recipient to evade blocklists.
+    This rule flags URLs with suspiciously long random-looking paths.
+    """
+
+    rule_id = "PHISH-013"
+    name = "Polymorphic URL Pattern"
+    description = "URL contains unique tracking identifiers typical of mass phishing campaigns"
+    category = "phishing"
+    severity = RiskLevel.MEDIUM
+    mitre_technique = "T1566.002"
+
+    async def evaluate(
+        self,
+        email: ParsedEmail,
+        enrichment: Optional[EnrichmentResults] = None
+    ) -> Optional[RuleMatch]:
+        if not email.urls:
+            return None
+
+        if self.is_sender_legitimate_brand(email):
+            return None
+
+        suspicious_urls = []
+        for url_info in email.urls:
+            url = url_info.url if hasattr(url_info, 'url') else str(url_info)
+
+            # Extract path from URL
+            path_match = re.search(r'https?://[^/]+(/.+)', url)
+            if not path_match:
+                continue
+            path = path_match.group(1)
+
+            # Check for long random-looking path segments (hex strings, base64, UUIDs)
+            random_segments = re.findall(r'/([a-zA-Z0-9]{20,})', path)
+            hex_segments = re.findall(r'/([0-9a-f]{16,})', path.lower())
+
+            # Check for excessive query parameters (tracking beacons)
+            param_count = url.count('=')
+
+            if random_segments or hex_segments or param_count >= 5:
+                suspicious_urls.append({
+                    'url': url[:120],
+                    'random_segments': len(random_segments),
+                    'hex_segments': len(hex_segments),
+                    'params': param_count,
+                })
+
+        if suspicious_urls:
+            evidence = [f"Polymorphic URL patterns detected in {len(suspicious_urls)} URL(s):"]
+            for su in suspicious_urls[:3]:
+                evidence.append(f"  - {su['url']}")
+                if su['random_segments']:
+                    evidence.append(f"    Random path segments: {su['random_segments']}")
+                if su['params'] >= 5:
+                    evidence.append(f"    Excessive tracking params: {su['params']}")
+
+            return self.create_match(
+                evidence=evidence,
+                indicators=[{
+                    'type': 'polymorphic_url',
+                    **su
+                } for su in suspicious_urls],
+            )
+
         return None
