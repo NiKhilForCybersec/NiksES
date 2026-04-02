@@ -47,20 +47,32 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/analyze", tags=["analyze"])
 
 
+@router.get("/status/{analysis_id}")
+async def get_analysis_status(analysis_id: str):
+    """Get real-time progress of an in-flight analysis."""
+    from app.api.dependencies import get_analysis_progress
+    return get_analysis_progress(analysis_id)
+
+
 @router.post("")
 async def analyze_email(
     file: UploadFile = File(..., description="Email file (.eml or .msg)"),
+    analysis_id: Optional[str] = Form(None),
     background_tasks: BackgroundTasks = None,
     settings = Depends(get_settings),
     analysis_store = Depends(get_analysis_store),
 ):
     """
     Comprehensive email security analysis.
-    
+
     Returns complete AnalysisResult compatible with exports.
+    Accepts optional analysis_id from frontend for progress polling.
     """
+    from app.api.dependencies import update_analysis_progress, cleanup_progress
+
     start_time = time.time()
-    analysis_id = str(uuid4())
+    if not analysis_id:
+        analysis_id = str(uuid4())
     
     # Validate file
     if not file.filename:
@@ -184,7 +196,10 @@ async def analyze_email(
                 "skipped": attachment_count
             }
         }
-    
+
+    # Cleanup progress tracking
+    cleanup_progress(analysis_id)
+
     return response
 
 
@@ -257,6 +272,11 @@ async def run_unified_analysis(
     """
     Run complete unified analysis and return AnalysisResult model.
     """
+    from app.api.dependencies import update_analysis_progress
+
+    def progress(stage: str, step: int, details: str = ""):
+        update_analysis_progress(analysis_id, stage, step, 11, details)
+
     from app.services.detection import DetectionEngine, RiskScorer
     from app.services.detection.multi_scorer import MultiDimensionalScorer
     from app.services.detection.lookalike import LookalikeDetector
@@ -282,10 +302,12 @@ async def run_unified_analysis(
     header_analysis = {}
     
     # 1. Initialize Detection Engine (always runs)
+    progress("init_detection", 1, "Loading detection rules")
     detection_engine = DetectionEngine()
-    logger.info(f"[1/10] Detection engine ready with {len(detection_engine.rules)} rules")
+    logger.info(f"[1/11] Detection engine ready with {len(detection_engine.rules)} rules")
     
     # 2. Run Header Analysis
+    progress("headers", 2, "Analyzing email headers")
     try:
         if email.raw_headers:
             header_analysis = analyze_headers(email.raw_headers)
@@ -295,6 +317,7 @@ async def run_unified_analysis(
         apis_errors.append(f"Header analysis: {str(e)}")
     
     # 3. GeoIP lookup for originating IP
+    progress("geoip", 3, "Looking up sender IP geolocation")
     originating_ip = header_analysis.get("originating_ip")
     if originating_ip:
         try:
@@ -308,6 +331,7 @@ async def run_unified_analysis(
             apis_errors.append(f"GeoIP: {str(e)}")
     
     # 4. Initialize AI clients (Anthropic primary, OpenAI fallback)
+    progress("init_ai", 4, "Initializing AI analysis")
     # SE/Content analyzers run heuristics only (no AI client needed).
     # AI analysis is done via TwoPassThreatAnalyzer which uses anthropic_client or openai_client.
     openai_client = None
@@ -349,6 +373,7 @@ async def run_unified_analysis(
     content_analyzer = ContentAnalyzer(None)
     
     # 5. Initialize TI providers individually
+    progress("init_ti", 5, "Connecting to threat intelligence feeds")
     vt_provider = None
     abuseipdb_provider = None
     urlhaus_provider = None
@@ -439,11 +464,13 @@ async def run_unified_analysis(
         "timeout": 120.0,
     }
 
-    logger.info(f"[7/10] Running orchestrator (heuristic mode): TI={options['run_ti']}")
+    progress("detection", 6, "Running detection rules + TI enrichment")
+    logger.info(f"[6/11] Running orchestrator (heuristic mode): TI={options['run_ti']}")
     
     result = await orchestrator.analyze_email(email, options)
     
-    logger.info(f"[8/10] Orchestrator complete: score={result.overall_score}, level={result.overall_level}")
+    progress("ti_enrichment", 7, "Threat intelligence enrichment complete")
+    logger.info(f"[7/11] Orchestrator complete: score={result.overall_score}, level={result.overall_level}")
     
     # 10. Run Two-Pass AI Analysis (if any AI provider available)
     two_pass_result = None
@@ -451,7 +478,8 @@ async def run_unified_analysis(
         try:
             from app.services.ai.threat_analyzer import TwoPassThreatAnalyzer
 
-            logger.info(f"[9/10] Running Two-Pass AI Analysis (provider: {ai_provider_name})...")
+            progress("ai_pass_1", 8, f"AI analysis Pass 1 — {ai_provider_name}")
+            logger.info(f"[8/11] Running Two-Pass AI Analysis (provider: {ai_provider_name})...")
             threat_analyzer = TwoPassThreatAnalyzer(
                 openai_client=openai_client,
                 anthropic_client=anthropic_client,
@@ -531,7 +559,8 @@ async def run_unified_analysis(
                 sender_info=sender_info,
             )
             
-            logger.info(f"Two-Pass AI complete: threat={two_pass_result.ai_threat_score}, se={two_pass_result.ai_se_score}")
+            progress("ai_pass_2", 9, "AI analysis complete")
+            logger.info(f"[9/11] Two-Pass AI complete: threat={two_pass_result.ai_threat_score}, se={two_pass_result.ai_se_score}")
             
         except Exception as e:
             logger.warning(f"Two-Pass AI analysis failed: {e}", exc_info=True)
@@ -575,6 +604,7 @@ async def run_unified_analysis(
         ai_description = generate_fallback_description({}, analysis_dict)
     
     # 12. Build proper AnalysisResult model
+    progress("scoring", 10, "Calculating multi-dimensional risk score")
     duration_ms = int((time.time() - start_time) * 1000)
     
     analysis_result = build_analysis_result(
@@ -599,7 +629,8 @@ async def run_unified_analysis(
         logger.info(f"AI Assessment: threat={two_pass_result.ai_threat_score}, se={two_pass_result.ai_se_score}")
     logger.info(f"Duration: {duration_ms}ms | APIs: {len(apis_configured)} configured")
     logger.info("=" * 60)
-    
+
+    progress("complete", 11, "Analysis complete")
     return analysis_result
 
 

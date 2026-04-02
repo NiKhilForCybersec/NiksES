@@ -282,6 +282,40 @@ def get_cached_analysis(analysis_id: str) -> Optional['AnalysisResult']:
     return result
 
 
+# =============================================================================
+# Analysis Progress Tracking (for real-time polling)
+# =============================================================================
+import time as _time
+
+_analysis_progress: Dict[str, Dict] = {}
+
+
+def update_analysis_progress(analysis_id: str, stage: str, step: int, total: int, details: str = ""):
+    """Update progress for an in-flight analysis."""
+    _analysis_progress[analysis_id] = {
+        "stage": stage,
+        "step": step,
+        "total": total,
+        "details": details,
+        "updated_at": _time.time(),
+    }
+
+
+def get_analysis_progress(analysis_id: str) -> Dict:
+    """Get current progress for an analysis."""
+    return _analysis_progress.get(analysis_id, {"stage": "unknown", "step": 0, "total": 11})
+
+
+def cleanup_progress(analysis_id: str):
+    """Remove progress entry after analysis completes."""
+    _analysis_progress.pop(analysis_id, None)
+    # Also clean stale entries (> 5 minutes old)
+    cutoff = _time.time() - 300
+    stale = [k for k, v in _analysis_progress.items() if v.get("updated_at", 0) < cutoff]
+    for k in stale:
+        _analysis_progress.pop(k, None)
+
+
 def get_cache_size() -> int:
     """Get current cache size."""
     return len(_analysis_cache)
