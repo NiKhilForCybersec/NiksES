@@ -101,8 +101,9 @@ async def analyze_email(
     try:
         parsed_email = await parse_email_file(content, file.filename)
     except Exception as e:
-        logger.error(f"Failed to parse email: {e}")
-        raise HTTPException(status_code=400, detail="Failed to parse email file. Please ensure it's a valid .eml or .msg file.")
+        import traceback
+        logger.error(f"Failed to parse email: {e}\n{traceback.format_exc()}")
+        raise HTTPException(status_code=400, detail=f"Failed to parse email file: {str(e)[:200]}")
     
     # Run unified analysis and build AnalysisResult
     try:
