@@ -503,6 +503,21 @@ def detect_url_patterns(urls: List[str]) -> List[ScamPattern]:
     return patterns
 
 
+def _levenshtein(s1: str, s2: str) -> int:
+    """Fast Levenshtein edit distance for short strings (typosquat detection)."""
+    if len(s1) < len(s2):
+        return _levenshtein(s2, s1)
+    if len(s2) == 0:
+        return len(s1)
+    prev = list(range(len(s2) + 1))
+    for i, c1 in enumerate(s1):
+        curr = [i + 1]
+        for j, c2 in enumerate(s2):
+            curr.append(min(prev[j + 1] + 1, curr[j] + 1, prev[j] + (0 if c1 == c2 else 1)))
+        prev = curr
+    return prev[-1]
+
+
 def calculate_risk_score(
     patterns: List[ScamPattern],
     urls: List[str],
@@ -606,18 +621,37 @@ def calculate_risk_score(
             elif len(parts) > 3:
                 url_score += 20
 
-            # 2. Typosquat detection — brand name appears but domain isn't the real brand
+            # 2. Typosquat detection — brand name appears OR close variant exists
+            typosquat_found = False
             for brand in brand_names:
+                # Check if it's the REAL brand domain (skip if so)
+                real_domains = [f'{brand}.com', f'{brand}.net', f'{brand}.org', f'{brand}.co']
+                if any(hostname_lower.endswith(rd) for rd in real_domains):
+                    continue
+
+                # Exact substring match
                 if brand in hostname_lower:
-                    # Check if it's NOT the real brand domain
-                    real_domain = f'{brand}.com'
-                    real_domain2 = f'{brand}.net'
-                    real_domain3 = f'{brand}.org'
-                    if not hostname_lower.endswith(real_domain) and \
-                       not hostname_lower.endswith(real_domain2) and \
-                       not hostname_lower.endswith(real_domain3):
-                        url_score += 40  # Brand name in non-brand domain = typosquat
-                        break
+                    url_score += 40
+                    typosquat_found = True
+                    break
+
+                # Fuzzy match: check each hostname part for edit distance ≤ 2 from brand
+                # Skip TLD parts (com, net, org, co, za, uk, etc.) to avoid false positives
+                tld_parts = {'com', 'net', 'org', 'co', 'uk', 'us', 'ca', 'au', 'de', 'fr',
+                             'za', 'ru', 'cn', 'jp', 'br', 'in', 'io', 'me', 'tv', 'info',
+                             'biz', 'edu', 'gov', 'mil', 'www'}
+                for part in parts:
+                    if part in tld_parts:
+                        continue  # Never fuzzy-match TLD components
+                    if len(part) >= 3 and len(brand) >= 4:  # Brand must be 4+ chars for fuzzy
+                        if abs(len(part) - len(brand)) <= 2:
+                            dist = _levenshtein(part, brand)
+                            if 0 < dist <= 2:  # Close but not exact
+                                url_score += 35  # Near-match typosquat (e.g., "eby" for "ebay")
+                                typosquat_found = True
+                                break
+                if typosquat_found:
+                    break
 
             # 3. Suspicious TLD
             for tld in suspicious_tlds:
