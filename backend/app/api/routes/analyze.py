@@ -548,6 +548,18 @@ async def run_unified_analysis(
                     "dkim": header_analysis.get("dkim_result", "unknown"),
                     "dmarc": header_analysis.get("dmarc_result", "unknown"),
                     "anomalies": header_analysis.get("anomalies", []),
+                    "sender_domain": email.sender.domain if email.sender else "unknown",
+                    "sender_email": email.sender.email if email.sender else "unknown",
+                }
+            else:
+                # Even without header analysis, pass sender info for AI context
+                sender_info = {
+                    "spf": "unknown",
+                    "dkim": "unknown",
+                    "dmarc": "unknown",
+                    "anomalies": [],
+                    "sender_domain": email.sender.domain if email.sender else "unknown",
+                    "sender_email": email.sender.email if email.sender else "unknown",
                 }
             
             # Run two-pass analysis
