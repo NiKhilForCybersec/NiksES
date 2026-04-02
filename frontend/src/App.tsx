@@ -4,7 +4,7 @@
  * Root component with Dashboard, Analysis Progress, and Detailed Results.
  */
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Toaster, toast } from 'react-hot-toast';
 import { 
   Upload, AlertTriangle, Shield, 
@@ -143,6 +143,15 @@ function App() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [detectionVizOpen, setDetectionVizOpen] = useState(false);
 
+  // Refs for timeout cleanup (prevent race conditions)
+  const progressTimeoutIds = useRef<number[]>([]);
+  const analysisVersionRef = useRef(0);
+
+  const clearProgressTimeouts = () => {
+    progressTimeoutIds.current.forEach(id => clearTimeout(id));
+    progressTimeoutIds.current = [];
+  };
+
   // SMS/Text analysis state
   const [inputType, setInputType] = useState<'email' | 'sms'>('email');
   const [textMessage, setTextMessage] = useState('');
@@ -209,8 +218,9 @@ function App() {
     }
   }, []);
 
-  // Simulate analysis progress
+  // Simulate analysis progress (stores timeout IDs for cleanup)
   const simulateProgress = () => {
+    clearProgressTimeouts();
     const stepUpdates = [
       { id: 'parse', delay: 300 },
       { id: 'urls', delay: 400 },
@@ -226,17 +236,18 @@ function App() {
 
     let totalDelay = 0;
     stepUpdates.forEach((update) => {
-      setTimeout(() => {
+      const t1 = window.setTimeout(() => {
         setAnalysisSteps((prev) =>
           prev.map((step) =>
             step.id === update.id ? { ...step, status: 'running' as const } : step
           )
         );
       }, totalDelay);
+      progressTimeoutIds.current.push(t1);
 
       totalDelay += update.delay;
 
-      setTimeout(() => {
+      const t2 = window.setTimeout(() => {
         setAnalysisSteps((prev) =>
           prev.map((step) =>
             step.id === update.id
@@ -245,6 +256,7 @@ function App() {
           )
         );
       }, totalDelay);
+      progressTimeoutIds.current.push(t2);
     });
 
     return totalDelay;
@@ -257,6 +269,9 @@ function App() {
       return;
     }
 
+    // Increment version to invalidate any in-flight stale requests
+    const thisVersion = ++analysisVersionRef.current;
+
     setLoading(true);
     setShowProgress(true);
     setResult(null);
@@ -265,7 +280,7 @@ function App() {
     setCurrentAnalysisType('email');
     setAnalysisSteps(createAnalysisSteps());
 
-    const progressDuration = simulateProgress();
+    simulateProgress();
 
     const formData = new FormData();
     formData.append('file', file);
@@ -273,73 +288,58 @@ function App() {
     formData.append('enable_ai', 'true');
 
     try {
-      // Always use the unified analysis endpoint
       const response = await apiClient.post('/analyze', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
       });
 
+      // Abort if a newer analysis was started while we were waiting
+      if (analysisVersionRef.current !== thisVersion) return;
+
       const data = response.data;
-      
-      // Log response for debugging
-      
-      setTimeout(() => {
-        try {
-          // Validate required fields exist
-          if (!data) {
-            throw new Error('Empty response from server');
-          }
-          
-          // Unified analysis returns all data in one response
-          setEnhancedResult(data);
-          
-          // Build detection object with proper fallbacks
-          // IMPORTANT: Use orchestrator's overall_score as primary (it applies false positive suppression)
-          // Detection engine's risk_score is just one component, not the final verdict
-          const detectionData = data.detection || data.detection_results || {};
-          const detection = {
-            ...detectionData,
-            // Priority: orchestrator overall_score > risk_score object > detection risk_score
-            risk_score: data.overall_score ?? extractScore(data.risk_score) ?? detectionData.risk_score ?? 0,
-            risk_level: data.overall_level ?? detectionData.risk_level ?? 'unknown',
-            primary_classification: data.classification ?? detectionData.primary_classification ?? 'unknown',
-            confidence: detectionData.confidence ?? 0.5,
-            rules_triggered: detectionData.rules_triggered || [],
-          };
-          
-          // Ensure email object exists
-          const email = data.email || data.parsed_email || {};
-          
-          // Ensure iocs object exists
-          const iocs = data.iocs || {
-            domains: [],
-            urls: [],
-            ips: [],
-            email_addresses: [],
-            file_hashes_sha256: [],
-          };
-          
-          // Set result for compatibility with existing UI components
-          const processedResult = {
-            ...data,
-            email,
-            detection,
-            iocs,
-          };
-          
-          
-          setResult(processedResult);
-          
-          setAnalysisComplete(true);
-          toast.success('Analysis complete!');
-        } catch (err) {
-          console.error('Error processing analysis result:', err);
-          toast.error('Error displaying results: ' + (err instanceof Error ? err.message : 'Unknown error'));
-        }
-      }, Math.max(0, progressDuration - 500));
+      if (!data) {
+        throw new Error('Empty response from server');
+      }
+
+      // Stop progress animation and mark all steps success
+      clearProgressTimeouts();
+      setAnalysisSteps((prev) =>
+        prev.map((step) => ({ ...step, status: 'success' as const, duration: 0 }))
+      );
+
+      // Build detection object with proper fallbacks
+      const detectionData = data.detection || data.detection_results || {};
+      const detection = {
+        ...detectionData,
+        risk_score: data.overall_score ?? extractScore(data.risk_score) ?? detectionData.risk_score ?? 0,
+        risk_level: data.overall_level ?? detectionData.risk_level ?? 'unknown',
+        primary_classification: data.classification ?? detectionData.primary_classification ?? 'unknown',
+        confidence: detectionData.confidence ?? 0.5,
+        rules_triggered: detectionData.rules_triggered || [],
+      };
+
+      const email = data.email || data.parsed_email || {};
+      const iocs = data.iocs || {
+        domains: [],
+        urls: [],
+        ips: [],
+        email_addresses: [],
+        file_hashes_sha256: [],
+      };
+
+      const processedResult = { ...data, email, detection, iocs };
+
+      setResult(processedResult);
+      setEnhancedResult(processedResult);
+      setAnalysisComplete(true);
+      setLoading(false);
+      toast.success('Analysis complete!');
 
     } catch (error: any) {
+      if (analysisVersionRef.current !== thisVersion) return;
+
+      clearProgressTimeouts();
       setAnalysisSteps((prev) =>
         prev.map((step) =>
           step.status === 'running' || step.status === 'pending'
@@ -347,12 +347,14 @@ function App() {
             : step
         )
       );
-      toast.error(error.message || 'Failed to analyze email');
+      setLoading(false);
+
+      // Specific error messages
+      const msg = error.code === 'ECONNABORTED' ? 'Analysis timed out — try again'
+        : error.response?.status === 429 ? 'API rate limit reached — try again later'
+        : error.response?.data?.detail || error.message || 'Failed to analyze email';
+      toast.error(msg);
       console.error('Analysis error:', error);
-    } finally {
-      setTimeout(() => {
-        setLoading(false);
-      }, progressDuration);
     }
   };
 
